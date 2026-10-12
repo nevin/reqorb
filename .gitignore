@@ -1,0 +1,12 @@
+/target
+.DS_Store
+
+# Editors
+.idea/
+.vscode/
+*.iml
+*.swp
+
+# Local data that should not be shared
+.env
+*.env.local
