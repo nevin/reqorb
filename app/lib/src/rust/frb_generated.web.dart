@@ -24,10 +24,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   });
 
   @protected
+  AnyhowException dco_decode_AnyhowException(dynamic raw);
+
+  @protected
   int dco_decode_CastedPrimitive_i_64(dynamic raw);
 
   @protected
   int dco_decode_CastedPrimitive_u_64(dynamic raw);
+
+  @protected
+  RustStreamSink<WsEvent> dco_decode_StreamSink_ws_event_Sse(dynamic raw);
 
   @protected
   String dco_decode_String(dynamic raw);
@@ -69,6 +75,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Environment dco_decode_box_autoadd_environment(dynamic raw);
 
   @protected
+  GrpcCall dco_decode_box_autoadd_grpc_call(dynamic raw);
+
+  @protected
   HttpMode dco_decode_box_autoadd_http_mode(dynamic raw);
 
   @protected
@@ -96,10 +105,25 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Environment dco_decode_environment(dynamic raw);
 
   @protected
+  Exchange dco_decode_exchange(dynamic raw);
+
+  @protected
   ExportFormat dco_decode_export_format(dynamic raw);
 
   @protected
   FormField dco_decode_form_field(dynamic raw);
+
+  @protected
+  GrpcCall dco_decode_grpc_call(dynamic raw);
+
+  @protected
+  GrpcMethod dco_decode_grpc_method(dynamic raw);
+
+  @protected
+  GrpcReply dco_decode_grpc_reply(dynamic raw);
+
+  @protected
+  GrpcSchema dco_decode_grpc_schema(dynamic raw);
 
   @protected
   Header dco_decode_header(dynamic raw);
@@ -141,7 +165,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<Environment> dco_decode_list_environment(dynamic raw);
 
   @protected
+  List<Exchange> dco_decode_list_exchange(dynamic raw);
+
+  @protected
   List<FormField> dco_decode_list_form_field(dynamic raw);
+
+  @protected
+  List<GrpcMethod> dco_decode_list_grpc_method(dynamic raw);
 
   @protected
   List<Header> dco_decode_list_header(dynamic raw);
@@ -216,10 +246,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Workspace dco_decode_workspace(dynamic raw);
 
   @protected
+  WsEvent dco_decode_ws_event(dynamic raw);
+
+  @protected
+  WsEventKind dco_decode_ws_event_kind(dynamic raw);
+
+  @protected
+  AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
+
+  @protected
   int sse_decode_CastedPrimitive_i_64(SseDeserializer deserializer);
 
   @protected
   int sse_decode_CastedPrimitive_u_64(SseDeserializer deserializer);
+
+  @protected
+  RustStreamSink<WsEvent> sse_decode_StreamSink_ws_event_Sse(
+    SseDeserializer deserializer,
+  );
 
   @protected
   String sse_decode_String(SseDeserializer deserializer);
@@ -261,6 +305,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Environment sse_decode_box_autoadd_environment(SseDeserializer deserializer);
 
   @protected
+  GrpcCall sse_decode_box_autoadd_grpc_call(SseDeserializer deserializer);
+
+  @protected
   HttpMode sse_decode_box_autoadd_http_mode(SseDeserializer deserializer);
 
   @protected
@@ -290,10 +337,25 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Environment sse_decode_environment(SseDeserializer deserializer);
 
   @protected
+  Exchange sse_decode_exchange(SseDeserializer deserializer);
+
+  @protected
   ExportFormat sse_decode_export_format(SseDeserializer deserializer);
 
   @protected
   FormField sse_decode_form_field(SseDeserializer deserializer);
+
+  @protected
+  GrpcCall sse_decode_grpc_call(SseDeserializer deserializer);
+
+  @protected
+  GrpcMethod sse_decode_grpc_method(SseDeserializer deserializer);
+
+  @protected
+  GrpcReply sse_decode_grpc_reply(SseDeserializer deserializer);
+
+  @protected
+  GrpcSchema sse_decode_grpc_schema(SseDeserializer deserializer);
 
   @protected
   Header sse_decode_header(SseDeserializer deserializer);
@@ -335,7 +397,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<Environment> sse_decode_list_environment(SseDeserializer deserializer);
 
   @protected
+  List<Exchange> sse_decode_list_exchange(SseDeserializer deserializer);
+
+  @protected
   List<FormField> sse_decode_list_form_field(SseDeserializer deserializer);
+
+  @protected
+  List<GrpcMethod> sse_decode_list_grpc_method(SseDeserializer deserializer);
 
   @protected
   List<Header> sse_decode_list_header(SseDeserializer deserializer);
@@ -412,10 +480,28 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Workspace sse_decode_workspace(SseDeserializer deserializer);
 
   @protected
+  WsEvent sse_decode_ws_event(SseDeserializer deserializer);
+
+  @protected
+  WsEventKind sse_decode_ws_event_kind(SseDeserializer deserializer);
+
+  @protected
+  void sse_encode_AnyhowException(
+    AnyhowException self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_CastedPrimitive_i_64(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_CastedPrimitive_u_64(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_StreamSink_ws_event_Sse(
+    RustStreamSink<WsEvent> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_String(String self, SseSerializer serializer);
@@ -466,6 +552,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_grpc_call(
+    GrpcCall self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_http_mode(
     HttpMode self,
     SseSerializer serializer,
@@ -502,10 +594,25 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_environment(Environment self, SseSerializer serializer);
 
   @protected
+  void sse_encode_exchange(Exchange self, SseSerializer serializer);
+
+  @protected
   void sse_encode_export_format(ExportFormat self, SseSerializer serializer);
 
   @protected
   void sse_encode_form_field(FormField self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_grpc_call(GrpcCall self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_grpc_method(GrpcMethod self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_grpc_reply(GrpcReply self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_grpc_schema(GrpcSchema self, SseSerializer serializer);
 
   @protected
   void sse_encode_header(Header self, SseSerializer serializer);
@@ -562,8 +669,17 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_exchange(List<Exchange> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_form_field(
     List<FormField> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_grpc_method(
+    List<GrpcMethod> self,
     SseSerializer serializer,
   );
 
@@ -656,6 +772,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_workspace(Workspace self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ws_event(WsEvent self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ws_event_kind(WsEventKind self, SseSerializer serializer);
 }
 
 // Section: wire_class

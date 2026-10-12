@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart' hide FormField;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:reqorb/actions.dart';
 import 'package:reqorb/main.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 import 'package:reqorb/src/rust/frb_generated.dart';
@@ -99,6 +100,13 @@ void main() {
       tmp = await Directory.systemTemp.createTemp('reqorb_test');
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       server.listen((request) async {
+        // A WebSocket that greets, then answers each message in capitals.
+        if (request.uri.path == '/ws') {
+          final socket = await WebSocketTransformer.upgrade(request);
+          socket.add('welcome ${request.headers.value('x-room')}');
+          socket.listen((message) => socket.add('$message'.toUpperCase()));
+          return;
+        }
         // The server also publishes a Swagger document describing itself.
         final swagger = request.uri.path == '/docs/swagger.json';
         if (!swagger) {
@@ -321,7 +329,9 @@ void main() {
     expect(store.collections.single.items.length, 1);
 
     // Deleting the open request detaches the editor, so Save asks where to put it.
-    await tester.tap(find.byTooltip('Delete request'));
+    await tester.tap(find.byTooltip('Request actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('delete-request')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('save')));
     await tester.pumpAndSettle();
@@ -386,7 +396,9 @@ void main() {
     expect(seen.path, '/solo/v2');
     expect(seen.headers!.value('x-solo'), '1');
 
-    await tester.tap(find.byTooltip('Delete request'));
+    await tester.tap(find.byTooltip('Request actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('delete-request')));
     await tester.pumpAndSettle();
     expect(store.requests, isEmpty);
     expect(tester.takeException(), isNull);
@@ -779,6 +791,8 @@ void main() {
     }
 
     Future<void> mode(String name) async {
+      await tester.ensureVisible(find.byKey(Key('body-mode-$name')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(Key('body-mode-$name')));
       await tester.pumpAndSettle();
     }
@@ -974,6 +988,9 @@ void main() {
 
     // Switching type swaps the form; an API key can go in the query string.
     await tester.tap(find.byKey(const Key('auth-kind')));
+    await tester.pumpAndSettle();
+    // In a short window the menu opens scrolled to the current type.
+    await tester.ensureVisible(find.text('API Key').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('API Key').last);
     await tester.pumpAndSettle();
@@ -1196,5 +1213,278 @@ void main() {
     expect(reloaded.environments.single.variables.length, 3);
     expect(exported, contains("'{{base}}/edited'"));
     expect(exported, contains('# Orders/Create order'));
+  });
+  testWidgets('renames, duplicates, filters and restores saved requests', (
+    tester,
+  ) async {
+    await start(tester);
+    await launch(tester);
+    final url = 'http://127.0.0.1:${server.port}';
+
+    await type(tester, find.byKey(const Key('url')), '$url/one');
+    await tester.tap(find.byKey(const Key('save')));
+    await tester.pumpAndSettle();
+    await type(tester, find.byKey(const Key('save-name')), 'First');
+    await tester.tap(find.byKey(const Key('save-confirm')));
+    await tester.pumpAndSettle();
+    expect(store.requests.single.name, 'First');
+
+    // An edit is flagged until the request is saved again.
+    expect(find.byKey(const Key('unsaved')), findsNothing);
+    await type(tester, find.byKey(const Key('url')), '$url/one?x=1');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('unsaved')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('save')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('unsaved')), findsNothing);
+    expect(store.requests.single.request!.url, '$url/one?x=1');
+
+    final actions = find.byTooltip('Request actions');
+    await tester.tap(actions);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('rename-request')));
+    await tester.pumpAndSettle();
+    await type(tester, find.byKey(const Key('request-name')), 'Renamed');
+    await tester.tap(find.byKey(const Key('dialog-confirm')));
+    await tester.pumpAndSettle();
+    expect(store.requests.single.name, 'Renamed');
+
+    await tester.tap(actions);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('duplicate-request')));
+    await tester.pumpAndSettle();
+    expect(store.requests.map((r) => r.name), ['Renamed', 'Renamed copy']);
+    expect(actions, findsNWidgets(2));
+
+    // The filter narrows the list to matching requests.
+    await type(tester, find.byKey(const Key('sidebar-filter')), 'COPY');
+    await tester.pumpAndSettle();
+    expect(actions, findsOneWidget);
+
+    // A deleted request can be brought back.
+    await tester.tap(actions);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('delete-request')));
+    await tester.pumpAndSettle();
+    expect(store.requests.map((r) => r.name), ['Renamed']);
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(store.requests.map((r) => r.name), ['Renamed', 'Renamed copy']);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('edits the title in place and exports the response', (
+    tester,
+  ) async {
+    await start(tester);
+    await launch(tester);
+    final url = 'http://127.0.0.1:${server.port}/ping';
+    await type(tester, find.byKey(const Key('url')), url);
+
+    Future<void> rename(String name) async {
+      await type(tester, find.byKey(const Key('title-field')), name);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('title-field')), findsNothing);
+    }
+
+    // A long press names a request before it is saved anywhere.
+    final title = find.byKey(const Key('title'));
+    await tester.longPress(title);
+    await tester.pumpAndSettle();
+    await rename('Ping');
+    await tester.tap(find.byKey(const Key('save')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('save-confirm')));
+    await tester.pumpAndSettle();
+    expect(store.requests.single.name, 'Ping');
+
+    // A double click renames the saved request.
+    await tester.tap(title);
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(title);
+    await tester.pumpAndSettle();
+    await rename('Pong');
+    expect(store.requests.single.name, 'Pong');
+
+    // The response body can be saved as JSON or as it was received.
+    final files = <String, String>{};
+    final realSaver = fileSaver;
+    fileSaver = ({required fileName, required bytes}) async {
+      files[fileName] = utf8.decode(bytes);
+      return fileName;
+    };
+    addTearDown(() => fileSaver = realSaver);
+
+    await tester.tap(find.byKey(const Key('send')));
+    await waitFor(tester, find.byKey(const Key('status')));
+    for (final kind in const ['json', 'text']) {
+      await tester.tap(find.byKey(const Key('export-response')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(Key('export-$kind')));
+      await tester.pumpAndSettle();
+    }
+    expect(files, {
+      'response.json': '{\n  "ok": true\n}',
+      'response.txt': '{"ok":true}',
+    });
+
+    // The whole session, here two sends, can be saved as a HAR file.
+    await tester.tap(find.byKey(const Key('send')));
+    await waitFor(tester, find.byKey(const Key('status')));
+    await tester.pumpAndSettle();
+    expect(find.text('Session · 2 requests'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('export-response')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('export-har')));
+    await tester.pumpAndSettle();
+    final har = jsonDecode(files['session.har']!) as Map<String, dynamic>;
+    final entries = har['log']['entries'] as List;
+    expect(har['log']['version'], '1.2');
+    expect(entries.length, 2);
+    expect(entries.first['request']['url'], url);
+    expect(entries.first['response']['status'], 201);
+    expect(entries.first['response']['content']['text'], '{"ok":true}');
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('guards unsaved edits and undoes removals', (tester) async {
+    await start(tester);
+    await launch(tester);
+    final url = 'http://127.0.0.1:${server.port}';
+    final newRequest = find.byKey(const Key('new-request'));
+
+    // Sending with no URL says why nothing happened.
+    await type(tester, find.byKey(const Key('url')), '');
+    await tester.tap(find.byKey(const Key('send')));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter a URL to send the request'), findsOneWidget);
+
+    await type(tester, find.byKey(const Key('url')), '$url/a');
+    await tester.tap(find.byKey(const Key('save')));
+    await tester.pumpAndSettle();
+    await type(tester, find.byKey(const Key('save-name')), 'A');
+    await tester.tap(find.byKey(const Key('save-confirm')));
+    await tester.pumpAndSettle();
+
+    // Leaving an edited request asks first; cancelling stays put.
+    await type(tester, find.byKey(const Key('url')), '$url/b');
+    await tester.tap(newRequest);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('$url/b'), findsOneWidget);
+
+    await tester.tap(newRequest);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('discard-changes')));
+    await tester.pumpAndSettle();
+    expect(store.requests.single.request!.url, '$url/a');
+    expect(find.text('$url/b'), findsNothing);
+
+    await tester.tap(find.text('A'));
+    await tester.pumpAndSettle();
+    await type(tester, find.byKey(const Key('url')), '$url/c');
+    await tester.tap(newRequest);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('save-changes')));
+    await tester.pumpAndSettle();
+    expect(store.requests.single.request!.url, '$url/c');
+
+    // An environment can be put to use, deleted, and brought back in use.
+    await tester.tap(find.byKey(const Key('manage-environments')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('env-add')));
+    await tester.pumpAndSettle();
+    await type(tester, find.byKey(const Key('env-name')), 'One');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('env-item-0')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('env-use')));
+    await tester.pumpAndSettle();
+    expect(store.activeEnvironment, 'One');
+    await tester.tap(find.byTooltip('Environment actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('env-delete')));
+    await tester.pumpAndSettle();
+    expect(store.environments, isEmpty);
+    expect(store.activeEnvironment, isNull);
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(store.environments.single.name, 'One');
+    expect(store.activeEnvironment, 'One');
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('connects to a WebSocket and exchanges messages', (tester) async {
+    await start(tester);
+    await launch(tester);
+
+    await tester.tap(find.byKey(const Key('method')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('WS').last);
+    await tester.pumpAndSettle();
+    await type(
+      tester,
+      find.byKey(const Key('url')),
+      'ws://127.0.0.1:${server.port}/ws',
+    );
+    await typeHeaders(tester, 'X-Room: lobby');
+
+    // The handshake carries the headers, and the greeting arrives.
+    await tester.tap(find.byKey(const Key('send')));
+    await waitFor(tester, find.text('Connected'));
+    await waitFor(tester, find.text('welcome lobby'));
+
+    await tester.tap(find.byKey(const Key('body-tab')));
+    await tester.pumpAndSettle();
+    await type(tester, find.byKey(const Key('ws-message')), 'hello');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('ws-send')));
+    await waitFor(tester, find.text('HELLO'));
+    expect(find.text('3 messages'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('send')));
+    await waitFor(tester, find.text('Disconnected'));
+    expect(find.text('Connect'), findsOneWidget);
+
+    // Saved like any request, with the message being composed.
+    await tester.tap(find.byKey(const Key('save')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('save-confirm')));
+    await tester.pumpAndSettle();
+    final saved = store.requests.single.request!;
+    expect((saved.method, saved.body), ('WS', 'hello'));
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('switches to gRPC and explains an unreachable server', (
+    tester,
+  ) async {
+    await start(tester);
+    await launch(tester);
+
+    await tester.tap(find.byKey(const Key('method')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('GRPC').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Invoke'), findsOneWidget);
+    expect(find.widgetWithText(Tab, 'Message'), findsOneWidget);
+
+    // Nothing listens on port 1, so loading the methods fails with a reason.
+    await type(tester, find.byKey(const Key('url')), '127.0.0.1:1');
+    await tester.tap(find.byKey(const Key('send')));
+    await waitFor(tester, find.byKey(const Key('grpc-error')));
+    expect(find.textContaining('cannot reach 127.0.0.1:1'), findsOneWidget);
+
+    // The address and message are saved as a gRPC request.
+    await tester.tap(find.byKey(const Key('body-tab')));
+    await tester.pumpAndSettle();
+    await type(tester, find.byKey(const Key('grpc-message')), '{"a": 1}');
+    await tester.tap(find.byKey(const Key('save')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('save-confirm')));
+    await tester.pumpAndSettle();
+    final saved = store.requests.single.request!;
+    expect(
+      (saved.method, saved.url, saved.body),
+      ('GRPC', '127.0.0.1:1', '{"a": 1}'),
+    );
+    expect(tester.takeException(), isNull);
   });
 }

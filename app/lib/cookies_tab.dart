@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'actions.dart';
 import 'src/rust/api/core.dart';
+import 'theme.dart';
 import 'workspace_store.dart';
 
 /// The Cookies tab: what servers have set, plus cookies added by hand.
@@ -16,8 +18,6 @@ class CookiesTab extends StatefulWidget {
   @override
   State<CookiesTab> createState() => _CookiesTabState();
 }
-
-const _mono = TextStyle(fontFamily: 'Menlo', fontSize: 13);
 
 class _CookiesTabState extends State<CookiesTab> {
   final _domain = TextEditingController();
@@ -110,7 +110,16 @@ class _CookiesTabState extends State<CookiesTab> {
                   if (cookies.isNotEmpty)
                     TextButton(
                       key: const Key('cookies-clear'),
-                      onPressed: _store.clearCookies,
+                      onPressed: () {
+                        final removed = [...cookies];
+                        _store.clearCookies();
+                        showUndo(
+                          context,
+                          'Cleared ${removed.length} '
+                          '${removed.length == 1 ? 'cookie' : 'cookies'}',
+                          () => _store.setCookies(removed),
+                        );
+                      },
                       child: const Text('Clear all'),
                     ),
                   TextButton.icon(
@@ -171,14 +180,21 @@ class _CookiesTabState extends State<CookiesTab> {
       title: SelectableText(
         '${cookie.name}=${cookie.value}',
         maxLines: 1,
-        style: _mono,
+        style: mono,
       ),
       subtitle: Text(details),
       trailing: IconButton(
         tooltip: 'Delete cookie',
         iconSize: 18,
         icon: const Icon(Icons.delete_outline),
-        onPressed: () => _store.removeCookie(cookie),
+        onPressed: () {
+          _store.removeCookie(cookie);
+          showUndo(
+            context,
+            'Deleted cookie "${cookie.name}"',
+            () => _store.putCookie(cookie),
+          );
+        },
       ),
     );
   }
@@ -191,12 +207,8 @@ class _CookiesTabState extends State<CookiesTab> {
   }
 
   Widget _form(ThemeData theme) {
-    InputDecoration field(String label, String hint) => InputDecoration(
-      border: const OutlineInputBorder(),
-      isDense: true,
-      labelText: label,
-      hintText: hint,
-    );
+    InputDecoration field(String label, String hint) =>
+        InputDecoration(isDense: true, labelText: label, hintText: hint);
     TextField input(
       String key,
       TextEditingController controller,
@@ -209,7 +221,7 @@ class _CookiesTabState extends State<CookiesTab> {
       enableSuggestions: false,
       smartQuotesType: SmartQuotesType.disabled,
       smartDashesType: SmartDashesType.disabled,
-      style: _mono,
+      style: mono,
       decoration: field(label, hint),
       onSubmitted: (_) => _add(),
     );

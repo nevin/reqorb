@@ -88,6 +88,24 @@ class WorkspaceStore extends ChangeNotifier {
 
   void clearCookies() => _set(cookies: const []);
 
+  // -------------------------------------------------------------- session
+
+  /// Every HTTP exchange made since the app started, oldest first. Kept in
+  /// memory only, so that it can be exported as a HAR file.
+  List<Exchange> get session => _session;
+  List<Exchange> _session = const [];
+
+  void addExchanges(List<Exchange> exchanges) {
+    if (exchanges.isEmpty) return;
+    _session = [..._session, ...exchanges];
+    notifyListeners();
+  }
+
+  void clearSession() {
+    _session = const [];
+    notifyListeners();
+  }
+
   Future<void> load() async {
     try {
       _workspace = await loadWorkspace(path: path);
@@ -225,6 +243,14 @@ class WorkspaceStore extends ChangeNotifier {
     _set(collections: [...collections]..removeAt(index));
   }
 
+  /// Puts a removed collection back where it was.
+  void insertCollection(int index, Collection collection) {
+    _set(
+      collections: [...collections]
+        ..insert(index.clamp(0, collections.length), collection),
+    );
+  }
+
   /// Appends a request to a collection, creating the collection when
   /// [collection] is null.
   RequestRef addRequest({
@@ -269,6 +295,56 @@ class WorkspaceStore extends ChangeNotifier {
   );
 
   void removeItem(RequestRef ref) => _changeItem(ref, (_) => null);
+
+  void renameItem(RequestRef ref, String name) => _changeItem(
+    ref,
+    (item) => Item(name: name, request: item.request, items: item.items),
+  );
+
+  /// Adds [item] as a sibling at [ref], which is how a removal is undone.
+  void insertItem(RequestRef ref, Item item) {
+    if (ref.path.isEmpty) return;
+    if (ref.collection == RequestRef.noCollection) {
+      _set(requests: _insert(requests, ref.path, item));
+      return;
+    }
+    if (ref.collection < 0 || ref.collection >= collections.length) return;
+    final all = [...collections];
+    final target = all[ref.collection];
+    all[ref.collection] = Collection(
+      name: target.name,
+      variables: target.variables,
+      items: _insert(target.items, ref.path, item),
+    );
+    _set(collections: all);
+  }
+
+  /// Copies a request to the end of the folder it is in, so that no other
+  /// request changes position.
+  void duplicateItem(RequestRef ref) {
+    final item = itemAt(ref);
+    if (item == null) return;
+    final parent = ref.path.sublist(0, ref.path.length - 1);
+    insertItem(
+      RequestRef(ref.collection, [...parent, 1 << 30]),
+      Item(name: '${item.name} copy', request: item.request, items: item.items),
+    );
+  }
+
+  static List<Item> _insert(List<Item> items, List<int> path, Item item) {
+    final i = path.first;
+    final out = [...items];
+    if (path.length == 1) {
+      out.insert(i.clamp(0, out.length), item);
+    } else if (i < items.length) {
+      out[i] = Item(
+        name: items[i].name,
+        request: items[i].request,
+        items: _insert(items[i].items, path.sublist(1), item),
+      );
+    }
+    return out;
+  }
 
   void _changeItem(RequestRef ref, Item? Function(Item) change) {
     if (itemAt(ref) == null) return;
@@ -349,6 +425,19 @@ class WorkspaceStore extends ChangeNotifier {
       activeEnvironment: activeEnvironment == old.name
           ? () => environment.name
           : null,
+    );
+  }
+
+  /// Puts a removed environment back, selecting it again if it was in use.
+  void insertEnvironment(
+    int index,
+    Environment environment, {
+    required bool active,
+  }) {
+    _set(
+      environments: [...environments]
+        ..insert(index.clamp(0, environments.length), environment),
+      activeEnvironment: active ? () => environment.name : null,
     );
   }
 

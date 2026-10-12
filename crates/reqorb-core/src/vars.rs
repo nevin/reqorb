@@ -41,6 +41,11 @@ pub fn resolve(request: &Request, variables: &[Variable]) -> Resolved {
     }
 }
 
+/// Substitutes variables in one piece of text, leaving unknown ones as written.
+pub(crate) fn fill(input: &str, variables: &[Variable]) -> String {
+    substitute(input, variables, 0, &mut Vec::new())
+}
+
 fn substitute(input: &str, vars: &[Variable], depth: u8, unresolved: &mut Vec<String>) -> String {
     let mut out = String::with_capacity(input.len());
     let mut rest = input;

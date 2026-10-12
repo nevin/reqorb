@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'theme.dart';
+
 /// One `key: value` line; a line without a colon is a key with no value.
 (String, String)? parseKeyValueLine(String line) {
   line = line.trim();
@@ -93,7 +95,8 @@ class _Row {
   }
 }
 
-const _mono = TextStyle(fontFamily: 'Menlo', fontSize: 13, height: 1.4);
+/// Width kept at the end of every row for its remove button.
+const _removeWidth = 36.0;
 
 class _KeyValueEditorState extends State<KeyValueEditor> {
   final _rows = <_Row>[];
@@ -181,28 +184,40 @@ class _KeyValueEditorState extends State<KeyValueEditor> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Laid out like a table row, so each label sits over its column.
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 4, 4, 0),
+          padding: const EdgeInsets.fromLTRB(12, 2, 4, 2),
           child: Row(
             children: [
               if (!widget.bulk) ...[
                 Expanded(child: Text(widget.keyLabel, style: label)),
                 const SizedBox(width: 8),
-                Expanded(child: Text(widget.valueLabel, style: label)),
-              ] else
-                Expanded(
-                  child: Text(
-                    'One ${widget.keyLabel.toLowerCase()}'
-                    '${widget.separator.trim()}'
-                    '${widget.valueLabel.toLowerCase()} per line',
-                    style: label,
-                  ),
+              ],
+              Expanded(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.bulk
+                            ? 'One ${widget.keyLabel.toLowerCase()}'
+                                  '${widget.separator.trim()}'
+                                  '${widget.valueLabel.toLowerCase()} per line'
+                            : widget.valueLabel,
+                        style: label,
+                      ),
+                    ),
+                    TextButton(
+                      key: Key('${widget.name}-bulk-toggle'),
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      onPressed: () => widget.onBulkChanged(!widget.bulk),
+                      child: Text(widget.bulk ? 'Key-Value Edit' : 'Bulk Edit'),
+                    ),
+                  ],
                 ),
-              TextButton(
-                key: Key('${widget.name}-bulk-toggle'),
-                onPressed: () => widget.onBulkChanged(!widget.bulk),
-                child: Text(widget.bulk ? 'Key-Value Edit' : 'Bulk Edit'),
               ),
+              const SizedBox(width: _removeWidth),
             ],
           ),
         ),
@@ -222,9 +237,11 @@ class _KeyValueEditorState extends State<KeyValueEditor> {
       smartQuotesType: SmartQuotesType.disabled,
       smartDashesType: SmartDashesType.disabled,
       textAlignVertical: TextAlignVertical.top,
-      style: _mono,
+      style: mono,
       decoration: InputDecoration(
         border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
         contentPadding: const EdgeInsets.all(12),
         hintText: widget.bulkHint,
       ),
@@ -263,15 +280,19 @@ class _KeyValueEditorState extends State<KeyValueEditor> {
             ),
           ),
           // The trailing blank row has nothing to remove yet.
-          Visibility.maintain(
-            visible: !isLast,
-            child: IconButton(
-              key: Key('${widget.name}-remove-$index'),
-              tooltip: 'Remove',
-              iconSize: 18,
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.close),
-              onPressed: isLast ? null : () => _remove(index),
+          SizedBox(
+            width: _removeWidth,
+            child: Visibility.maintain(
+              visible: !isLast,
+              child: IconButton(
+                key: Key('${widget.name}-remove-$index'),
+                tooltip: 'Remove',
+                iconSize: 16,
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.close),
+                onPressed: isLast ? null : () => _remove(index),
+              ),
             ),
           ),
         ],
@@ -287,12 +308,8 @@ class _KeyValueEditorState extends State<KeyValueEditor> {
       enableSuggestions: false,
       smartQuotesType: SmartQuotesType.disabled,
       smartDashesType: SmartDashesType.disabled,
-      style: _mono,
-      decoration: InputDecoration(
-        border: const OutlineInputBorder(),
-        isDense: true,
-        hintText: hint,
-      ),
+      style: mono,
+      decoration: InputDecoration(isDense: true, hintText: hint),
       onChanged: (_) => _writeText(),
     );
   }

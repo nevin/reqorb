@@ -33,6 +33,13 @@ pub struct Request {
     /// Fields for the form-data and url-encoded body types.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub form: Vec<FormField>,
+    /// For a gRPC request, the method to call as `package.Service/Method`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grpc_method: Option<String>,
+    /// For a gRPC request, the `.proto` file describing the service; `None`
+    /// asks the server through reflection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proto_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -194,6 +201,15 @@ pub struct Response {
     pub size_bytes: u64,
     /// Time from sending the request to receiving the full body.
     pub elapsed_ms: u64,
+}
+
+/// One request as it went out and the response that came back.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Exchange {
+    /// When the request was sent, in milliseconds since the Unix epoch.
+    pub started_ms: u64,
+    pub request: Request,
+    pub response: Response,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

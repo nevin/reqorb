@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'src/rust/api/core.dart';
+import 'theme.dart';
 
 /// The Auth tab: a type picker and the form that type needs.
 ///
@@ -179,7 +180,7 @@ class _AuthEditorState extends State<AuthEditor> {
       enableSuggestions: false,
       smartQuotesType: SmartQuotesType.disabled,
       smartDashesType: SmartDashesType.disabled,
-      style: const TextStyle(fontFamily: 'Menlo', fontSize: 13),
+      style: mono,
       decoration: InputDecoration(
         labelText: field.label,
         alignLabelWithHint: true,

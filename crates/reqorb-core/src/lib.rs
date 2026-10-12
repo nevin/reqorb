@@ -3,22 +3,30 @@
 mod auth;
 mod cookies;
 mod export;
+mod grpc;
+mod har;
 mod import;
 mod model;
 mod openapi;
 mod vars;
+mod ws;
 
 use std::time::{Duration, Instant};
 
 pub use auth::{Auth, AuthField, AuthKind, AuthParam, auth_fields};
 pub use cookies::{Cookie, cookie_header, store_set_cookie};
 pub use export::{ExportFormat, export_collection, export_environment, export_native, to_curl};
+pub use grpc::{
+    GrpcCall, GrpcMethod, GrpcReply, GrpcSchema, grpc_call, grpc_load_proto, grpc_reflect,
+};
+pub use har::to_har;
 pub use import::{ImportResult, import};
 pub use model::{
-    AppTheme, BodyMode, Collection, DisabledTls, Environment, FormField, Header, HttpMode, Item,
-    Request, RequestSettings, Response, SendOptions, Settings, Variable, Workspace,
+    AppTheme, BodyMode, Collection, DisabledTls, Environment, Exchange, FormField, Header,
+    HttpMode, Item, Request, RequestSettings, Response, SendOptions, Settings, Variable, Workspace,
 };
 pub use vars::{Resolved, resolve};
+pub use ws::{WsEvent, WsEventKind, WsHandle, ws_connect};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -68,6 +76,9 @@ pub struct Sent {
     pub unresolved: Vec<String>,
     /// The cookie jar after the exchange, including anything the server set.
     pub cookies: Vec<Cookie>,
+    /// Every HTTP exchange the send made, oldest first: redirects and
+    /// authorization round trips as well as the final one.
+    pub exchanges: Vec<Exchange>,
 }
 
 /// Substitutes `variables` into the request and sends it. Undefined
@@ -90,11 +101,12 @@ pub async fn send_with(
         return Err(Error::UnresolvedVariables(resolved.unresolved));
     }
     let mut jar = cookies.to_vec();
-    let response = send_opts(resolved.request, options, &mut jar).await?;
+    let (response, exchanges) = send_logged(resolved.request, options, &mut jar).await?;
     Ok(Sent {
         response,
         unresolved: resolved.unresolved,
         cookies: jar,
+        exchanges,
     })
 }
 
@@ -137,10 +149,19 @@ pub async fn send(request: Request) -> Result<Response, Error> {
 /// Matching cookies from `cookies` are sent, and the jar is updated with
 /// whatever the server sets, including on redirects along the way.
 pub async fn send_opts(
-    mut request: Request,
+    request: Request,
     options: &SendOptions,
     cookies: &mut Vec<Cookie>,
 ) -> Result<Response, Error> {
+    Ok(send_logged(request, options, cookies).await?.0)
+}
+
+/// Like [`send_opts`], also returning each exchange that took place.
+async fn send_logged(
+    mut request: Request,
+    options: &SendOptions,
+    cookies: &mut Vec<Cookie>,
+) -> Result<(Response, Vec<Exchange>), Error> {
     let auth = request.auth.take().unwrap_or_default();
     let settings = request.settings.take().unwrap_or_default();
     request.timeout_ms = request.timeout_ms.or(options.timeout_ms);
@@ -210,6 +231,7 @@ pub async fn send_opts(
     let transport = Transport {
         client: builder.build()?,
         settings,
+        log: Default::default(),
     };
 
     let started = Instant::now();
@@ -224,7 +246,8 @@ pub async fn send_opts(
     match result {
         Ok(mut response) => {
             response.elapsed_ms = started.elapsed().as_millis() as u64;
-            Ok(response)
+            let exchanges = std::mem::take(&mut *transport.log.lock().unwrap());
+            Ok((response, exchanges))
         }
         // A server that only speaks HTTP/1.1 fails in ways that do not name the cause.
         Err(Error::Http(message)) if http_mode == HttpMode::Http2 => Err(Error::Http(format!(
@@ -238,6 +261,8 @@ pub async fn send_opts(
 pub(crate) struct Transport {
     client: reqwest::Client,
     settings: RequestSettings,
+    /// Each exchange made through this transport, for the session log.
+    log: std::sync::Mutex<Vec<Exchange>>,
 }
 
 /// Performs an exchange, following redirects as the request's settings say.
@@ -246,7 +271,13 @@ pub(crate) async fn execute(transport: &Transport, request: &Request) -> Result<
     let mut current = request.clone();
     let mut hops = 0;
     loop {
+        let started_ms = cookies::now_ms();
         let response = execute_once(&transport.client, &current).await?;
+        transport.log.lock().unwrap().push(Exchange {
+            started_ms,
+            request: current.clone(),
+            response: response.clone(),
+        });
         let location = response
             .headers
             .iter()
@@ -724,6 +755,36 @@ mod tests {
         change(&mut settings);
         request.settings = Some(settings);
         request
+    }
+
+    #[tokio::test]
+    async fn a_send_records_every_exchange_for_the_session_log() {
+        let (url, server) = serve(vec![
+            reply("302 Found", "Location: /next\r\n", ""),
+            reply("200 OK", "Content-Type: text/plain\r\n", "done"),
+        ]);
+        let mut request = Request::new("POST", &url);
+        request.body = Some("payload".into());
+        let sent = send_with(&request, &[], &SendOptions::default(), &[])
+            .await
+            .unwrap();
+        server.join().unwrap();
+
+        let log: Vec<_> = sent
+            .exchanges
+            .iter()
+            .map(|e| (e.request.method.as_str(), e.response.status))
+            .collect();
+        assert_eq!(log, [("POST", 302), ("GET", 200)]);
+        assert!(sent.exchanges[1].request.url.ends_with("/next"));
+        assert!(sent.exchanges[0].started_ms > 1_700_000_000_000);
+
+        let har: serde_json::Value = serde_json::from_str(&to_har(&sent.exchanges)).unwrap();
+        let entries = har["log"]["entries"].as_array().unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0]["response"]["redirectURL"], "/next");
+        assert_eq!(entries[0]["request"]["postData"]["text"], "payload");
+        assert_eq!(entries[1]["response"]["content"]["text"], "done");
     }
 
     #[tokio::test]

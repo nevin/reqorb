@@ -3,8 +3,7 @@ import 'package:flutter/material.dart' hide FormField;
 
 import 'key_value_editor.dart';
 import 'src/rust/api/core.dart';
-
-const _mono = TextStyle(fontFamily: 'Menlo', fontSize: 13, height: 1.4);
+import 'theme.dart';
 
 /// Content types offered for a raw body, by the name shown in the picker.
 const rawLanguages = {
@@ -24,7 +23,7 @@ const _modeLabels = {
 };
 
 /// Asks for a file and returns its path, or null when cancelled.
-Future<String?> _pickPath() async => (await FilePicker.pickFile())?.path;
+Future<String?> pickFilePath() async => (await FilePicker.pickFile())?.path;
 
 /// The Body tab: a body type picker and the editor for that type.
 /// The page owns all the state, so switching type loses nothing.
@@ -69,24 +68,36 @@ class BodyEditor extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-          child: Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              for (final entry in _modeLabels.entries)
-                ChoiceChip(
-                  key: Key('body-mode-${entry.value}'),
-                  label: Text(entry.value),
-                  selected: mode == entry.key,
-                  showCheckmark: false,
-                  visualDensity: VisualDensity.compact,
-                  onSelected: (_) => onModeChanged(entry.key),
+        // One line: the types scroll sideways in a narrow pane rather than
+        // wrapping, and the raw type picker stays in view beside them.
+        Row(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                child: Row(
+                  spacing: 6,
+                  children: [
+                    for (final entry in _modeLabels.entries)
+                      ChoiceChip(
+                        key: Key('body-mode-${entry.value}'),
+                        label: Text(entry.value),
+                        labelStyle: const TextStyle(fontSize: 13),
+                        labelPadding: const EdgeInsets.symmetric(horizontal: 2),
+                        selected: mode == entry.key,
+                        showCheckmark: false,
+                        visualDensity: VisualDensity.compact,
+                        onSelected: (_) => onModeChanged(entry.key),
+                      ),
+                  ],
                 ),
-              if (mode == BodyMode.raw)
-                DropdownButton<String>(
+              ),
+            ),
+            if (mode == BodyMode.raw)
+              Padding(
+                padding: const EdgeInsets.only(right: 12, top: 4),
+                child: DropdownButton<String>(
                   key: const Key('body-raw-language'),
                   value: rawLanguage,
                   hint: const Text('Type'),
@@ -100,8 +111,8 @@ class BodyEditor extends StatelessWidget {
                     if (name != null) onRawLanguageChanged(name);
                   },
                 ),
-            ],
-          ),
+              ),
+          ],
         ),
         Expanded(
           child: switch (mode) {
@@ -121,9 +132,11 @@ class BodyEditor extends StatelessWidget {
               smartQuotesType: SmartQuotesType.disabled,
               smartDashesType: SmartDashesType.disabled,
               textAlignVertical: TextAlignVertical.top,
-              style: _mono,
+              style: mono,
               decoration: const InputDecoration(
                 border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
                 contentPadding: EdgeInsets.all(12),
                 hintText: '{\n  "name": "reqorb"\n}',
               ),
@@ -189,9 +202,8 @@ class _PathField extends StatelessWidget {
       enableSuggestions: false,
       smartQuotesType: SmartQuotesType.disabled,
       smartDashesType: SmartDashesType.disabled,
-      style: _mono,
+      style: mono,
       decoration: InputDecoration(
-        border: const OutlineInputBorder(),
         isDense: true,
         hintText: hint,
         suffixIcon: IconButton(
@@ -200,7 +212,7 @@ class _PathField extends StatelessWidget {
           iconSize: 18,
           icon: const Icon(Icons.folder_open_outlined),
           onPressed: () async {
-            final path = await _pickPath();
+            final path = await pickFilePath();
             if (path == null) return;
             controller.text = path;
             onChanged?.call();
@@ -211,6 +223,10 @@ class _PathField extends StatelessWidget {
     );
   }
 }
+
+/// Widths of the type picker and the remove button in a form-data row.
+const _typeWidth = 64.0;
+const _removeWidth = 36.0;
 
 class _FormRow {
   _FormRow(FormField field)
@@ -280,9 +296,29 @@ class _FormDataEditorState extends State<FormDataEditor> {
   Widget build(BuildContext context) {
     // A column, not a lazy list: there are few rows, and each one should
     // exist even while scrolled out of a short pane.
+    final theme = Theme.of(context);
+    final label = theme.textTheme.labelMedium?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(12, 4, 4, 12),
-      child: Column(children: [for (var i = 0; i < _rows.length; i++) _row(i)]),
+      child: Column(
+        children: [
+          // Mirrors a row, so each label sits over its column.
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              children: [
+                Expanded(flex: 2, child: Text('Key', style: label)),
+                const SizedBox(width: _typeWidth + 12),
+                Expanded(flex: 3, child: Text('Value', style: label)),
+                const SizedBox(width: _removeWidth),
+              ],
+            ),
+          ),
+          for (var i = 0; i < _rows.length; i++) _row(i),
+        ],
+      ),
     );
   }
 
@@ -302,29 +338,29 @@ class _FormDataEditorState extends State<FormDataEditor> {
               enableSuggestions: false,
               smartQuotesType: SmartQuotesType.disabled,
               smartDashesType: SmartDashesType.disabled,
-              style: _mono,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                isDense: true,
-                hintText: 'Key',
-              ),
+              style: mono,
+              decoration: const InputDecoration(isDense: true, hintText: 'Key'),
               onChanged: (_) => _emit(),
             ),
           ),
           const SizedBox(width: 6),
-          DropdownButton<bool>(
-            key: Key('form-type-$index'),
-            value: row.file,
-            isDense: true,
-            underline: const SizedBox.shrink(),
-            items: const [
-              DropdownMenuItem(value: false, child: Text('Text')),
-              DropdownMenuItem(value: true, child: Text('File')),
-            ],
-            onChanged: (file) {
-              setState(() => row.file = file ?? false);
-              _emit();
-            },
+          SizedBox(
+            width: _typeWidth,
+            child: DropdownButton<bool>(
+              key: Key('form-type-$index'),
+              value: row.file,
+              isDense: true,
+              isExpanded: true,
+              underline: const SizedBox.shrink(),
+              items: const [
+                DropdownMenuItem(value: false, child: Text('Text')),
+                DropdownMenuItem(value: true, child: Text('File')),
+              ],
+              onChanged: (file) {
+                setState(() => row.file = file ?? false);
+                _emit();
+              },
+            ),
           ),
           const SizedBox(width: 6),
           Expanded(
@@ -344,29 +380,32 @@ class _FormDataEditorState extends State<FormDataEditor> {
                     enableSuggestions: false,
                     smartQuotesType: SmartQuotesType.disabled,
                     smartDashesType: SmartDashesType.disabled,
-                    style: _mono,
+                    style: mono,
                     decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
                       isDense: true,
                       hintText: 'Value',
                     ),
                     onChanged: (_) => _emit(),
                   ),
           ),
-          Visibility.maintain(
-            visible: !isLast,
-            child: IconButton(
-              key: Key('form-remove-$index'),
-              tooltip: 'Remove',
-              iconSize: 18,
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.close),
-              onPressed: isLast
-                  ? null
-                  : () {
-                      setState(() => _rows.removeAt(index).dispose());
-                      _emit();
-                    },
+          SizedBox(
+            width: _removeWidth,
+            child: Visibility.maintain(
+              visible: !isLast,
+              child: IconButton(
+                key: Key('form-remove-$index'),
+                tooltip: 'Remove',
+                iconSize: 16,
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.close),
+                onPressed: isLast
+                    ? null
+                    : () {
+                        setState(() => _rows.removeAt(index).dispose());
+                        _emit();
+                      },
+              ),
             ),
           ),
         ],

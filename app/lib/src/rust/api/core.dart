@@ -32,6 +32,54 @@ Future<Sent> sendRequest({
   cookies: cookies,
 );
 
+/// The exchanges of a session as an HTTP Archive (HAR 1.2) document.
+String exportHar({required List<Exchange> exchanges}) =>
+    RustLib.instance.api.crateApiCoreExportHar(exchanges: exchanges);
+
+/// Opens a WebSocket and reports what happens on it until it ends. A
+/// connection that cannot be opened ends with a single `Error` event.
+Stream<WsEvent> wsOpen({
+  required int id,
+  required Request request,
+  required List<Variable> variables,
+}) => RustLib.instance.api.crateApiCoreWsOpen(
+  id: id,
+  request: request,
+  variables: variables,
+);
+
+/// Sends a text message; false when the connection is not open.
+bool wsSend({required int id, required String text}) =>
+    RustLib.instance.api.crateApiCoreWsSend(id: id, text: text);
+
+/// Asks the connection to close; false when it is not open.
+bool wsClose({required int id}) =>
+    RustLib.instance.api.crateApiCoreWsClose(id: id);
+
+/// Asks a gRPC server which methods it offers, through server reflection.
+Future<GrpcSchema> grpcReflect({
+  required String url,
+  required List<Header> metadata,
+  Auth? auth,
+  required List<Variable> variables,
+}) => RustLib.instance.api.crateApiCoreGrpcReflect(
+  url: url,
+  metadata: metadata,
+  auth: auth,
+  variables: variables,
+);
+
+/// Reads the methods a `.proto` file defines.
+Future<GrpcSchema> grpcLoadProto({required String path}) =>
+    RustLib.instance.api.crateApiCoreGrpcLoadProto(path: path);
+
+/// Makes a gRPC call and waits for all of its responses.
+Future<GrpcReply> grpcCall({
+  required GrpcCall call,
+  required List<Variable> variables,
+}) =>
+    RustLib.instance.api.crateApiCoreGrpcCall(call: call, variables: variables);
+
 Future<Workspace> loadWorkspace({required String path}) =>
     RustLib.instance.api.crateApiCoreLoadWorkspace(path: path);
 
@@ -282,6 +330,30 @@ class Environment {
           variables == other.variables;
 }
 
+class Exchange {
+  final int startedMs;
+  final Request request;
+  final Response response;
+
+  const Exchange({
+    required this.startedMs,
+    required this.request,
+    required this.response,
+  });
+
+  @override
+  int get hashCode => startedMs.hashCode ^ request.hashCode ^ response.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Exchange &&
+          runtimeType == other.runtimeType &&
+          startedMs == other.startedMs &&
+          request == other.request &&
+          response == other.response;
+}
+
 enum ExportFormat { reqorb, postman, bruno, curl, dotenv }
 
 class FormField {
@@ -302,6 +374,141 @@ class FormField {
           key == other.key &&
           value == other.value &&
           file == other.file;
+}
+
+class GrpcCall {
+  final String url;
+  final String method;
+  final List<String> messages;
+  final List<Header> metadata;
+  final Auth? auth;
+  final Uint8List descriptors;
+  final int? timeoutMs;
+
+  const GrpcCall({
+    required this.url,
+    required this.method,
+    required this.messages,
+    required this.metadata,
+    this.auth,
+    required this.descriptors,
+    this.timeoutMs,
+  });
+
+  @override
+  int get hashCode =>
+      url.hashCode ^
+      method.hashCode ^
+      messages.hashCode ^
+      metadata.hashCode ^
+      auth.hashCode ^
+      descriptors.hashCode ^
+      timeoutMs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GrpcCall &&
+          runtimeType == other.runtimeType &&
+          url == other.url &&
+          method == other.method &&
+          messages == other.messages &&
+          metadata == other.metadata &&
+          auth == other.auth &&
+          descriptors == other.descriptors &&
+          timeoutMs == other.timeoutMs;
+}
+
+class GrpcMethod {
+  final String path;
+  final bool clientStreaming;
+  final bool serverStreaming;
+  final String example;
+
+  const GrpcMethod({
+    required this.path,
+    required this.clientStreaming,
+    required this.serverStreaming,
+    required this.example,
+  });
+
+  @override
+  int get hashCode =>
+      path.hashCode ^
+      clientStreaming.hashCode ^
+      serverStreaming.hashCode ^
+      example.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GrpcMethod &&
+          runtimeType == other.runtimeType &&
+          path == other.path &&
+          clientStreaming == other.clientStreaming &&
+          serverStreaming == other.serverStreaming &&
+          example == other.example;
+}
+
+class GrpcReply {
+  final int code;
+  final String status;
+  final String message;
+  final List<String> messages;
+  final List<Header> headers;
+  final List<Header> trailers;
+  final int elapsedMs;
+
+  const GrpcReply({
+    required this.code,
+    required this.status,
+    required this.message,
+    required this.messages,
+    required this.headers,
+    required this.trailers,
+    required this.elapsedMs,
+  });
+
+  @override
+  int get hashCode =>
+      code.hashCode ^
+      status.hashCode ^
+      message.hashCode ^
+      messages.hashCode ^
+      headers.hashCode ^
+      trailers.hashCode ^
+      elapsedMs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GrpcReply &&
+          runtimeType == other.runtimeType &&
+          code == other.code &&
+          status == other.status &&
+          message == other.message &&
+          messages == other.messages &&
+          headers == other.headers &&
+          trailers == other.trailers &&
+          elapsedMs == other.elapsedMs;
+}
+
+class GrpcSchema {
+  final List<GrpcMethod> methods;
+  final Uint8List descriptors;
+
+  const GrpcSchema({required this.methods, required this.descriptors});
+
+  @override
+  int get hashCode => methods.hashCode ^ descriptors.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GrpcSchema &&
+          runtimeType == other.runtimeType &&
+          methods == other.methods &&
+          descriptors == other.descriptors;
 }
 
 class Header {
@@ -385,6 +592,8 @@ class Request {
   final RequestSettings? settings;
   final BodyMode? bodyMode;
   final List<FormField> form;
+  final String? grpcMethod;
+  final String? protoPath;
 
   const Request({
     required this.method,
@@ -396,6 +605,8 @@ class Request {
     this.settings,
     this.bodyMode,
     required this.form,
+    this.grpcMethod,
+    this.protoPath,
   });
 
   @override
@@ -408,7 +619,9 @@ class Request {
       auth.hashCode ^
       settings.hashCode ^
       bodyMode.hashCode ^
-      form.hashCode;
+      form.hashCode ^
+      grpcMethod.hashCode ^
+      protoPath.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -423,7 +636,9 @@ class Request {
           auth == other.auth &&
           settings == other.settings &&
           bodyMode == other.bodyMode &&
-          form == other.form;
+          form == other.form &&
+          grpcMethod == other.grpcMethod &&
+          protoPath == other.protoPath;
 }
 
 class RequestSettings {
@@ -528,16 +743,21 @@ class Sent {
   final Response response;
   final List<String> unresolved;
   final List<Cookie> cookies;
+  final List<Exchange> exchanges;
 
   const Sent({
     required this.response,
     required this.unresolved,
     required this.cookies,
+    required this.exchanges,
   });
 
   @override
   int get hashCode =>
-      response.hashCode ^ unresolved.hashCode ^ cookies.hashCode;
+      response.hashCode ^
+      unresolved.hashCode ^
+      cookies.hashCode ^
+      exchanges.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -546,7 +766,8 @@ class Sent {
           runtimeType == other.runtimeType &&
           response == other.response &&
           unresolved == other.unresolved &&
-          cookies == other.cookies;
+          cookies == other.cookies &&
+          exchanges == other.exchanges;
 }
 
 class Settings {
@@ -635,3 +856,44 @@ class Workspace {
           settings == other.settings &&
           cookies == other.cookies;
 }
+
+class WsEvent {
+  final WsEventKind kind;
+  final String text;
+  final Uint8List data;
+  final int code;
+  final List<Header> headers;
+  final int atMs;
+
+  const WsEvent({
+    required this.kind,
+    required this.text,
+    required this.data,
+    required this.code,
+    required this.headers,
+    required this.atMs,
+  });
+
+  @override
+  int get hashCode =>
+      kind.hashCode ^
+      text.hashCode ^
+      data.hashCode ^
+      code.hashCode ^
+      headers.hashCode ^
+      atMs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is WsEvent &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          text == other.text &&
+          data == other.data &&
+          code == other.code &&
+          headers == other.headers &&
+          atMs == other.atMs;
+}
+
+enum WsEventKind { open, text, binary, ping, pong, closed, error }

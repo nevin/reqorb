@@ -30,6 +30,72 @@ enum Command {
     Import(ImportArgs),
     /// Convert a collection or environment file to another format
     Export(ExportArgs),
+    /// Open a WebSocket, send messages and print what arrives
+    Ws(WsArgs),
+    /// List a gRPC server's methods, or call one with JSON messages
+    Grpc(GrpcArgs),
+}
+
+#[derive(Args)]
+struct GrpcArgs {
+    /// Server address, such as localhost:50051 or https://api.example.com
+    address: String,
+
+    /// Method to call as `package.Service/Method`; omit to list the methods
+    method: Option<String>,
+
+    /// Request message as JSON, or `@file` (repeat for a client stream)
+    #[arg(short = 'd', long = "data", value_name = "JSON")]
+    messages: Vec<String>,
+
+    /// Read the services from this .proto file instead of asking the server
+    #[arg(long, value_name = "FILE")]
+    proto: Option<String>,
+
+    /// Metadata as `name: value` (repeatable)
+    #[arg(short = 'H', long = "header", value_name = "METADATA")]
+    headers: Vec<String>,
+
+    /// Give up after this many seconds
+    #[arg(short, long, value_name = "SECS")]
+    timeout: Option<f64>,
+
+    /// Print the response metadata and trailers
+    #[arg(short, long)]
+    include: bool,
+
+    #[command(flatten)]
+    vars: VarArgs,
+}
+
+#[derive(Args)]
+struct WsArgs {
+    /// Address to connect to, such as wss://echo.example.com
+    url: String,
+
+    /// Handshake header as `Name: value` (repeatable)
+    #[arg(short = 'H', long = "header", value_name = "HEADER")]
+    headers: Vec<String>,
+
+    /// Message to send once connected (repeatable); lines typed on standard
+    /// input are sent as well
+    #[arg(short, long = "message", value_name = "TEXT")]
+    messages: Vec<String>,
+
+    /// Disconnect after this many messages have arrived
+    #[arg(short = 'n', long, value_name = "N")]
+    exit_after: Option<usize>,
+
+    /// Disconnect after this many seconds
+    #[arg(short, long, value_name = "SECS")]
+    timeout: Option<f64>,
+
+    /// Accept a server certificate that cannot be verified
+    #[arg(short = 'k', long)]
+    insecure: bool,
+
+    #[command(flatten)]
+    vars: VarArgs,
 }
 
 #[derive(Args)]
@@ -160,6 +226,24 @@ struct OutputArgs {
     /// Print the status line and response headers
     #[arg(short, long)]
     include: bool,
+
+    /// Write every HTTP exchange made, redirects included, to a HAR file
+    #[arg(long, value_name = "FILE")]
+    har: Option<PathBuf>,
+}
+
+/// Writes the session's exchanges as a HAR file when `--har` was given.
+fn write_har(output: &OutputArgs, exchanges: &[reqorb_core::Exchange]) -> Result<()> {
+    if let Some(path) = &output.har {
+        std::fs::write(path, reqorb_core::to_har(exchanges))
+            .with_context(|| format!("cannot write {}", path.display()))?;
+        eprintln!(
+            "wrote {} exchange(s) to {}",
+            exchanges.len(),
+            path.display()
+        );
+    }
+    Ok(())
 }
 
 #[derive(Args)]
@@ -441,6 +525,7 @@ async fn send(args: SendArgs) -> Result<ExitCode> {
     let sent = reqorb_core::send_with(&request, &variables, &args.http.options()?, &[]).await?;
     warn_unresolved(&sent.unresolved);
     print_response(&sent.response, &args.output)?;
+    write_har(&args.output, &sent.exchanges)?;
 
     Ok(if sent.response.status >= 400 {
         ExitCode::from(1)
@@ -485,6 +570,7 @@ async fn run(args: RunArgs) -> Result<ExitCode> {
         let sent = reqorb_core::send_with(request, variables, &options, &[]).await?;
         warn_unresolved(&sent.unresolved);
         print_response(&sent.response, &args.output)?;
+        write_har(&args.output, &sent.exchanges)?;
         return Ok(if sent.response.status >= 400 {
             ExitCode::from(1)
         } else {
@@ -494,12 +580,14 @@ async fn run(args: RunArgs) -> Result<ExitCode> {
 
     // Cookies carry over from one request to the next, as in a browser session.
     let mut cookies = Vec::new();
+    let mut exchanges = Vec::new();
     let mut failed = 0;
     for (path, request, variables) in &selected {
         let request = &args.http.apply(request);
         match reqorb_core::send_with(request, variables, &options, &cookies).await {
             Ok(sent) => {
                 cookies = sent.cookies;
+                exchanges.extend(sent.exchanges);
                 let ok = sent.response.status < 400;
                 failed += usize::from(!ok);
                 println!(
@@ -518,11 +606,175 @@ async fn run(args: RunArgs) -> Result<ExitCode> {
             }
         }
     }
+    write_har(&args.output, &exchanges)?;
     eprintln!("\n{} run, {failed} failed", selected.len());
     Ok(if failed > 0 {
         ExitCode::from(1)
     } else {
         ExitCode::SUCCESS
+    })
+}
+
+async fn ws(args: WsArgs) -> Result<ExitCode> {
+    use reqorb_core::WsEventKind;
+    use tokio::io::AsyncBufReadExt;
+
+    let url = if args.url.contains("://") || args.url.starts_with("{{") {
+        args.url.clone()
+    } else {
+        format!("ws://{}", args.url)
+    };
+    let mut request = Request::new("GET", url);
+    for raw in &args.headers {
+        request.headers.push(parse_header(raw)?);
+    }
+    if args.insecure {
+        request.settings = Some(reqorb_core::RequestSettings {
+            verify_ssl: false,
+            ..Default::default()
+        });
+    }
+    let variables = load_variables(&args.vars).await?;
+    let (handle, mut events) = reqorb_core::ws_connect(&request, &variables).await?;
+    for message in &args.messages {
+        handle.send_text(message.clone());
+    }
+
+    // Lines typed, or piped in, are sent as they arrive.
+    let typed = handle.clone();
+    tokio::spawn(async move {
+        let mut lines = tokio::io::BufReader::new(tokio::io::stdin()).lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            if !typed.send_text(line) {
+                break;
+            }
+        }
+    });
+    let deadline = args.timeout.map(std::time::Duration::from_secs_f64);
+    let give_up = async {
+        match deadline {
+            Some(after) => tokio::time::sleep(after).await,
+            None => std::future::pending().await,
+        }
+    };
+    tokio::pin!(give_up);
+
+    let mut received = 0;
+    let mut failed = false;
+    loop {
+        let event = tokio::select! {
+            event = events.recv() => event,
+            () = &mut give_up => {
+                handle.close();
+                // Keep reading so the close is acknowledged and reported.
+                deadline_passed(&mut events).await
+            }
+        };
+        let Some(event) = event else { break };
+        match event.kind {
+            WsEventKind::Open => eprintln!("connected ({} {})", event.code, event.text),
+            WsEventKind::Text => {
+                println!("{}", event.text);
+                received += 1;
+            }
+            WsEventKind::Binary => {
+                println!("[{} bytes of binary data]", event.data.len());
+                received += 1;
+            }
+            WsEventKind::Ping | WsEventKind::Pong => {}
+            WsEventKind::Closed => {
+                eprintln!("closed: {}", event.text);
+                break;
+            }
+            WsEventKind::Error => {
+                eprintln!("reqorb: {}", event.text);
+                failed = true;
+                break;
+            }
+        }
+        if args.exit_after.is_some_and(|n| received >= n) {
+            handle.close();
+        }
+    }
+    Ok(if failed {
+        ExitCode::from(1)
+    } else {
+        ExitCode::SUCCESS
+    })
+}
+
+/// After asking to close, waits for the event that ends the connection.
+async fn deadline_passed(
+    events: &mut tokio::sync::mpsc::UnboundedReceiver<reqorb_core::WsEvent>,
+) -> Option<reqorb_core::WsEvent> {
+    while let Some(event) = events.recv().await {
+        if matches!(
+            event.kind,
+            reqorb_core::WsEventKind::Closed | reqorb_core::WsEventKind::Error
+        ) {
+            return Some(event);
+        }
+    }
+    None
+}
+
+async fn grpc(args: GrpcArgs) -> Result<ExitCode> {
+    let variables = load_variables(&args.vars).await?;
+    let mut metadata = Vec::new();
+    for raw in &args.headers {
+        metadata.push(parse_header(raw)?);
+    }
+    let schema = match &args.proto {
+        Some(path) => reqorb_core::grpc_load_proto(path)?,
+        None => reqorb_core::grpc_reflect(&args.address, &metadata, None, &variables).await?,
+    };
+    let Some(method) = args.method else {
+        for method in &schema.methods {
+            let kind = match (method.client_streaming, method.server_streaming) {
+                (false, false) => "unary",
+                (true, false) => "client stream",
+                (false, true) => "server stream",
+                (true, true) => "two-way stream",
+            };
+            println!("{}  ({kind})", method.path);
+        }
+        return Ok(ExitCode::SUCCESS);
+    };
+    let mut messages = Vec::new();
+    for message in &args.messages {
+        messages.push(read_body(message)?);
+    }
+    let call = reqorb_core::GrpcCall {
+        url: args.address,
+        method,
+        messages,
+        metadata,
+        auth: None,
+        descriptors: schema.descriptors,
+        timeout_ms: args.timeout.map(|s| (s * 1000.0) as u64),
+    };
+    let reply = reqorb_core::grpc_call(&call, &variables).await?;
+    if args.include {
+        for header in &reply.headers {
+            eprintln!("{}: {}", header.name, header.value);
+        }
+    }
+    for message in &reply.messages {
+        println!("{message}");
+    }
+    if args.include {
+        for trailer in &reply.trailers {
+            eprintln!("{}: {}", trailer.name, trailer.value);
+        }
+    }
+    eprintln!(
+        "{} {}  {} ms",
+        reply.status, reply.message, reply.elapsed_ms
+    );
+    Ok(if reply.code == 0 {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
     })
 }
 
@@ -595,6 +847,8 @@ async fn main() -> ExitCode {
         Some(Command::Run(args)) => run(args).await,
         Some(Command::Import(args)) => import(args).await,
         Some(Command::Export(args)) => export(args).await,
+        Some(Command::Ws(args)) => ws(args).await,
+        Some(Command::Grpc(args)) => grpc(args).await,
         None => send(cli.send).await,
     };
     match result {

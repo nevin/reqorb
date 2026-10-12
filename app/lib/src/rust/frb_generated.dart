@@ -69,7 +69,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -107589416;
+  int get rustContentHash => 1151443186;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -99,6 +99,22 @@ abstract class RustLibApi extends BaseApi {
 
   String crateApiCoreExportExtension({required ExportFormat format});
 
+  String crateApiCoreExportHar({required List<Exchange> exchanges});
+
+  Future<GrpcReply> crateApiCoreGrpcCall({
+    required GrpcCall call,
+    required List<Variable> variables,
+  });
+
+  Future<GrpcSchema> crateApiCoreGrpcLoadProto({required String path});
+
+  Future<GrpcSchema> crateApiCoreGrpcReflect({
+    required String url,
+    required List<Header> metadata,
+    Auth? auth,
+    required List<Variable> variables,
+  });
+
   Future<ImportResult> crateApiCoreImportText({
     required String text,
     required String nameHint,
@@ -121,6 +137,16 @@ abstract class RustLibApi extends BaseApi {
     required Settings settings,
     required List<Cookie> cookies,
   });
+
+  bool crateApiCoreWsClose({required int id});
+
+  Stream<WsEvent> crateApiCoreWsOpen({
+    required int id,
+    required Request request,
+    required List<Variable> variables,
+  });
+
+  bool crateApiCoreWsSend({required int id, required String text});
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -292,6 +318,129 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "export_extension", argNames: ["format"]);
 
   @override
+  String crateApiCoreExportHar({required List<Exchange> exchanges}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_list_exchange(exchanges, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiCoreExportHarConstMeta,
+        argValues: [exchanges],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiCoreExportHarConstMeta =>
+      const TaskConstMeta(debugName: "export_har", argNames: ["exchanges"]);
+
+  @override
+  Future<GrpcReply> crateApiCoreGrpcCall({
+    required GrpcCall call,
+    required List<Variable> variables,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_grpc_call(call, serializer);
+          sse_encode_list_variable(variables, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_grpc_reply,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCoreGrpcCallConstMeta,
+        argValues: [call, variables],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiCoreGrpcCallConstMeta => const TaskConstMeta(
+    debugName: "grpc_call",
+    argNames: ["call", "variables"],
+  );
+
+  @override
+  Future<GrpcSchema> crateApiCoreGrpcLoadProto({required String path}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(path, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_grpc_schema,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCoreGrpcLoadProtoConstMeta,
+        argValues: [path],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiCoreGrpcLoadProtoConstMeta =>
+      const TaskConstMeta(debugName: "grpc_load_proto", argNames: ["path"]);
+
+  @override
+  Future<GrpcSchema> crateApiCoreGrpcReflect({
+    required String url,
+    required List<Header> metadata,
+    Auth? auth,
+    required List<Variable> variables,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(url, serializer);
+          sse_encode_list_header(metadata, serializer);
+          sse_encode_opt_box_autoadd_auth(auth, serializer);
+          sse_encode_list_variable(variables, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 10,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_grpc_schema,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCoreGrpcReflectConstMeta,
+        argValues: [url, metadata, auth, variables],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiCoreGrpcReflectConstMeta => const TaskConstMeta(
+    debugName: "grpc_reflect",
+    argNames: ["url", "metadata", "auth", "variables"],
+  );
+
+  @override
   Future<ImportResult> crateApiCoreImportText({
     required String text,
     required String nameHint,
@@ -305,7 +454,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 11,
             port: port_,
           );
         },
@@ -335,7 +484,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 8,
+            funcId: 12,
             port: port_,
           );
         },
@@ -362,7 +511,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 13,
             port: port_,
           );
         },
@@ -390,7 +539,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 14,
             port: port_,
           );
         },
@@ -422,7 +571,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 15,
             port: port_,
           );
         },
@@ -460,7 +609,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 16,
             port: port_,
           );
         },
@@ -480,6 +629,100 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     argNames: ["request", "variables", "settings", "cookies"],
   );
 
+  @override
+  bool crateApiCoreWsClose({required int id}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_32(id, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 17)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiCoreWsCloseConstMeta,
+        argValues: [id],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiCoreWsCloseConstMeta =>
+      const TaskConstMeta(debugName: "ws_close", argNames: ["id"]);
+
+  @override
+  Stream<WsEvent> crateApiCoreWsOpen({
+    required int id,
+    required Request request,
+    required List<Variable> variables,
+  }) {
+    final sink = RustStreamSink<WsEvent>();
+    unawaited(
+      handler.executeNormal(
+        NormalTask(
+          callFfi: (port_) {
+            final serializer = SseSerializer(generalizedFrbRustBinding);
+            sse_encode_u_32(id, serializer);
+            sse_encode_box_autoadd_request(request, serializer);
+            sse_encode_list_variable(variables, serializer);
+            sse_encode_StreamSink_ws_event_Sse(sink, serializer);
+            pdeCallFfi(
+              generalizedFrbRustBinding,
+              serializer,
+              funcId: 18,
+              port: port_,
+            );
+          },
+          codec: SseCodec(
+            decodeSuccessData: sse_decode_unit,
+            decodeErrorData: null,
+          ),
+          constMeta: kCrateApiCoreWsOpenConstMeta,
+          argValues: [id, request, variables, sink],
+          apiImpl: this,
+        ),
+      ),
+    );
+    return sink.stream;
+  }
+
+  TaskConstMeta get kCrateApiCoreWsOpenConstMeta => const TaskConstMeta(
+    debugName: "ws_open",
+    argNames: ["id", "request", "variables", "sink"],
+  );
+
+  @override
+  bool crateApiCoreWsSend({required int id, required String text}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_32(id, serializer);
+          sse_encode_String(text, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 19)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiCoreWsSendConstMeta,
+        argValues: [id, text],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiCoreWsSendConstMeta =>
+      const TaskConstMeta(debugName: "ws_send", argNames: ["id", "text"]);
+
+  @protected
+  AnyhowException dco_decode_AnyhowException(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return AnyhowException(raw as String);
+  }
+
   @protected
   int dco_decode_CastedPrimitive_i_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -494,6 +737,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     throw UnimplementedError(
       'Not implemented in this codec, please use the other one',
     );
+  }
+
+  @protected
+  RustStreamSink<WsEvent> dco_decode_StreamSink_ws_event_Sse(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    throw UnimplementedError();
   }
 
   @protected
@@ -604,6 +853,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  GrpcCall dco_decode_box_autoadd_grpc_call(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_grpc_call(raw);
+  }
+
+  @protected
   HttpMode dco_decode_box_autoadd_http_mode(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_http_mode(raw);
@@ -683,6 +938,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  Exchange dco_decode_exchange(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return Exchange(
+      startedMs: dco_decode_CastedPrimitive_u_64(arr[0]),
+      request: dco_decode_request(arr[1]),
+      response: dco_decode_response(arr[2]),
+    );
+  }
+
+  @protected
   ExportFormat dco_decode_export_format(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return ExportFormat.values[raw as int];
@@ -698,6 +966,66 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       key: dco_decode_String(arr[0]),
       value: dco_decode_String(arr[1]),
       file: dco_decode_bool(arr[2]),
+    );
+  }
+
+  @protected
+  GrpcCall dco_decode_grpc_call(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    return GrpcCall(
+      url: dco_decode_String(arr[0]),
+      method: dco_decode_String(arr[1]),
+      messages: dco_decode_list_String(arr[2]),
+      metadata: dco_decode_list_header(arr[3]),
+      auth: dco_decode_opt_box_autoadd_auth(arr[4]),
+      descriptors: dco_decode_list_prim_u_8_strict(arr[5]),
+      timeoutMs: dco_decode_opt_CastedPrimitive_u_64(arr[6]),
+    );
+  }
+
+  @protected
+  GrpcMethod dco_decode_grpc_method(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return GrpcMethod(
+      path: dco_decode_String(arr[0]),
+      clientStreaming: dco_decode_bool(arr[1]),
+      serverStreaming: dco_decode_bool(arr[2]),
+      example: dco_decode_String(arr[3]),
+    );
+  }
+
+  @protected
+  GrpcReply dco_decode_grpc_reply(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    return GrpcReply(
+      code: dco_decode_i_32(arr[0]),
+      status: dco_decode_String(arr[1]),
+      message: dco_decode_String(arr[2]),
+      messages: dco_decode_list_String(arr[3]),
+      headers: dco_decode_list_header(arr[4]),
+      trailers: dco_decode_list_header(arr[5]),
+      elapsedMs: dco_decode_CastedPrimitive_u_64(arr[6]),
+    );
+  }
+
+  @protected
+  GrpcSchema dco_decode_grpc_schema(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return GrpcSchema(
+      methods: dco_decode_list_grpc_method(arr[0]),
+      descriptors: dco_decode_list_prim_u_8_strict(arr[1]),
     );
   }
 
@@ -801,9 +1129,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<Exchange> dco_decode_list_exchange(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_exchange).toList();
+  }
+
+  @protected
   List<FormField> dco_decode_list_form_field(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_form_field).toList();
+  }
+
+  @protected
+  List<GrpcMethod> dco_decode_list_grpc_method(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_grpc_method).toList();
   }
 
   @protected
@@ -882,8 +1222,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Request dco_decode_request(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 9)
-      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    if (arr.length != 11)
+      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
     return Request(
       method: dco_decode_String(arr[0]),
       url: dco_decode_String(arr[1]),
@@ -894,6 +1234,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       settings: dco_decode_opt_box_autoadd_request_settings(arr[6]),
       bodyMode: dco_decode_opt_box_autoadd_body_mode(arr[7]),
       form: dco_decode_list_form_field(arr[8]),
+      grpcMethod: dco_decode_opt_String(arr[9]),
+      protoPath: dco_decode_opt_String(arr[10]),
     );
   }
 
@@ -938,12 +1280,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Sent dco_decode_sent(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return Sent(
       response: dco_decode_response(arr[0]),
       unresolved: dco_decode_list_String(arr[1]),
       cookies: dco_decode_list_cookie(arr[2]),
+      exchanges: dco_decode_list_exchange(arr[3]),
     );
   }
 
@@ -1020,6 +1363,35 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  WsEvent dco_decode_ws_event(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return WsEvent(
+      kind: dco_decode_ws_event_kind(arr[0]),
+      text: dco_decode_String(arr[1]),
+      data: dco_decode_list_prim_u_8_strict(arr[2]),
+      code: dco_decode_u_16(arr[3]),
+      headers: dco_decode_list_header(arr[4]),
+      atMs: dco_decode_CastedPrimitive_u_64(arr[5]),
+    );
+  }
+
+  @protected
+  WsEventKind dco_decode_ws_event_kind(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return WsEventKind.values[raw as int];
+  }
+
+  @protected
+  AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_String(deserializer);
+    return AnyhowException(inner);
+  }
+
+  @protected
   int sse_decode_CastedPrimitive_i_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_i_64(deserializer);
@@ -1031,6 +1403,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_u_64(deserializer);
     return inner.toInt();
+  }
+
+  @protected
+  RustStreamSink<WsEvent> sse_decode_StreamSink_ws_event_Sse(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    throw UnimplementedError('Unreachable ()');
   }
 
   @protected
@@ -1137,6 +1517,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  GrpcCall sse_decode_box_autoadd_grpc_call(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_grpc_call(deserializer));
+  }
+
+  @protected
   HttpMode sse_decode_box_autoadd_http_mode(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_http_mode(deserializer));
@@ -1220,6 +1606,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  Exchange sse_decode_exchange(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_startedMs = sse_decode_CastedPrimitive_u_64(deserializer);
+    var var_request = sse_decode_request(deserializer);
+    var var_response = sse_decode_response(deserializer);
+    return Exchange(
+      startedMs: var_startedMs,
+      request: var_request,
+      response: var_response,
+    );
+  }
+
+  @protected
   ExportFormat sse_decode_export_format(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_i_32(deserializer);
@@ -1233,6 +1632,71 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_value = sse_decode_String(deserializer);
     var var_file = sse_decode_bool(deserializer);
     return FormField(key: var_key, value: var_value, file: var_file);
+  }
+
+  @protected
+  GrpcCall sse_decode_grpc_call(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_url = sse_decode_String(deserializer);
+    var var_method = sse_decode_String(deserializer);
+    var var_messages = sse_decode_list_String(deserializer);
+    var var_metadata = sse_decode_list_header(deserializer);
+    var var_auth = sse_decode_opt_box_autoadd_auth(deserializer);
+    var var_descriptors = sse_decode_list_prim_u_8_strict(deserializer);
+    var var_timeoutMs = sse_decode_opt_CastedPrimitive_u_64(deserializer);
+    return GrpcCall(
+      url: var_url,
+      method: var_method,
+      messages: var_messages,
+      metadata: var_metadata,
+      auth: var_auth,
+      descriptors: var_descriptors,
+      timeoutMs: var_timeoutMs,
+    );
+  }
+
+  @protected
+  GrpcMethod sse_decode_grpc_method(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_path = sse_decode_String(deserializer);
+    var var_clientStreaming = sse_decode_bool(deserializer);
+    var var_serverStreaming = sse_decode_bool(deserializer);
+    var var_example = sse_decode_String(deserializer);
+    return GrpcMethod(
+      path: var_path,
+      clientStreaming: var_clientStreaming,
+      serverStreaming: var_serverStreaming,
+      example: var_example,
+    );
+  }
+
+  @protected
+  GrpcReply sse_decode_grpc_reply(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_code = sse_decode_i_32(deserializer);
+    var var_status = sse_decode_String(deserializer);
+    var var_message = sse_decode_String(deserializer);
+    var var_messages = sse_decode_list_String(deserializer);
+    var var_headers = sse_decode_list_header(deserializer);
+    var var_trailers = sse_decode_list_header(deserializer);
+    var var_elapsedMs = sse_decode_CastedPrimitive_u_64(deserializer);
+    return GrpcReply(
+      code: var_code,
+      status: var_status,
+      message: var_message,
+      messages: var_messages,
+      headers: var_headers,
+      trailers: var_trailers,
+      elapsedMs: var_elapsedMs,
+    );
+  }
+
+  @protected
+  GrpcSchema sse_decode_grpc_schema(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_methods = sse_decode_list_grpc_method(deserializer);
+    var var_descriptors = sse_decode_list_prim_u_8_strict(deserializer);
+    return GrpcSchema(methods: var_methods, descriptors: var_descriptors);
   }
 
   @protected
@@ -1371,6 +1835,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<Exchange> sse_decode_list_exchange(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <Exchange>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_exchange(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<FormField> sse_decode_list_form_field(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -1378,6 +1854,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <FormField>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_form_field(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<GrpcMethod> sse_decode_list_grpc_method(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <GrpcMethod>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_grpc_method(deserializer));
     }
     return ans_;
   }
@@ -1529,6 +2017,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     );
     var var_bodyMode = sse_decode_opt_box_autoadd_body_mode(deserializer);
     var var_form = sse_decode_list_form_field(deserializer);
+    var var_grpcMethod = sse_decode_opt_String(deserializer);
+    var var_protoPath = sse_decode_opt_String(deserializer);
     return Request(
       method: var_method,
       url: var_url,
@@ -1539,6 +2029,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       settings: var_settings,
       bodyMode: var_bodyMode,
       form: var_form,
+      grpcMethod: var_grpcMethod,
+      protoPath: var_protoPath,
     );
   }
 
@@ -1596,10 +2088,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_response = sse_decode_response(deserializer);
     var var_unresolved = sse_decode_list_String(deserializer);
     var var_cookies = sse_decode_list_cookie(deserializer);
+    var var_exchanges = sse_decode_list_exchange(deserializer);
     return Sent(
       response: var_response,
       unresolved: var_unresolved,
       cookies: var_cookies,
+      exchanges: var_exchanges,
     );
   }
 
@@ -1674,6 +2168,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  WsEvent sse_decode_ws_event(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_kind = sse_decode_ws_event_kind(deserializer);
+    var var_text = sse_decode_String(deserializer);
+    var var_data = sse_decode_list_prim_u_8_strict(deserializer);
+    var var_code = sse_decode_u_16(deserializer);
+    var var_headers = sse_decode_list_header(deserializer);
+    var var_atMs = sse_decode_CastedPrimitive_u_64(deserializer);
+    return WsEvent(
+      kind: var_kind,
+      text: var_text,
+      data: var_data,
+      code: var_code,
+      headers: var_headers,
+      atMs: var_atMs,
+    );
+  }
+
+  @protected
+  WsEventKind sse_decode_ws_event_kind(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return WsEventKind.values[inner];
+  }
+
+  @protected
+  void sse_encode_AnyhowException(
+    AnyhowException self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.message, serializer);
+  }
+
+  @protected
   void sse_encode_CastedPrimitive_i_64(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_64(sseEncodeCastedPrimitiveI64(self), serializer);
@@ -1683,6 +2212,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_CastedPrimitive_u_64(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_64(sseEncodeCastedPrimitiveU64(self), serializer);
+  }
+
+  @protected
+  void sse_encode_StreamSink_ws_event_Sse(
+    RustStreamSink<WsEvent> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(
+      self.setupAndSerialize(
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_ws_event,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+      ),
+      serializer,
+    );
   }
 
   @protected
@@ -1782,6 +2328,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_grpc_call(
+    GrpcCall self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_grpc_call(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_http_mode(
     HttpMode self,
     SseSerializer serializer,
@@ -1858,6 +2413,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_exchange(Exchange self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_CastedPrimitive_u_64(self.startedMs, serializer);
+    sse_encode_request(self.request, serializer);
+    sse_encode_response(self.response, serializer);
+  }
+
+  @protected
   void sse_encode_export_format(ExportFormat self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.index, serializer);
@@ -1869,6 +2432,46 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.key, serializer);
     sse_encode_String(self.value, serializer);
     sse_encode_bool(self.file, serializer);
+  }
+
+  @protected
+  void sse_encode_grpc_call(GrpcCall self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.url, serializer);
+    sse_encode_String(self.method, serializer);
+    sse_encode_list_String(self.messages, serializer);
+    sse_encode_list_header(self.metadata, serializer);
+    sse_encode_opt_box_autoadd_auth(self.auth, serializer);
+    sse_encode_list_prim_u_8_strict(self.descriptors, serializer);
+    sse_encode_opt_CastedPrimitive_u_64(self.timeoutMs, serializer);
+  }
+
+  @protected
+  void sse_encode_grpc_method(GrpcMethod self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.path, serializer);
+    sse_encode_bool(self.clientStreaming, serializer);
+    sse_encode_bool(self.serverStreaming, serializer);
+    sse_encode_String(self.example, serializer);
+  }
+
+  @protected
+  void sse_encode_grpc_reply(GrpcReply self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.code, serializer);
+    sse_encode_String(self.status, serializer);
+    sse_encode_String(self.message, serializer);
+    sse_encode_list_String(self.messages, serializer);
+    sse_encode_list_header(self.headers, serializer);
+    sse_encode_list_header(self.trailers, serializer);
+    sse_encode_CastedPrimitive_u_64(self.elapsedMs, serializer);
+  }
+
+  @protected
+  void sse_encode_grpc_schema(GrpcSchema self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_grpc_method(self.methods, serializer);
+    sse_encode_list_prim_u_8_strict(self.descriptors, serializer);
   }
 
   @protected
@@ -1992,6 +2595,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_exchange(List<Exchange> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_exchange(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_form_field(
     List<FormField> self,
     SseSerializer serializer,
@@ -2000,6 +2612,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_form_field(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_grpc_method(
+    List<GrpcMethod> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_grpc_method(item, serializer);
     }
   }
 
@@ -2150,6 +2774,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_box_autoadd_request_settings(self.settings, serializer);
     sse_encode_opt_box_autoadd_body_mode(self.bodyMode, serializer);
     sse_encode_list_form_field(self.form, serializer);
+    sse_encode_opt_String(self.grpcMethod, serializer);
+    sse_encode_opt_String(self.protoPath, serializer);
   }
 
   @protected
@@ -2188,6 +2814,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_response(self.response, serializer);
     sse_encode_list_String(self.unresolved, serializer);
     sse_encode_list_cookie(self.cookies, serializer);
+    sse_encode_list_exchange(self.exchanges, serializer);
   }
 
   @protected
@@ -2244,5 +2871,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_String(self.activeEnvironment, serializer);
     sse_encode_settings(self.settings, serializer);
     sse_encode_list_cookie(self.cookies, serializer);
+  }
+
+  @protected
+  void sse_encode_ws_event(WsEvent self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_ws_event_kind(self.kind, serializer);
+    sse_encode_String(self.text, serializer);
+    sse_encode_list_prim_u_8_strict(self.data, serializer);
+    sse_encode_u_16(self.code, serializer);
+    sse_encode_list_header(self.headers, serializer);
+    sse_encode_CastedPrimitive_u_64(self.atMs, serializer);
+  }
+
+  @protected
+  void sse_encode_ws_event_kind(WsEventKind self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
   }
 }

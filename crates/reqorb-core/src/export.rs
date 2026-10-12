@@ -48,9 +48,38 @@ pub fn export_native(collections: &[Collection], environments: &[Environment]) -
     })
 }
 
+/// The collection without its WebSocket and gRPC requests, which the HTTP
+/// formats of other tools have no way to describe.
+fn http_only(collection: &Collection) -> Collection {
+    fn keep(items: &[Item]) -> Vec<Item> {
+        items
+            .iter()
+            .filter(|item| {
+                item.request.as_ref().is_none_or(|request| {
+                    !["WS", "GRPC"].contains(&request.method.to_uppercase().as_str())
+                })
+            })
+            .map(|item| Item {
+                name: item.name.clone(),
+                request: item.request.clone(),
+                items: keep(&item.items),
+            })
+            .collect()
+    }
+    Collection {
+        name: collection.name.clone(),
+        variables: collection.variables.clone(),
+        items: keep(&collection.items),
+    }
+}
+
 pub fn export_collection(collection: &Collection, format: ExportFormat) -> Result<String, Error> {
+    if format == ExportFormat::Reqorb {
+        return Ok(export_native(std::slice::from_ref(collection), &[]));
+    }
+    let collection = &http_only(collection);
     match format {
-        ExportFormat::Reqorb => Ok(export_native(std::slice::from_ref(collection), &[])),
+        ExportFormat::Reqorb => unreachable!("handled above"),
         ExportFormat::Postman => Ok(pretty(&postman_collection(collection))),
         ExportFormat::Bruno => Ok(pretty(&bruno_collection(collection))),
         ExportFormat::Curl => {
@@ -998,6 +1027,36 @@ mod tests {
         let script = export_collection(&collection, ExportFormat::Curl).unwrap();
         assert!(script.contains("# Orders/Create\ncurl"));
         assert!(script.contains("# Ping\ncurl \\\n  '{{base}}/ping'"));
+    }
+
+    #[test]
+    fn other_tools_formats_leave_out_websocket_and_grpc_requests() {
+        let item = |name: &str, method: &str| Item {
+            name: name.into(),
+            request: Some(Request::new(method, "example.com:50051")),
+            items: vec![],
+        };
+        let collection = Collection {
+            name: "Mixed".into(),
+            variables: vec![],
+            items: vec![
+                item("Ping", "GET"),
+                item("Feed", "WS"),
+                item("Call", "GRPC"),
+            ],
+        };
+        for format in [
+            ExportFormat::Postman,
+            ExportFormat::Bruno,
+            ExportFormat::Curl,
+        ] {
+            let out = export_collection(&collection, format).unwrap();
+            assert!(out.contains("Ping"), "{out}");
+            assert!(!out.contains("Feed") && !out.contains("Call"), "{out}");
+        }
+        // reqorb's own format keeps everything.
+        let native = export_collection(&collection, ExportFormat::Reqorb).unwrap();
+        assert!(native.contains("Feed") && native.contains("GRPC"));
     }
 
     #[test]

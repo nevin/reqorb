@@ -50,6 +50,13 @@ pub(crate) fn now() -> i64 {
         .map_or(0, |d| d.as_secs() as i64)
 }
 
+/// The current time in milliseconds since the Unix epoch.
+pub(crate) fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as u64)
+}
+
 /// Applies one `Set-Cookie` header received from `url`. Cookies for a
 /// domain the response does not belong to are ignored.
 pub fn store_set_cookie(jar: &mut Vec<Cookie>, header: &str, url: &Url, now: i64) {

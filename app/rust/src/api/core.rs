@@ -1,13 +1,18 @@
 //! Exposes `reqorb_core` to Dart. The `_Name` structs only describe the
 //! shape of the core types so the bridge can generate matching Dart classes.
 
+use std::collections::HashMap;
 use std::path::Path;
+use std::sync::{LazyLock, Mutex};
 
 use flutter_rust_bridge::frb;
+
+use crate::frb_generated::StreamSink;
 pub use reqorb_core::{
     AppTheme, Auth, AuthField, AuthKind, AuthParam, BodyMode, Collection, Cookie, DisabledTls,
-    Environment, ExportFormat, FormField, Header, HttpMode, ImportResult, Item, Request,
-    RequestSettings, Response, Sent, Settings, Variable, Workspace,
+    Environment, Exchange, ExportFormat, FormField, GrpcCall, GrpcMethod, GrpcReply, GrpcSchema,
+    Header, HttpMode, ImportResult, Item, Request, RequestSettings, Response, Sent, Settings,
+    Variable, Workspace, WsEvent, WsEventKind,
 };
 
 #[frb(mirror(AppTheme))]
@@ -166,6 +171,8 @@ pub struct _Request {
     pub settings: Option<RequestSettings>,
     pub body_mode: Option<BodyMode>,
     pub form: Vec<FormField>,
+    pub grpc_method: Option<String>,
+    pub proto_path: Option<String>,
 }
 
 #[frb(mirror(Response))]
@@ -184,6 +191,14 @@ pub struct _Sent {
     pub response: Response,
     pub unresolved: Vec<String>,
     pub cookies: Vec<Cookie>,
+    pub exchanges: Vec<Exchange>,
+}
+
+#[frb(mirror(Exchange))]
+pub struct _Exchange {
+    pub started_ms: u64,
+    pub request: Request,
+    pub response: Response,
 }
 
 #[frb(mirror(Variable))]
@@ -250,6 +265,141 @@ pub async fn send_request(
     cookies: Vec<Cookie>,
 ) -> Result<Sent, String> {
     reqorb_core::send_with(&request, &variables, &settings.send_options(), &cookies)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// The exchanges of a session as an HTTP Archive (HAR 1.2) document.
+#[frb(sync)]
+pub fn export_har(exchanges: Vec<Exchange>) -> String {
+    reqorb_core::to_har(&exchanges)
+}
+
+#[frb(mirror(WsEventKind))]
+pub enum _WsEventKind {
+    Open,
+    Text,
+    Binary,
+    Ping,
+    Pong,
+    Closed,
+    Error,
+}
+
+#[frb(mirror(WsEvent))]
+pub struct _WsEvent {
+    pub kind: WsEventKind,
+    pub text: String,
+    pub data: Vec<u8>,
+    pub code: u16,
+    pub headers: Vec<Header>,
+    pub at_ms: u64,
+}
+
+/// Open WebSocket connections, by the id the app gave each one.
+static SOCKETS: LazyLock<Mutex<HashMap<u32, reqorb_core::WsHandle>>> =
+    LazyLock::new(Default::default);
+
+/// Opens a WebSocket and reports what happens on it until it ends. A
+/// connection that cannot be opened ends with a single `Error` event.
+pub async fn ws_open(
+    id: u32,
+    request: Request,
+    variables: Vec<Variable>,
+    sink: StreamSink<WsEvent>,
+) {
+    let (handle, mut events) = match reqorb_core::ws_connect(&request, &variables).await {
+        Ok(connected) => connected,
+        Err(e) => {
+            let _ = sink.add(WsEvent::failed(e.to_string()));
+            return;
+        }
+    };
+    SOCKETS.lock().unwrap().insert(id, handle);
+    while let Some(event) = events.recv().await {
+        if sink.add(event).is_err() {
+            break;
+        }
+    }
+    SOCKETS.lock().unwrap().remove(&id);
+}
+
+/// Sends a text message; false when the connection is not open.
+#[frb(sync)]
+pub fn ws_send(id: u32, text: String) -> bool {
+    SOCKETS
+        .lock()
+        .unwrap()
+        .get(&id)
+        .is_some_and(|socket| socket.send_text(text))
+}
+
+/// Asks the connection to close; false when it is not open.
+#[frb(sync)]
+pub fn ws_close(id: u32) -> bool {
+    SOCKETS
+        .lock()
+        .unwrap()
+        .get(&id)
+        .is_some_and(|socket| socket.close())
+}
+
+#[frb(mirror(GrpcMethod))]
+pub struct _GrpcMethod {
+    pub path: String,
+    pub client_streaming: bool,
+    pub server_streaming: bool,
+    pub example: String,
+}
+
+#[frb(mirror(GrpcSchema))]
+pub struct _GrpcSchema {
+    pub methods: Vec<GrpcMethod>,
+    pub descriptors: Vec<u8>,
+}
+
+#[frb(mirror(GrpcCall))]
+pub struct _GrpcCall {
+    pub url: String,
+    pub method: String,
+    pub messages: Vec<String>,
+    pub metadata: Vec<Header>,
+    pub auth: Option<Auth>,
+    pub descriptors: Vec<u8>,
+    pub timeout_ms: Option<u64>,
+}
+
+#[frb(mirror(GrpcReply))]
+pub struct _GrpcReply {
+    pub code: i32,
+    pub status: String,
+    pub message: String,
+    pub messages: Vec<String>,
+    pub headers: Vec<Header>,
+    pub trailers: Vec<Header>,
+    pub elapsed_ms: u64,
+}
+
+/// Asks a gRPC server which methods it offers, through server reflection.
+pub async fn grpc_reflect(
+    url: String,
+    metadata: Vec<Header>,
+    auth: Option<Auth>,
+    variables: Vec<Variable>,
+) -> Result<GrpcSchema, String> {
+    reqorb_core::grpc_reflect(&url, &metadata, auth.as_ref(), &variables)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Reads the methods a `.proto` file defines.
+pub async fn grpc_load_proto(path: String) -> Result<GrpcSchema, String> {
+    reqorb_core::grpc_load_proto(&path).map_err(|e| e.to_string())
+}
+
+/// Makes a gRPC call and waits for all of its responses.
+pub async fn grpc_call(call: GrpcCall, variables: Vec<Variable>) -> Result<GrpcReply, String> {
+    reqorb_core::grpc_call(&call, &variables)
         .await
         .map_err(|e| e.to_string())
 }

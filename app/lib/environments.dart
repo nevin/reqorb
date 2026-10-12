@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'actions.dart';
 import 'src/rust/api/core.dart';
+import 'theme.dart';
 import 'workspace_store.dart';
 
 /// `KEY=value` per line; a leading `#` marks a disabled variable.
@@ -127,109 +128,199 @@ class _EnvironmentsPageState extends State<EnvironmentsPage> {
                 ),
               ),
             )
-          : Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 720),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: DropdownButton<int>(
-                              key: const Key('env-edit-select'),
-                              isExpanded: true,
-                              value: _index,
-                              items: [
-                                for (var i = 0; i < environments.length; i++)
-                                  DropdownMenuItem(
-                                    value: i,
-                                    child: Text(environments[i].name),
-                                  ),
-                              ],
-                              onChanged: (i) =>
-                                  setState(() => _select(i ?? _index)),
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                // A list beside the editor when there is room for both.
+                final wide = constraints.maxWidth >= 640;
+                final editor = _editor(context, environments, picker: !wide);
+                if (!wide) return editor;
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(width: 240, child: _list(context, environments)),
+                    const VerticalDivider(width: 1),
+                    Expanded(child: editor),
+                  ],
+                );
+              },
+            ),
+    );
+  }
+
+  void _delete() {
+    final index = _index;
+    final removed = _store.environments[index];
+    final active = _store.activeEnvironment == removed.name;
+    _store.removeEnvironment(index);
+    setState(() => _select(0));
+    showUndo(context, 'Deleted environment "${removed.name}"', () {
+      _store.insertEnvironment(index, removed, active: active);
+      if (mounted) setState(() => _select(index));
+    });
+  }
+
+  /// Every environment, with the one in use marked.
+  Widget _list(BuildContext context, List<Environment> environments) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Material(
+      color: scheme.surfaceContainerLow,
+      child: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        children: [
+          for (var i = 0; i < environments.length; i++)
+            ListTile(
+              key: Key('env-item-$i'),
+              dense: true,
+              selected: i == _index,
+              selectedTileColor: scheme.secondaryContainer,
+              title: Text(
+                environments[i].name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text(
+                '${environments[i].variables.length} '
+                '${environments[i].variables.length == 1 ? 'variable' : 'variables'}',
+              ),
+              trailing: environments[i].name == _store.activeEnvironment
+                  ? Tooltip(
+                      message: 'In use',
+                      child: Icon(
+                        Icons.check_circle,
+                        size: 18,
+                        color: scheme.primary,
+                      ),
+                    )
+                  : null,
+              onTap: () => setState(() => _select(i)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _editor(
+    BuildContext context,
+    List<Environment> environments, {
+    required bool picker,
+  }) {
+    final current = environments[_index];
+    final active = _store.activeEnvironment == current.name;
+    return Align(
+      alignment: Alignment.topLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  if (picker)
+                    Expanded(
+                      child: DropdownButton<int>(
+                        key: const Key('env-edit-select'),
+                        isExpanded: true,
+                        value: _index,
+                        items: [
+                          for (var i = 0; i < environments.length; i++)
+                            DropdownMenuItem(
+                              value: i,
+                              child: Text(environments[i].name),
                             ),
-                          ),
-                          PopupMenuButton<VoidCallback>(
-                            tooltip: 'Environment actions',
-                            icon: const Icon(Icons.more_horiz),
-                            onSelected: (action) => action(),
-                            itemBuilder: (_) => [
-                              for (final (label, format) in const [
-                                ('Export as reqorb JSON…', ExportFormat.reqorb),
-                                ('Export as Postman…', ExportFormat.postman),
-                                ('Export as .env…', ExportFormat.dotenv),
-                              ])
-                                PopupMenuItem(
-                                  value: () => exportEnvironmentFile(
-                                    context,
-                                    environments[_index],
-                                    format,
-                                  ),
-                                  child: Text(label),
-                                ),
-                              const PopupMenuDivider(),
-                              PopupMenuItem(
-                                value: () {
-                                  _store.removeEnvironment(_index);
-                                  setState(() => _select(0));
-                                },
-                                child: const Text('Delete environment'),
-                              ),
-                            ],
-                          ),
                         ],
+                        onChanged: (i) => setState(() => _select(i ?? _index)),
                       ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        key: const Key('env-name'),
-                        controller: _name,
-                        decoration: InputDecoration(
-                          border: const OutlineInputBorder(),
-                          labelText: 'Name',
-                          errorText: _nameTaken
-                              ? 'Use a name no other environment has'
-                              : null,
-                        ),
-                        onChanged: (_) => _edited(),
-                      ),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: TextField(
-                          key: const Key('env-variables'),
-                          smartQuotesType: SmartQuotesType.disabled,
-                          smartDashesType: SmartDashesType.disabled,
-                          controller: _variables,
-                          maxLines: null,
-                          expands: true,
-                          autocorrect: false,
-                          enableSuggestions: false,
-                          textAlignVertical: TextAlignVertical.top,
-                          style: const TextStyle(
-                            fontFamily: 'Menlo',
-                            fontSize: 13,
-                            height: 1.4,
+                    )
+                  else
+                    const Spacer(),
+                  // Saves a trip back to the main screen to switch.
+                  active
+                      ? OutlinedButton.icon(
+                          key: const Key('env-use'),
+                          onPressed: () =>
+                              setState(() => _store.setActiveEnvironment(null)),
+                          icon: const Icon(Icons.check, size: 18),
+                          label: const Text('In use'),
+                        )
+                      : FilledButton.tonal(
+                          key: const Key('env-use'),
+                          onPressed: () => setState(
+                            () => _store.setActiveEnvironment(current.name),
                           ),
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            labelText: 'Variables',
-                            alignLabelWithHint: true,
-                            hintText: 'base_url=https://api.example.com\ntoken=abc123',
-                            helperText:
-                                'One KEY=value per line. Start a line with # '
-                                'to disable it. Use {{KEY}} in a request.',
-                          ),
-                          onChanged: (_) => _edited(),
+                          child: const Text('Use'),
                         ),
+                  PopupMenuButton<VoidCallback>(
+                    tooltip: 'Environment actions',
+                    icon: const Icon(Icons.more_horiz),
+                    onSelected: (action) => action(),
+                    itemBuilder: (_) => [
+                      for (final (label, format) in const [
+                        ('Export as reqorb JSON…', ExportFormat.reqorb),
+                        ('Export as Postman…', ExportFormat.postman),
+                        ('Export as .env…', ExportFormat.dotenv),
+                      ])
+                        PopupMenuItem(
+                          value: () => exportEnvironmentFile(
+                            context,
+                            environments[_index],
+                            format,
+                          ),
+                          child: Text(label),
+                        ),
+                      const PopupMenuDivider(),
+                      PopupMenuItem(
+                        key: const Key('env-delete'),
+                        value: _delete,
+                        child: const Text('Delete environment'),
                       ),
                     ],
                   ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('env-name'),
+                controller: _name,
+                decoration: InputDecoration(
+                  isDense: false,
+                  labelText: 'Name',
+                  errorText: _nameTaken
+                      ? 'Use a name no other environment has'
+                      : null,
+                ),
+                onChanged: (_) => _edited(),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: TextField(
+                  key: const Key('env-variables'),
+                  smartQuotesType: SmartQuotesType.disabled,
+                  smartDashesType: SmartDashesType.disabled,
+                  controller: _variables,
+                  maxLines: null,
+                  expands: true,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  textAlignVertical: TextAlignVertical.top,
+                  style: mono,
+                  decoration: const InputDecoration(
+                    labelText: 'Variables',
+                    alignLabelWithHint: true,
+                    hintText: 'base_url=https://api.example.com\ntoken=abc123',
+                    helperText:
+                        'One KEY=value per line. Start a line with # '
+                        'to disable it. Use {{KEY}} in a request.',
+                  ),
+                  onChanged: (_) => _edited(),
                 ),
               ),
-            ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

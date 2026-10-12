@@ -7,20 +7,34 @@ license.workspace = true
 [dependencies]
 base64 = "0.23.1"
 cookie = "0.18.2"
+futures-util = "0.3.34"
 hex = "0.4.3"
 hmac = "0.13.0"
 jsonwebtoken = { version = "11.1.0", features = ["aws_lc_rs"] }
 md-5 = "0.11.0"
 ntlmclient = "0.2.0"
+prost = "0.14.4"
+prost-reflect = { version = "0.16.5", features = ["serde"] }
+prost-types = "0.14.4"
+protox = "0.10.0"
 reqwest = { version = "0.13.5", default-features = false, features = ["brotli", "charset", "cookies", "deflate", "gzip", "http2", "multipart", "rustls", "system-proxy", "zstd"] }
+rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs", "std", "tls12"] }
+rustls-platform-verifier = "0.7"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
 serde_yaml_ng = "0.10.0"
 sha1 = "0.11.0"
 sha2 = "0.11.0"
 thiserror = "2.0.21"
+tokio = { version = "1.53.2", features = ["rt", "sync", "time", "macros", "net"] }
+tokio-stream = { version = "0.1.19", features = ["net"] }
+tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["connect", "handshake", "rustls-tls-webpki-roots"] }
+tonic = { version = "0.14.6", default-features = false, features = ["transport", "codegen", "tls-aws-lc", "tls-native-roots"] }
+tonic-reflection = { version = "0.14.6", default-features = false, features = ["server"] }
 url = "2.5.8"
 
 [dev-dependencies]
 tempfile = "3.27.0"
 tokio = { version = "1.53.2", features = ["macros", "rt-multi-thread"] }
+tonic = { version = "0.14.6", default-features = false, features = ["router", "server", "transport"] }
+tonic-health = "0.14.6"

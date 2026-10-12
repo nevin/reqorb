@@ -1,13 +1,44 @@
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'src/rust/api/core.dart';
+import 'theme.dart';
 import 'workspace_store.dart';
 
 void showMessage(BuildContext context, String message) =>
     _notify(ScaffoldMessenger.of(context), message);
+
+/// Reports something that was just removed and offers to put it back.
+void showUndo(BuildContext context, String message, VoidCallback undo) {
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: Text(message),
+        action: SnackBarAction(label: 'Undo', onPressed: undo),
+      ),
+    );
+}
+
+/// Asks for a new name for a saved request; null when cancelled or empty.
+Future<String?> askRequestName(BuildContext context, String current) async {
+  final name = await showDialog<String>(
+    context: context,
+    builder: (_) => _TextDialog(
+      title: 'Rename request',
+      action: 'Rename',
+      fieldKey: const Key('request-name'),
+      hint: 'Request name',
+      lines: 1,
+      initial: current,
+      url: false,
+    ),
+  );
+  return (name == null || name.trim().isEmpty) ? null : name.trim();
+}
 
 // Async actions look the messenger up before their first await, so they can
 // still report after the widget that started them is gone.
@@ -187,11 +218,9 @@ class _TextDialogState extends State<_TextDialog> {
           textCapitalization: widget.url
               ? TextCapitalization.none
               : TextCapitalization.sentences,
-          style: widget.url
-              ? const TextStyle(fontFamily: 'Menlo', fontSize: 13)
-              : null,
+          style: widget.url ? mono : null,
           decoration: InputDecoration(
-            border: const OutlineInputBorder(),
+            isDense: false,
             hintText: widget.hint,
             helperText: widget.helper,
           ),
@@ -311,6 +340,29 @@ Future<void> _runImport(
   );
 }
 
+/// Asks where to save a file and writes it; tests replace this so that no
+/// system dialog opens.
+@visibleForTesting
+Future<Object?> Function({required String fileName, required Uint8List bytes})
+fileSaver = _pickAndSave;
+
+Future<Object?> _pickAndSave({
+  required String fileName,
+  required Uint8List bytes,
+}) => FilePicker.saveFile(fileName: fileName, bytes: bytes);
+
+/// Saves every exchange of the session as an HTTP Archive.
+Future<void> exportSessionHar(BuildContext context, WorkspaceStore store) =>
+    _saveExport(
+      context,
+      'session.har',
+      () async => exportHar(exchanges: store.session),
+    );
+
+/// Saves [text] to a file the user chooses, suggesting [fileName].
+Future<void> saveTextFile(BuildContext context, String fileName, String text) =>
+    _saveExport(context, fileName, () async => text);
+
 Future<void> _saveExport(
   BuildContext context,
   String fileName,
@@ -319,10 +371,7 @@ Future<void> _saveExport(
   final messenger = ScaffoldMessenger.of(context);
   try {
     final text = await render();
-    final saved = await FilePicker.saveFile(
-      fileName: fileName,
-      bytes: utf8.encode(text),
-    );
+    final saved = await fileSaver(fileName: fileName, bytes: utf8.encode(text));
     if (saved != null) _notify(messenger, 'Exported $fileName');
   } catch (e) {
     _notify(messenger, 'Export failed: $e');
