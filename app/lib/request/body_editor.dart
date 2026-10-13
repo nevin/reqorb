@@ -1,9 +1,9 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart' hide FormField;
 
-import 'key_value_editor.dart';
-import 'src/rust/api/core.dart';
-import 'theme.dart';
+import 'package:reqorb/request/key_value_editor.dart';
+import 'package:reqorb/src/rust/api/core.dart';
+import 'package:reqorb/shared/theme.dart';
 
 /// Content types offered for a raw body, by the name shown in the picker.
 const rawLanguages = {

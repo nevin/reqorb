@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'theme.dart';
+import 'package:reqorb/shared/theme.dart';
 
 /// One `key: value` line; a line without a colon is a key with no value.
 (String, String)? parseKeyValueLine(String line) {

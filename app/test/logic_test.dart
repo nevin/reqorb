@@ -1,12 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reqorb/actions.dart';
-import 'package:reqorb/grpc_view.dart';
-import 'package:reqorb/har_analysis.dart';
-import 'package:reqorb/key_value_editor.dart';
-import 'package:reqorb/response_view.dart';
+import 'package:reqorb/transfer/import_actions.dart';
+import 'package:reqorb/protocols/grpc_view.dart';
+import 'package:reqorb/har/har_analysis.dart';
+import 'package:reqorb/request/key_value_editor.dart';
+import 'package:reqorb/response/response_view.dart';
 import 'package:reqorb/src/rust/api/core.dart';
-import 'package:reqorb/tests_editor.dart';
-import 'package:reqorb/workspace_store.dart';
+import 'package:reqorb/request/tests_editor.dart';
+import 'package:reqorb/workspace/workspace_store.dart';
 
 void main() {
   test('reads key and value lines', () {

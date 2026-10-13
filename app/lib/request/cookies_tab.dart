@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'actions.dart';
-import 'src/rust/api/core.dart';
-import 'theme.dart';
-import 'workspace_store.dart';
+import 'package:reqorb/shared/messages.dart';
+import 'package:reqorb/src/rust/api/core.dart';
+import 'package:reqorb/shared/theme.dart';
+import 'package:reqorb/workspace/workspace_store.dart';
 
 /// The Cookies tab: what servers have set, plus cookies added by hand.
 /// The jar is shared by every request, so all domains are listed.

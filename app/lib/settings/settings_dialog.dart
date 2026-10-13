@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'src/rust/api/core.dart';
-import 'workspace_store.dart';
+import 'package:reqorb/src/rust/api/core.dart';
+import 'package:reqorb/workspace/workspace_store.dart';
 
 /// App-wide preferences, in a Themes section and a General section.
 /// Changes apply and are saved as they are made.

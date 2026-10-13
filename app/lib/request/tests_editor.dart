@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'theme.dart';
+import 'package:reqorb/shared/theme.dart';
 
 /// The lines of [text] that hold something.
 List<String> linesOf(String text) => [

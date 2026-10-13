@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'src/rust/api/core.dart';
+import 'package:reqorb/src/rust/api/core.dart';
 
 /// The request's Settings tab: how this one request is carried out.
 /// Give the widget a new [key] to load a different request's settings.

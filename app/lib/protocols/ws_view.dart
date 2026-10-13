@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'src/rust/api/core.dart';
-import 'theme.dart';
+import 'package:reqorb/src/rust/api/core.dart';
+import 'package:reqorb/shared/theme.dart';
 
 /// One line of a WebSocket conversation: a message either way, or
 /// something that happened to the connection.
@@ -214,6 +214,74 @@ class _WsLogViewState extends State<WsLogView> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The Message tab of a WebSocket: what to send next, and a button for it.
+class WsComposer extends StatelessWidget {
+  const WsComposer({
+    super.key,
+    required this.controller,
+    required this.connected,
+    required this.onSend,
+  });
+
+  final TextEditingController controller;
+  final bool connected;
+  final VoidCallback onSend;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: TextField(
+            key: const Key('ws-message'),
+            controller: controller,
+            maxLines: null,
+            expands: true,
+            autocorrect: false,
+            enableSuggestions: false,
+            smartQuotesType: SmartQuotesType.disabled,
+            smartDashesType: SmartDashesType.disabled,
+            textAlignVertical: TextAlignVertical.top,
+            style: mono,
+            decoration: const InputDecoration(
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              contentPadding: EdgeInsets.all(12),
+              hintText: 'Message to send, such as {"type": "ping"}',
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  connected
+                      ? 'Sent as a text message. '
+                            '${isDesktop ? '$shortcutModifier↵ sends it.' : ''}'
+                      : 'Connect first, then send messages from here.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              FilledButton.tonal(
+                key: const Key('ws-send'),
+                onPressed: connected ? onSend : null,
+                child: const Text('Send message'),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

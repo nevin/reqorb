@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import 'src/rust/api/core.dart';
+import 'package:reqorb/src/rust/api/core.dart';
 
 /// Where a saved request lives: a collection and the item indices leading to it.
 @immutable

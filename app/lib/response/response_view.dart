@@ -3,9 +3,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'actions.dart';
-import 'src/rust/api/core.dart';
-import 'theme.dart';
+import 'package:reqorb/shared/messages.dart';
+import 'package:reqorb/transfer/export_actions.dart';
+import 'package:reqorb/src/rust/api/core.dart';
+import 'package:reqorb/shared/theme.dart';
 
 /// The response pane: status, timing, and the body and headers received.
 class ResponseView extends StatelessWidget {

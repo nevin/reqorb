@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 
-import 'actions.dart';
-import 'settings_dialog.dart';
-import 'src/rust/api/core.dart';
-import 'theme.dart';
-import 'workspace_store.dart';
+import 'package:reqorb/shared/messages.dart';
+import 'package:reqorb/workspace/collection_actions.dart';
+import 'package:reqorb/transfer/import_actions.dart';
+import 'package:reqorb/transfer/export_actions.dart';
+import 'package:reqorb/har/har_actions.dart';
+import 'package:reqorb/settings/settings_dialog.dart';
+import 'package:reqorb/src/rust/api/core.dart';
+import 'package:reqorb/shared/theme.dart';
+import 'package:reqorb/workspace/workspace_store.dart';
 
 /// The collections tree with import and export actions.
 class Sidebar extends StatefulWidget {

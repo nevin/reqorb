@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'src/rust/api/core.dart';
-import 'theme.dart';
+import 'package:reqorb/src/rust/api/core.dart';
+import 'package:reqorb/shared/theme.dart';
 
 /// The Auth tab: a type picker and the form that type needs.
 ///

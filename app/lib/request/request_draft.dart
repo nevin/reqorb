@@ -3,10 +3,10 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' hide FormField;
 
-import 'body_editor.dart';
-import 'key_value_editor.dart';
-import 'src/rust/api/core.dart';
-import 'tests_editor.dart';
+import 'package:reqorb/request/body_editor.dart';
+import 'package:reqorb/request/key_value_editor.dart';
+import 'package:reqorb/src/rust/api/core.dart';
+import 'package:reqorb/request/tests_editor.dart';
 
 /// The request being edited: everything that is sent or saved, apart from
 /// where it is saved and what came back. Notifies on every edit.

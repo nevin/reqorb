@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reqorb/request_draft.dart';
+import 'package:reqorb/request/request_draft.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 
 Request _request({

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import 'response_view.dart';
-import 'src/rust/api/core.dart';
-import 'theme.dart';
+import 'package:reqorb/response/response_view.dart';
+import 'package:reqorb/src/rust/api/core.dart';
+import 'package:reqorb/shared/theme.dart';
 
 /// Splits the editor's text into the messages of a call: one, or several
 /// separated by lines holding only `---` for a client stream.

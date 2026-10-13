@@ -5,11 +5,11 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart' hide FormField;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:reqorb/actions.dart';
+import 'package:reqorb/transfer/export_actions.dart';
 import 'package:reqorb/main.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 import 'package:reqorb/src/rust/frb_generated.dart';
-import 'package:reqorb/workspace_store.dart';
+import 'package:reqorb/workspace/workspace_store.dart';
 
 /// What the test server saw on its most recent request.
 class Seen {

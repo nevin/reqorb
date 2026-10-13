@@ -217,11 +217,33 @@ file over before sharing it.
 
 ## Project layout
 
-- `crates/reqorb-core`: the request engine (reqwest, tonic, tokio-tungstenite), used by
-  everything else
-- `crates/reqorb-cli`: the `reqorb` command
-- `app`: the Flutter UI
-- `app/rust`: the bridge crate exposing the core to Dart through flutter_rust_bridge
+```text
+crates/reqorb-core/src/     the request engine, used by everything else
+  lib.rs                    the public API: module list and re-exports only
+  model.rs  error.rs        the data types and the error type
+  http/                     sending: client cache, one exchange, cookie jar
+  ws.rs  grpc.rs            the other two protocols
+  auth/                     auth types, signing a request, negotiating with a server
+  formats/                  one module per format, each with its import and export
+  vars.rs  checks.rs        variable substitution; tests and captures
+  redact.rs  analyze.rs     redaction; the HAR report
+crates/reqorb-cli/src/      the `reqorb` command
+  cli.rs                    every command, argument and option
+  input.rs  output.rs       reading what the user gave; printing and writing files
+  commands/                 one module per command
+app/lib/                    the Flutter UI, one folder per feature
+  request/                  the main page, the request model and its editors
+  response/  protocols/     the response pane; WebSocket and gRPC views
+  sidebar/  environments/  settings/  har/
+  transfer/                 import and export actions
+  workspace/                the saved workspace and collection actions
+  shared/                   theme, messages and small reusable widgets
+app/rust/                   the bridge crate exposing the core to Dart
+```
+
+Dependencies point one way: the CLI and the bridge depend on the core, never the
+reverse, and inside the core `model` depends on nothing while the protocol and format
+modules depend on it.
 
 ## Development
 

@@ -2,9 +2,9 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
-import 'response_view.dart';
-import 'src/rust/api/core.dart';
-import 'theme.dart';
+import 'package:reqorb/response/response_view.dart';
+import 'package:reqorb/src/rust/api/core.dart';
+import 'package:reqorb/shared/theme.dart';
 
 /// `1.25 s` or `340 ms`.
 String formatDuration(int ms) =>

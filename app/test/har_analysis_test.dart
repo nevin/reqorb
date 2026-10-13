@@ -2,9 +2,9 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reqorb/har_analysis.dart';
+import 'package:reqorb/har/har_analysis.dart';
 import 'package:reqorb/src/rust/api/core.dart';
-import 'package:reqorb/theme.dart';
+import 'package:reqorb/shared/theme.dart';
 
 HarEntry _entry(
   String method,
