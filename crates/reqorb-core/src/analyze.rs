@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use crate::import::str_field;
 use crate::redact::is_sensitive;
-use crate::{Error, REDACTED};
+use crate::{Error, Header, REDACTED};
 
 /// A request counts as slow from this many milliseconds.
 const SLOW_MS: u64 = 1000;
@@ -14,6 +14,12 @@ const SLOW_MS: u64 = 1000;
 const LARGE_BYTES: u64 = 1024 * 1024;
 /// Text responses smaller than this are not worth compressing.
 const COMPRESSIBLE_BYTES: u64 = 10 * 1024;
+/// Response bodies are shown up to this many bytes.
+const BODY_BYTES: usize = 200 * 1024;
+/// The phases of a request, in order, by their HAR names.
+const PHASES: &[&str] = &[
+    "blocked", "dns", "connect", "ssl", "send", "wait", "receive",
+];
 /// How many entries a finding spells out before it says "and N more".
 const NAMED: usize = 5;
 
@@ -52,6 +58,24 @@ pub struct HarEntry {
     pub time_ms: u64,
     /// Time spent waiting for the first byte, when the archive says.
     pub wait_ms: Option<u64>,
+    pub status_text: String,
+    pub request_headers: Vec<Header>,
+    pub response_headers: Vec<Header>,
+    /// What was sent, as text; form fields are written one per line.
+    pub request_body: Option<String>,
+    /// What came back, when it is text. Long bodies are cut short and
+    /// binary ones left out, as `body_note` then says.
+    pub response_body: Option<String>,
+    pub body_note: Option<String>,
+    /// Where the time went, in the order the phases happen.
+    pub phases: Vec<HarPhase>,
+}
+
+/// One step of a request, such as `dns` or `wait`, and how long it took.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HarPhase {
+    pub name: String,
+    pub ms: u64,
 }
 
 /// A group of requests and what they add up to.
@@ -163,6 +187,63 @@ fn header<'a>(message: &'a Value, name: &str) -> Option<&'a str> {
         .and_then(|h| str_field(h, "value"))
 }
 
+fn headers(message: &Value) -> Vec<Header> {
+    message["headers"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|h| {
+            Some(Header {
+                name: str_field(h, "name")?.to_string(),
+                value: str_field(h, "value").unwrap_or("").to_string(),
+            })
+        })
+        .collect()
+}
+
+fn request_body(post: &Value) -> Option<String> {
+    if let Some(text) = str_field(post, "text").filter(|t| !t.is_empty()) {
+        return Some(text.to_string());
+    }
+    let fields: Vec<String> = post["params"]
+        .as_array()?
+        .iter()
+        .filter_map(|param| {
+            let name = str_field(param, "name")?;
+            Some(match str_field(param, "fileName") {
+                Some(file) => format!("{name}: (file) {file}"),
+                None => format!("{name}: {}", str_field(param, "value").unwrap_or("")),
+            })
+        })
+        .collect();
+    (!fields.is_empty()).then(|| fields.join("\n"))
+}
+
+/// The response body as text, and a note when it is not all there.
+fn response_body(content: &Value) -> (Option<String>, Option<String>) {
+    let Some(text) = str_field(content, "text").filter(|t| !t.is_empty()) else {
+        return (None, None);
+    };
+    if str_field(content, "encoding").is_some_and(|e| e.eq_ignore_ascii_case("base64")) {
+        return (None, Some("Binary content is not shown.".into()));
+    }
+    if text.len() <= BODY_BYTES {
+        return (Some(text.to_string()), None);
+    }
+    let mut end = BODY_BYTES;
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    (
+        Some(text[..end].to_string()),
+        Some(format!(
+            "Showing the first {} KB of {} KB.",
+            BODY_BYTES / 1024,
+            text.len() / 1024
+        )),
+    )
+}
+
 fn summarize(entry: &Value, offset_ms: u64) -> HarEntry {
     let request = &entry["request"];
     let response = &entry["response"];
@@ -178,6 +259,7 @@ fn summarize(entry: &Value, offset_ms: u64) -> HarEntry {
         .or_else(|| number(&response["bodySize"]).filter(|n| *n > 0))
         .or_else(|| number(&content["size"]))
         .unwrap_or_else(|| str_field(content, "text").map_or(0, |t| t.len() as u64));
+    let (response_body, body_note) = response_body(content);
     HarEntry {
         offset_ms,
         method: str_field(request, "method").unwrap_or("GET").to_uppercase(),
@@ -188,6 +270,28 @@ fn summarize(entry: &Value, offset_ms: u64) -> HarEntry {
         size_bytes,
         time_ms: number(&entry["time"]).unwrap_or(0),
         wait_ms: number(&entry["timings"]["wait"]),
+        status_text: str_field(response, "statusText").unwrap_or("").to_string(),
+        request_headers: headers(request),
+        response_headers: headers(response),
+        request_body: request_body(&request["postData"]),
+        response_body,
+        body_note,
+        // Phases the archive marks as not applicable (-1) or instant are
+        // left out. `ssl` is part of `connect`, so it is taken out of it.
+        phases: PHASES
+            .iter()
+            .filter_map(|&name| {
+                let timings = &entry["timings"];
+                let mut ms = number(&timings[name])?;
+                if name == "connect" {
+                    ms = ms.saturating_sub(number(&timings["ssl"]).unwrap_or(0));
+                }
+                (ms > 0).then(|| HarPhase {
+                    name: name.to_string(),
+                    ms,
+                })
+            })
+            .collect(),
     }
 }
 
@@ -625,6 +729,12 @@ mod tests {
             (1000, "cdn.test", "script")
         );
         assert_eq!(script.wait_ms, Some(900));
+        let phases: Vec<(&str, u64)> = script
+            .phases
+            .iter()
+            .map(|p| (p.name.as_str(), p.ms))
+            .collect();
+        assert_eq!(phases, [("wait", 900), ("receive", 900)]);
 
         let names = |counts: &[HarCount]| -> Vec<String> {
             counts
@@ -680,6 +790,67 @@ mod tests {
         );
         let errors = &report.findings[2];
         assert!(errors.detail.ends_with("404 GET /missing"));
+    }
+
+    #[test]
+    fn keeps_the_detail_of_each_request() {
+        let har = json!({ "log": { "entries": [{
+            "startedDateTime": "2024-01-01T00:00:00Z",
+            "time": 300,
+            "request": {
+                "method": "POST",
+                "url": "https://api.test/upload",
+                "headers": [{ "name": "Accept", "value": "*/*" }],
+                "postData": {
+                    "mimeType": "multipart/form-data",
+                    "params": [
+                        { "name": "title", "value": "Hi" },
+                        { "name": "doc", "fileName": "a.pdf" },
+                    ],
+                },
+            },
+            "response": {
+                "status": 200,
+                "statusText": "OK",
+                "headers": [{ "name": "Content-Type", "value": "image/png" }],
+                "content": { "size": 4, "mimeType": "image/png", "text": "AAAA", "encoding": "base64" },
+            },
+            "timings": { "blocked": -1, "dns": 20, "connect": 80, "ssl": 50, "send": 0, "wait": 150, "receive": 50 },
+        }] } });
+        let report = analyze_har(&har.to_string()).unwrap();
+        let entry = &report.entries[0];
+        assert_eq!(entry.status_text, "OK");
+        assert_eq!(entry.request_headers[0].name, "Accept");
+        assert_eq!(entry.response_headers[0].value, "image/png");
+        assert_eq!(
+            entry.request_body.as_deref(),
+            Some("title: Hi\ndoc: (file) a.pdf")
+        );
+        assert_eq!(entry.response_body, None);
+        assert_eq!(
+            entry.body_note.as_deref(),
+            Some("Binary content is not shown.")
+        );
+        let phases: Vec<(&str, u64)> = entry
+            .phases
+            .iter()
+            .map(|p| (p.name.as_str(), p.ms))
+            .collect();
+        assert_eq!(
+            phases,
+            [
+                ("dns", 20),
+                ("connect", 30),
+                ("ssl", 50),
+                ("wait", 150),
+                ("receive", 50)
+            ]
+        );
+
+        let long = "é".repeat(150_000);
+        let (body, note) = response_body(&json!({ "text": long }));
+        assert!(body.unwrap().len() <= BODY_BYTES);
+        assert_eq!(note.as_deref(), Some("Showing the first 200 KB of 292 KB."));
     }
 
     #[test]

@@ -123,6 +123,18 @@ Future<String> exportEnvironment({
 Future<HarReport> analyzeHar({required String text}) =>
     RustLib.instance.api.crateApiCoreAnalyzeHar(text: text);
 
+/// Imports the entries of a HAR archive at the given positions as a
+/// collection called `name`.
+Future<ImportResult> importHar({
+  required String text,
+  required String name,
+  required List<int> entries,
+}) => RustLib.instance.api.crateApiCoreImportHar(
+  text: text,
+  name: name,
+  entries: entries,
+);
+
 /// Copies with tokens, passwords, cookies and keys replaced, for exports
 /// that are going to be shared.
 List<Exchange> redactExchanges({required List<Exchange> exchanges}) =>
@@ -571,6 +583,13 @@ class HarEntry {
   final int sizeBytes;
   final int timeMs;
   final int? waitMs;
+  final String statusText;
+  final List<Header> requestHeaders;
+  final List<Header> responseHeaders;
+  final String? requestBody;
+  final String? responseBody;
+  final String? bodyNote;
+  final List<HarPhase> phases;
 
   const HarEntry({
     required this.offsetMs,
@@ -582,6 +601,13 @@ class HarEntry {
     required this.sizeBytes,
     required this.timeMs,
     this.waitMs,
+    required this.statusText,
+    required this.requestHeaders,
+    required this.responseHeaders,
+    this.requestBody,
+    this.responseBody,
+    this.bodyNote,
+    required this.phases,
   });
 
   @override
@@ -594,7 +620,14 @@ class HarEntry {
       kind.hashCode ^
       sizeBytes.hashCode ^
       timeMs.hashCode ^
-      waitMs.hashCode;
+      waitMs.hashCode ^
+      statusText.hashCode ^
+      requestHeaders.hashCode ^
+      responseHeaders.hashCode ^
+      requestBody.hashCode ^
+      responseBody.hashCode ^
+      bodyNote.hashCode ^
+      phases.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -609,7 +642,14 @@ class HarEntry {
           kind == other.kind &&
           sizeBytes == other.sizeBytes &&
           timeMs == other.timeMs &&
-          waitMs == other.waitMs;
+          waitMs == other.waitMs &&
+          statusText == other.statusText &&
+          requestHeaders == other.requestHeaders &&
+          responseHeaders == other.responseHeaders &&
+          requestBody == other.requestBody &&
+          responseBody == other.responseBody &&
+          bodyNote == other.bodyNote &&
+          phases == other.phases;
 }
 
 class HarFinding {
@@ -638,6 +678,24 @@ class HarFinding {
           title == other.title &&
           detail == other.detail &&
           entries == other.entries;
+}
+
+class HarPhase {
+  final String name;
+  final int ms;
+
+  const HarPhase({required this.name, required this.ms});
+
+  @override
+  int get hashCode => name.hashCode ^ ms.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is HarPhase &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          ms == other.ms;
 }
 
 class HarReport {

@@ -157,7 +157,9 @@ the same report, and `--json` gives it as JSON for scripts. The report has:
   text over 10 KB, redirects and repeated requests
 
 In the app, clicking a finding narrows the request table to the requests it is about,
-and **Import as collection** keeps the archive's requests. The compression check is
+and the filter box narrows it by address, method, status or kind. Clicking a request
+shows its headers, bodies and timing phases. **Import as collection** keeps the ticked
+requests, which is how to pick the API calls out of a browser archive. The compression check is
 skipped for archives reqorb recorded itself, as it stores responses decompressed.
 
 ## Redacting exports

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import 'response_view.dart';
@@ -31,8 +33,8 @@ class HarAnalysisPage extends StatefulWidget {
   final String name;
   final HarReport report;
 
-  /// Imports the archive's requests as a collection.
-  final Future<void> Function(BuildContext context) onImport;
+  /// Imports the requests at these positions in the archive as a collection.
+  final Future<void> Function(BuildContext context, List<int> entries) onImport;
 
   @override
   State<HarAnalysisPage> createState() => _HarAnalysisPageState();
@@ -45,6 +47,23 @@ class _HarAnalysisPageState extends State<HarAnalysisPage> {
 
   /// The heading of the request table.
   final _requests = GlobalKey();
+
+  /// Text the listed requests must contain.
+  final _search = TextEditingController();
+
+  /// Positions of the requests to import; all of them to begin with.
+  late final _selected = {for (var i = 0; i < _report.entries.length; i++) i};
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  /// Ticks or clears every request listed, leaving the hidden ones alone.
+  void _selectShown(List<int> rows, bool select) => setState(
+    () => select ? _selected.addAll(rows) : _selected.removeAll(rows),
+  );
 
   /// Narrows the table to [finding]'s requests and brings it into view, or
   /// shows every request again when that finding is already chosen.
@@ -68,9 +87,19 @@ class _HarAnalysisPageState extends State<HarAnalysisPage> {
   /// Indexes of the entries to list, filtered and sorted.
   List<int> get _rows {
     final entries = _report.entries;
-    final rows =
-        _finding?.entries.toList() ??
-        [for (var i = 0; i < entries.length; i++) i];
+    final words = _search.text.toLowerCase().split(' ')
+      ..removeWhere((w) => w.isEmpty);
+    bool matches(int i) {
+      final e = entries[i];
+      final text = '${e.method} ${e.url} ${e.status} ${e.kind}'.toLowerCase();
+      return words.every(text.contains);
+    }
+
+    final rows = [
+      for (final i
+          in _finding?.entries ?? [for (var i = 0; i < entries.length; i++) i])
+        if (matches(i)) i,
+    ];
     switch (_sort) {
       case _Sort.order:
         rows.sort();
@@ -91,6 +120,8 @@ class _HarAnalysisPageState extends State<HarAnalysisPage> {
     final report = _report;
     final rows = _rows;
     final heading = theme.textTheme.titleSmall;
+    final chosen = (_selected.toList()..sort());
+    final shownChosen = rows.where(_selected.contains).length;
     return Scaffold(
       appBar: AppBar(
         title: Text('HAR analysis · ${widget.name}'),
@@ -98,10 +129,14 @@ class _HarAnalysisPageState extends State<HarAnalysisPage> {
           TextButton.icon(
             key: const Key('har-import'),
             icon: const Icon(Icons.file_download_outlined, size: 18),
-            label: const Text('Import as collection'),
-            onPressed: report.entries.isEmpty
+            label: Text(
+              chosen.length == report.entries.length
+                  ? 'Import as collection'
+                  : 'Import ${chosen.length} as collection',
+            ),
+            onPressed: chosen.isEmpty
                 ? null
-                : () => widget.onImport(context),
+                : () => widget.onImport(context, chosen),
           ),
           const SizedBox(width: 8),
         ],
@@ -184,7 +219,61 @@ class _HarAnalysisPageState extends State<HarAnalysisPage> {
                           ),
                         ],
                       ),
-                      const Divider(height: 16),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Checkbox(
+                            key: const Key('har-select-shown'),
+                            tristate: true,
+                            value: shownChosen == 0
+                                ? false
+                                : shownChosen == rows.length
+                                ? true
+                                : null,
+                            onChanged: rows.isEmpty
+                                ? null
+                                : (_) => _selectShown(
+                                    rows,
+                                    shownChosen < rows.length,
+                                  ),
+                          ),
+                          Text(
+                            '${chosen.length} of ${report.entries.length} '
+                            'selected to import',
+                            key: const Key('har-selected'),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 320,
+                                ),
+                                child: TextField(
+                                  key: const Key('har-search'),
+                                  controller: _search,
+                                  autocorrect: false,
+                                  style: theme.textTheme.bodySmall,
+                                  decoration: const InputDecoration(
+                                    hintText:
+                                        'Filter: address, method, 404, json…',
+                                    prefixIcon: Icon(Icons.search, size: 16),
+                                    prefixIconConstraints: BoxConstraints(
+                                      minWidth: 32,
+                                    ),
+                                  ),
+                                  onChanged: (_) => setState(() {}),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 12),
                     ],
                   ),
                 ),
@@ -193,12 +282,27 @@ class _HarAnalysisPageState extends State<HarAnalysisPage> {
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                 sliver: SliverList.builder(
                   itemCount: rows.length,
-                  itemBuilder: (context, i) => _EntryRow(
-                    key: Key('har-entry-${rows[i]}'),
-                    entry: report.entries[rows[i]],
-                    spanMs: report.spanMs,
-                    timeline: timeline,
-                  ),
+                  itemBuilder: (context, i) {
+                    final index = rows[i];
+                    final entry = report.entries[index];
+                    return _EntryRow(
+                      key: Key('har-entry-$index'),
+                      index: index,
+                      entry: entry,
+                      spanMs: report.spanMs,
+                      timeline: timeline,
+                      selected: _selected.contains(index),
+                      onSelected: (select) => setState(
+                        () => select
+                            ? _selected.add(index)
+                            : _selected.remove(index),
+                      ),
+                      onOpen: () => showDialog<void>(
+                        context: context,
+                        builder: (_) => _EntryDialog(entry: entry),
+                      ),
+                    );
+                  },
                 ),
               ),
             ],
@@ -415,14 +519,26 @@ class _Stat extends StatelessWidget {
 class _EntryRow extends StatelessWidget {
   const _EntryRow({
     super.key,
+    required this.index,
     required this.entry,
     required this.spanMs,
     required this.timeline,
+    required this.selected,
+    required this.onSelected,
+    required this.onOpen,
   });
 
+  final int index;
   final HarEntry entry;
   final int spanMs;
   final bool timeline;
+
+  /// Whether the request is ticked for import.
+  final bool selected;
+  final ValueChanged<bool> onSelected;
+
+  /// Shows the request in full.
+  final VoidCallback onOpen;
 
   /// The address without its scheme and host, which have their own column.
   String get _path {
@@ -441,10 +557,16 @@ class _EntryRow extends StatelessWidget {
     final color = failed ? scheme.error : statusColor(entry.status, scheme);
     final small = mono.copyWith(fontSize: 12);
     final muted = small.copyWith(color: scheme.onSurfaceVariant);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+    return InkWell(
+      onTap: onOpen,
       child: Row(
         children: [
+          Checkbox(
+            key: Key('har-check-$index'),
+            value: selected,
+            visualDensity: VisualDensity.compact,
+            onChanged: (value) => onSelected(value ?? false),
+          ),
           SizedBox(
             width: 36,
             child: Text(
@@ -536,6 +658,211 @@ class _EntryRow extends StatelessWidget {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Everything the archive recorded about one request.
+class _EntryDialog extends StatelessWidget {
+  const _EntryDialog({required this.entry});
+
+  final HarEntry entry;
+
+  /// [body] indented when it is JSON, otherwise as recorded.
+  static String _readable(String body) {
+    final trimmed = body.trimLeft();
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return body;
+    try {
+      return const JsonEncoder.withIndent('  ').convert(jsonDecode(body));
+    } on FormatException {
+      return body;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final failed = entry.status == 0 || entry.status >= 400;
+    final color = failed ? scheme.error : statusColor(entry.status, scheme);
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
+    final longest = entry.phases.fold(1, (m, p) => p.ms > m ? p.ms : m);
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760, maxHeight: 680),
+        child: DefaultTabController(
+          length: 2,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 8, 0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text.rich(
+                            TextSpan(
+                              children: [
+                                TextSpan(
+                                  text: entry.status == 0
+                                      ? 'No response'
+                                      : '${entry.status} ${entry.statusText}'
+                                            .trim(),
+                                  style: TextStyle(color: color),
+                                ),
+                                TextSpan(text: '  ·  ${entry.method}'),
+                              ],
+                            ),
+                            style: theme.textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 4),
+                          SelectableText(
+                            entry.url,
+                            key: const Key('har-detail-url'),
+                            style: mono.copyWith(fontSize: 12),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${entry.kind} · ${formatSize(entry.sizeBytes)} · '
+                            '${formatDuration(entry.timeMs)} · started at '
+                            '${formatDuration(entry.offsetMs)}',
+                            style: muted,
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      key: const Key('har-detail-close'),
+                      tooltip: 'Close',
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              // A single phase would only repeat the total above.
+              if (entry.phases.length > 1)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                  child: Column(
+                    children: [
+                      for (final phase in entry.phases)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 3),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 64,
+                                child: Text(phase.name, style: muted),
+                              ),
+                              Expanded(
+                                child: LinearProgressIndicator(
+                                  value: phase.ms / longest,
+                                  minHeight: 6,
+                                  borderRadius: BorderRadius.circular(3),
+                                  backgroundColor:
+                                      scheme.surfaceContainerHighest,
+                                ),
+                              ),
+                              SizedBox(
+                                width: 72,
+                                child: Text(
+                                  formatDuration(phase.ms),
+                                  textAlign: TextAlign.right,
+                                  style: muted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              const TabBar(
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
+                tabs: [
+                  Tab(key: Key('har-detail-request'), text: 'Request'),
+                  Tab(key: Key('har-detail-response'), text: 'Response'),
+                ],
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _message(
+                      theme,
+                      entry.requestHeaders,
+                      entry.requestBody,
+                      null,
+                      'No body was sent.',
+                    ),
+                    _message(
+                      theme,
+                      entry.responseHeaders,
+                      entry.responseBody,
+                      entry.bodyNote,
+                      'The archive holds no response body.',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _message(
+    ThemeData theme,
+    List<Header> headers,
+    String? body,
+    String? note,
+    String empty,
+  ) {
+    final scheme = theme.colorScheme;
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
+    final small = mono.copyWith(fontSize: 12);
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Headers', style: theme.textTheme.labelLarge),
+          const SizedBox(height: 4),
+          if (headers.isEmpty) Text('None recorded.', style: muted),
+          if (headers.isNotEmpty)
+            SelectableText.rich(
+              TextSpan(
+                children: [
+                  for (final header in headers) ...[
+                    TextSpan(
+                      text: '${header.name}: ',
+                      style: small.copyWith(color: scheme.primary),
+                    ),
+                    TextSpan(text: '${header.value}\n', style: small),
+                  ],
+                ],
+              ),
+            ),
+          const SizedBox(height: 12),
+          Text('Body', style: theme.textTheme.labelLarge),
+          const SizedBox(height: 4),
+          if (note != null) Text(note, style: muted),
+          if (body != null)
+            SelectableText(_readable(body), style: small)
+          else if (note == null)
+            Text(empty, style: muted),
         ],
       ),
     );

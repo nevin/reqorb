@@ -128,8 +128,12 @@ Future<void> showHarAnalysis(
       builder: (_) => HarAnalysisPage(
         name: name,
         report: report,
-        onImport: (context) =>
-            importFromText(context, store, text, nameHintFor(name)),
+        onImport: (context, entries) => _runImport(
+          context,
+          store,
+          () =>
+              importHar(text: text, name: nameHintFor(name), entries: entries),
+        ),
       ),
     ),
   );

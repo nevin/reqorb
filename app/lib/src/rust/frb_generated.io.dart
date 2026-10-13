@@ -133,6 +133,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   HarFinding dco_decode_har_finding(dynamic raw);
 
   @protected
+  HarPhase dco_decode_har_phase(dynamic raw);
+
+  @protected
   HarReport dco_decode_har_report(dynamic raw);
 
   @protected
@@ -196,10 +199,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<HarFinding> dco_decode_list_har_finding(dynamic raw);
 
   @protected
+  List<HarPhase> dco_decode_list_har_phase(dynamic raw);
+
+  @protected
   List<Header> dco_decode_list_header(dynamic raw);
 
   @protected
   List<Item> dco_decode_list_item(dynamic raw);
+
+  @protected
+  List<int> dco_decode_list_prim_u_32_loose(dynamic raw);
 
   @protected
   Uint32List dco_decode_list_prim_u_32_strict(dynamic raw);
@@ -392,6 +401,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   HarFinding sse_decode_har_finding(SseDeserializer deserializer);
 
   @protected
+  HarPhase sse_decode_har_phase(SseDeserializer deserializer);
+
+  @protected
   HarReport sse_decode_har_report(SseDeserializer deserializer);
 
   @protected
@@ -455,10 +467,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<HarFinding> sse_decode_list_har_finding(SseDeserializer deserializer);
 
   @protected
+  List<HarPhase> sse_decode_list_har_phase(SseDeserializer deserializer);
+
+  @protected
   List<Header> sse_decode_list_header(SseDeserializer deserializer);
 
   @protected
   List<Item> sse_decode_list_item(SseDeserializer deserializer);
+
+  @protected
+  List<int> sse_decode_list_prim_u_32_loose(SseDeserializer deserializer);
 
   @protected
   Uint32List sse_decode_list_prim_u_32_strict(SseDeserializer deserializer);
@@ -676,6 +694,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_har_finding(HarFinding self, SseSerializer serializer);
 
   @protected
+  void sse_encode_har_phase(HarPhase self, SseSerializer serializer);
+
+  @protected
   void sse_encode_har_report(HarReport self, SseSerializer serializer);
 
   @protected
@@ -763,10 +784,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_har_phase(List<HarPhase> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_header(List<Header> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_item(List<Item> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_prim_u_32_loose(
+    List<int> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_prim_u_32_strict(

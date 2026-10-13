@@ -15,14 +15,14 @@ mod ws;
 
 use std::time::{Duration, Instant};
 
-pub use analyze::{HarCount, HarEntry, HarFinding, HarReport, HarSeverity, analyze_har};
+pub use analyze::{HarCount, HarEntry, HarFinding, HarPhase, HarReport, HarSeverity, analyze_har};
 pub use auth::{Auth, AuthField, AuthKind, AuthParam, auth_fields};
 pub use cookies::{Cookie, cookie_header, store_set_cookie};
 pub use export::{ExportFormat, export_collection, export_environment, export_native, to_curl};
 pub use grpc::{
     GrpcCall, GrpcMethod, GrpcReply, GrpcSchema, grpc_call, grpc_load_proto, grpc_reflect,
 };
-pub use har::to_har;
+pub use har::{import_har, to_har};
 pub use import::{ImportResult, import};
 pub use model::{
     AppTheme, BodyMode, Collection, DisabledTls, Environment, Exchange, FormField, Header,

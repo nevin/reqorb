@@ -4,7 +4,7 @@
 use serde_json::{Value, json};
 
 use crate::import::{ImportResult, str_field};
-use crate::{BodyMode, Collection, Exchange, FormField, Header, Item, REDACTED, Request};
+use crate::{BodyMode, Collection, Error, Exchange, FormField, Header, Item, REDACTED, Request};
 
 /// Renders `exchanges`, oldest first, as a HAR 1.2 document that browser
 /// developer tools and HAR viewers can open.
@@ -32,11 +32,33 @@ const COMPUTED_HEADERS: &[&str] = &["host", "content-length", "connection", "tra
 /// `name`, one request per entry and in the order they were made. The
 /// recorded responses are not kept.
 pub(crate) fn from_har(value: &Value, name: &str) -> ImportResult {
+    from_har_entries(value, name, None)
+}
+
+/// Imports the entries of the HAR archive in `text` whose positions are in
+/// `entries`, as a collection named `name`.
+pub fn import_har(text: &str, name: &str, entries: &[u32]) -> Result<ImportResult, Error> {
+    let text = text.trim_start_matches('\u{feff}').trim();
+    let value: Value =
+        serde_json::from_str(text).map_err(|e| Error::Format(format!("invalid JSON: {e}")))?;
+    if !is_har(&value) {
+        return Err(Error::Format(
+            "not a HAR archive: `log.entries` is missing".into(),
+        ));
+    }
+    Ok(from_har_entries(&value, name, Some(entries)))
+}
+
+fn from_har_entries(value: &Value, name: &str, only: Option<&[u32]>) -> ImportResult {
     let mut warnings = Vec::new();
     let mut items: Vec<Item> = Vec::new();
     let mut files = 0;
+    let mut redacted = false;
     let entries = value["log"]["entries"].as_array();
-    for entry in entries.into_iter().flatten() {
+    for (index, entry) in entries.into_iter().flatten().enumerate() {
+        if only.is_some_and(|only| !only.contains(&(index as u32))) {
+            continue;
+        }
         let recorded = &entry["request"];
         let Some(url) = str_field(recorded, "url").filter(|u| !u.is_empty()) else {
             continue;
@@ -98,6 +120,7 @@ pub(crate) fn from_har(value: &Value, name: &str) -> ImportResult {
             request.body = Some(path.to_string());
         }
 
+        redacted |= entry["request"].to_string().contains(REDACTED);
         // Requests are found by name, so repeats of one call are numbered.
         let base = format!("{} {}", request.method, short_path(url));
         let mut name = base.clone();
@@ -118,7 +141,7 @@ pub(crate) fn from_har(value: &Value, name: &str) -> ImportResult {
             "{files} uploaded file(s) are recorded by name only; choose the files again before sending"
         ));
     }
-    if value.to_string().contains(REDACTED) {
+    if redacted {
         warnings.push(format!(
             "this archive was redacted; fill in the values marked {REDACTED} before sending"
         ));
@@ -434,6 +457,17 @@ mod tests {
         let login = &requests[3].1;
         assert_eq!(login.body_mode, Some(BodyMode::UrlEncoded));
         assert_eq!(login.form, [FormField::text("user", "a b")]);
+
+        // A chosen few can be imported, by their position in the archive.
+        let few = import_har(&har.to_string(), "few", &[4, 1]).unwrap();
+        let names: Vec<&str> = few.collections[0]
+            .items
+            .iter()
+            .map(|item| item.name.as_str())
+            .collect();
+        assert_eq!(names, ["POST /items", "GET /items"]);
+        assert!(few.warnings.is_empty());
+        assert!(import_har("{}", "x", &[]).is_err());
 
         let warnings = from_har(&har, "session").warnings;
         assert_eq!(warnings.len(), 1);

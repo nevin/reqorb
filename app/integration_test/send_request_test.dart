@@ -1445,7 +1445,30 @@ void main() {
     expect(find.text(narrowed), findsNothing);
     expect(find.byKey(const Key('har-entry-0')), findsOneWidget);
 
-    // The requests can be kept as a collection straight from the report.
+    // Typing narrows the table too, by address, method, status or kind.
+    await type(tester, find.byKey(const Key('har-search')), '302');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('har-entry-0')), findsOneWidget);
+    expect(find.byKey(const Key('har-entry-1')), findsNothing);
+
+    // A row opens the request in full.
+    await tester.tap(find.byKey(const Key('har-entry-0')));
+    await tester.pumpAndSettle();
+    expect(find.text('$base/old'), findsOneWidget);
+    expect(find.textContaining('302'), findsWidgets);
+    await tester.tap(find.byKey(const Key('har-detail-response')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('/new?from=old'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('har-detail-close')));
+    await tester.pumpAndSettle();
+
+    // Only the ticked requests are kept as a collection: here the redirect
+    // is left out by clearing everything listed.
+    expect(find.text('3 of 3 selected to import'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('har-select-shown')));
+    await tester.pumpAndSettle();
+    expect(find.text('2 of 3 selected to import'), findsOneWidget);
+    expect(find.text('Import 2 as collection'), findsOneWidget);
     await tester.tap(find.byKey(const Key('har-import')));
     await waitFor(tester, find.byKey(const Key('collection-name')));
     await tester.pumpAndSettle();
@@ -1453,7 +1476,10 @@ void main() {
     await tester.tap(find.byKey(const Key('dialog-confirm')));
     await tester.pumpAndSettle();
     expect(store.collections.single.name, 'Recorded');
-    expect(store.collections.single.items.length, 3);
+    expect(store.collections.single.items.map((i) => i.name), [
+      'GET /new',
+      'GET /ping',
+    ]);
     expect(tester.takeException(), isNull);
   });
   testWidgets('guards unsaved edits and undoes removals', (tester) async {

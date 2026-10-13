@@ -11,8 +11,9 @@ use crate::frb_generated::StreamSink;
 pub use reqorb_core::{
     AppTheme, Auth, AuthField, AuthKind, AuthParam, BodyMode, Collection, Cookie, DisabledTls,
     Environment, Exchange, ExportFormat, FormField, GrpcCall, GrpcMethod, GrpcReply, GrpcSchema,
-    HarCount, HarEntry, HarFinding, HarReport, HarSeverity, Header, HttpMode, ImportResult, Item, Request, RequestSettings, Response, Sent, Settings,
-    Variable, Workspace, WsEvent, WsEventKind,
+    HarCount, HarEntry, HarFinding, HarPhase, HarReport, HarSeverity, Header, HttpMode,
+    ImportResult, Item, Request, RequestSettings, Response, Sent, Settings, Variable, Workspace,
+    WsEvent, WsEventKind,
 };
 
 #[frb(mirror(AppTheme))]
@@ -462,6 +463,19 @@ pub struct _HarEntry {
     pub size_bytes: u64,
     pub time_ms: u64,
     pub wait_ms: Option<u64>,
+    pub status_text: String,
+    pub request_headers: Vec<Header>,
+    pub response_headers: Vec<Header>,
+    pub request_body: Option<String>,
+    pub response_body: Option<String>,
+    pub body_note: Option<String>,
+    pub phases: Vec<HarPhase>,
+}
+
+#[frb(mirror(HarPhase))]
+pub struct _HarPhase {
+    pub name: String,
+    pub ms: u64,
 }
 
 #[frb(mirror(HarCount))]
@@ -489,6 +503,12 @@ pub struct _HarReport {
 /// Reports on the text of a HAR archive: totals, breakdowns and findings.
 pub fn analyze_har(text: String) -> Result<HarReport, String> {
     reqorb_core::analyze_har(&text).map_err(|e| e.to_string())
+}
+
+/// Imports the entries of a HAR archive at the given positions as a
+/// collection called `name`.
+pub fn import_har(text: String, name: String, entries: Vec<u32>) -> Result<ImportResult, String> {
+    reqorb_core::import_har(&text, &name, &entries).map_err(|e| e.to_string())
 }
 
 /// Copies with tokens, passwords, cookies and keys replaced, for exports
