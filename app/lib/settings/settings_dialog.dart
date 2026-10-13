@@ -707,6 +707,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
       ('Send, connect or call', 'enter'),
       ('Save the request', 'S'),
       ('New request', 'N'),
+      ('Close request', 'W'),
       ('Go to the address', 'L'),
       ('Show or hide the sidebar', 'B'),
     ];

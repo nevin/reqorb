@@ -12,7 +12,9 @@ import 'package:reqorb/history/history_page.dart';
 import 'package:reqorb/protocols/grpc_session.dart';
 import 'package:reqorb/protocols/ws_session.dart';
 import 'package:reqorb/request/environment_picker.dart';
+import 'package:reqorb/request/request_tab.dart';
 import 'package:reqorb/request/request_title.dart';
+import 'package:reqorb/request/tab_strip.dart';
 import 'package:reqorb/request/url_bar.dart';
 import 'package:reqorb/request/send_session.dart';
 import 'package:reqorb/environments/environments.dart';
@@ -50,8 +52,13 @@ class RequestPage extends StatefulWidget {
 class _RequestPageState extends State<RequestPage> {
   final _scaffold = GlobalKey<ScaffoldState>();
 
-  /// The request in the editor. The names below are shorthand for its parts.
-  final _draft = RequestDraft(url: 'https://httpbin.org/get');
+  /// The requests that are open, and which of them is showing. The names
+  /// below are shorthand for the parts of the one showing.
+  late final _tabs = [_newTab(url: 'https://httpbin.org/get')];
+  int _active = 0;
+
+  RequestTab get _tab => _tabs[_active];
+  RequestDraft get _draft => _tab.draft;
 
   TextEditingController get _url => _draft.url;
   TextEditingController get _headers => _draft.headers;
@@ -82,7 +89,11 @@ class _RequestPageState extends State<RequestPage> {
   final _bulk = <String>{};
 
   /// The saved request being edited, if the editor was opened from one.
-  RequestRef? _origin;
+  RequestRef? get _origin => _tab.origin;
+  set _origin(RequestRef? ref) {
+    _tab.origin = ref;
+    _tab.savedName = ref == null ? null : _store.itemAt(ref)?.name;
+  }
 
   /// Whether the docked sidebar is hidden to give the editor more room.
   bool _sidebarCollapsed = false;
@@ -93,7 +104,8 @@ class _RequestPageState extends State<RequestPage> {
   final _urlFocus = FocusNode();
 
   /// The name given to a request that has not been saved yet.
-  String? _draftName;
+  String? get _draftName => _tab.draftName;
+  set _draftName(String? name) => _tab.draftName = name;
 
   /// Notifies on any edit to the request, for the title and the tab badges.
   Listenable get _edits => _draft;
@@ -104,9 +116,9 @@ class _RequestPageState extends State<RequestPage> {
 
   // The three kinds of request each have a session that does the talking
   // and holds what came back; the names below are shorthand for their state.
-  late final _http = SendSession(_store.engine, _store);
-  late final _ws = WsSession(_store.engine);
-  late final _grpc = GrpcSession(_store.engine);
+  SendSession get _http => _tab.http;
+  WsSession get _ws => _tab.ws;
+  GrpcSession get _grpc => _tab.grpc;
   late final _graphql = GraphqlSession(_store.engine, _store);
 
   bool get _sending => _http.sending;
@@ -127,21 +139,130 @@ class _RequestPageState extends State<RequestPage> {
   @override
   void initState() {
     super.initState();
-    for (final session in [_http, _ws, _grpc, _graphql]) {
-      session.addListener(_sessionChanged);
-    }
+    _graphql.addListener(_sessionChanged);
   }
 
   @override
   void dispose() {
-    _draft.dispose();
-    _http.dispose();
-    _ws.dispose();
-    _grpc.dispose();
+    for (final tab in _tabs) {
+      tab.sessions.removeListener(_sessionChanged);
+      tab.dispose();
+    }
     _graphql.dispose();
     _urlFocus.dispose();
     super.dispose();
   }
+
+  // ------------------------------------------------------------------ tabs
+
+  /// Makes a tab whose conversations redraw the page as they move on.
+  RequestTab _newTab({String url = ''}) =>
+      RequestTab(_store.engine, _store, url: url)
+        ..sessions.addListener(_sessionChanged);
+
+  /// Brings a tab forward for something to be opened in: the one showing
+  /// if nothing has been done in it, otherwise a new one.
+  void _useFreshTab() {
+    if (_tab.blank) return;
+    _tabs.add(_newTab());
+    _active = _tabs.length - 1;
+  }
+
+  void _selectTab(int index) {
+    if (index == _active) return;
+    setState(() {
+      _active = index;
+      _graphql.reset();
+    });
+  }
+
+  /// Closes a tab, after making sure unsaved edits to a saved request are
+  /// not lost without being asked. The last tab makes way for a new one.
+  Future<void> _closeTab(int index) async {
+    final tab = _tabs[index];
+    final origin = tab.origin;
+    if (tab.dirty && origin != null && _store.settings.confirmDiscard) {
+      final name = _store.itemAt(origin)?.name ?? tab.savedName;
+      final save = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Save changes?'),
+          content: Text(
+            '"$name" has changes that have not been saved. '
+            'Discarding them cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              key: const Key('discard-changes'),
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Discard'),
+            ),
+            FilledButton(
+              key: const Key('save-changes'),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      );
+      if (save == null || !mounted) return;
+      if (save) _store.updateRequest(origin, tab.draft.toRequest());
+    }
+    // The dialog took a moment; the tab may have moved meanwhile.
+    final at = _tabs.indexOf(tab);
+    if (at < 0) return;
+    setState(() {
+      _tabs.removeAt(at);
+      if (_tabs.isEmpty) _tabs.add(_newTab());
+      if (_active > at || _active >= _tabs.length) _active--;
+      if (_active < 0) _active = 0;
+      _graphql.reset();
+    });
+    tab.sessions.removeListener(_sessionChanged);
+    // An open socket is closed with its tab.
+    tab.ws.reset();
+    // Let go of the tab once the widgets showing it have gone.
+    WidgetsBinding.instance.addPostFrameCallback((_) => tab.dispose());
+  }
+
+  /// After saved requests were removed, positions may have moved. A tab
+  /// whose request is no longer where it was carries on as an unsaved one.
+  void _reconcileTabs() => setState(() {
+    for (final tab in _tabs) {
+      final origin = tab.origin;
+      if (origin == null) continue;
+      final item = _store.itemAt(origin);
+      final was = tab.draft.saved;
+      final same =
+          item?.request != null &&
+          item!.name == tab.savedName &&
+          item.request!.method.toUpperCase() == was?.method &&
+          item.request!.url == was?.url;
+      if (!same) {
+        tab.origin = null;
+        tab.draftName = tab.savedName;
+        tab.savedName = null;
+        tab.draft.saved = null;
+      }
+    }
+  });
+
+  /// What the strip shows for each open request.
+  List<OpenTab> _tabLabels() => [
+    for (final tab in _tabs)
+      (
+        method: tab.draft.method,
+        name:
+            (tab.origin == null ? null : _store.itemAt(tab.origin!)?.name) ??
+            tab.draftName ??
+            tab.fallbackLabel,
+        dirty: tab.dirty,
+      ),
+  ];
 
   List<Header> _parseHeaders() => _draft.parseHeaders();
 
@@ -320,6 +441,7 @@ class _RequestPageState extends State<RequestPage> {
     setState(() {
       if (origin != null && _store.itemAt(origin) != null) {
         _store.renameItem(origin, name);
+        _tab.savedName = name;
       } else {
         _draftName = name;
       }
@@ -342,49 +464,20 @@ class _RequestPageState extends State<RequestPage> {
     _method = method;
   });
 
-  /// Runs [then], which replaces what is in the editor, after making sure
-  /// unsaved edits to a saved request are not lost without being asked.
-  Future<void> _leave(VoidCallback then) async {
-    final origin = _origin;
-    final name = _name;
-    if (!_dirty || origin == null || !_store.settings.confirmDiscard) {
-      return then();
-    }
-    final save = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Save changes?'),
-        content: Text(
-          '"$name" has changes that have not been saved. '
-          'Discarding them cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            key: const Key('discard-changes'),
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Discard'),
-          ),
-          FilledButton(
-            key: const Key('save-changes'),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    if (save == null || !mounted) return;
-    if (save) _store.updateRequest(origin, _request());
-    then();
-  }
-
+  /// Shows a saved request: in the tab it is already open in, or else in
+  /// a tab of its own.
   void _open(RequestRef ref) {
     final request = _store.itemAt(ref)?.request;
     if (request == null) return;
+    final open = _tabs.indexWhere((tab) => tab.origin == ref);
     setState(() {
+      if (open >= 0) {
+        // Reloading it would throw away whatever has been typed since.
+        _active = open;
+        _graphql.reset();
+        return;
+      }
+      _useFreshTab();
       _wsReset();
       _grpcReset();
       _draft.load(request);
@@ -398,9 +491,10 @@ class _RequestPageState extends State<RequestPage> {
     }
   }
 
-  /// Clears the editor for a request that is not saved anywhere yet.
+  /// Opens a tab for a request that is not saved anywhere yet.
   void _newRequest() {
     setState(() {
+      _useFreshTab();
       _wsReset();
       _grpcReset();
       _origin = null;
@@ -424,7 +518,7 @@ class _RequestPageState extends State<RequestPage> {
     }
     final entry = await showHistory(context, _store);
     if (entry == null || !mounted) return;
-    await _leave(() => _showPast(entry));
+    await _showPast(entry);
   }
 
   /// Puts a request from the history in the editor as a new, unsaved one,
@@ -448,6 +542,7 @@ class _RequestPageState extends State<RequestPage> {
     }
     if (!mounted) return;
     setState(() {
+      _useFreshTab();
       _wsReset();
       _grpcReset();
       _draft.load(request ?? entry.exchange.request);
@@ -558,16 +653,9 @@ class _RequestPageState extends State<RequestPage> {
           final sidebar = Sidebar(
             store: _store,
             selected: _origin,
-            onOpen: (ref) {
-              // The open request needs no reloading, and reloading it would
-              // throw away whatever has been typed since.
-              if (ref != _origin) _leave(() => _open(ref));
-            },
-            onNewRequest: () => _leave(_newRequest),
-            onRemoved: () => setState(() {
-              _origin = null;
-              _draft.saved = null;
-            }),
+            onOpen: _open,
+            onNewRequest: _newRequest,
+            onRemoved: _reconcileTabs,
             onHistory: _openHistory,
             onCollapse: docked ? toggle : null,
           );
@@ -579,7 +667,8 @@ class _RequestPageState extends State<RequestPage> {
                 (LogicalKeyboardKey.keyB, toggle),
                 (LogicalKeyboardKey.enter, _primary),
                 (LogicalKeyboardKey.keyS, _save),
-                (LogicalKeyboardKey.keyN, () => _leave(_newRequest)),
+                (LogicalKeyboardKey.keyN, _newRequest),
+                (LogicalKeyboardKey.keyW, () => _closeTab(_active)),
                 (LogicalKeyboardKey.keyL, _urlFocus.requestFocus),
               ]) ...{
                 SingleActivator(key, meta: true): action,
@@ -766,7 +855,7 @@ class _RequestPageState extends State<RequestPage> {
     // A text label needs room; below that the icon alone has to do.
     final roomy = MediaQuery.sizeOf(context).width >= 1000;
 
-    return Column(
+    final editor = Column(
       children: [
         Padding(
           padding: EdgeInsets.fromLTRB(showMenu ? 4 : 16, 8, 12, 0),
@@ -882,6 +971,26 @@ class _RequestPageState extends State<RequestPage> {
               second: response,
             ),
           ),
+        ),
+      ],
+    );
+    return Column(
+      children: [
+        ListenableBuilder(
+          listenable: _edits,
+          builder: (context, _) => TabStrip(
+            tabs: _tabLabels(),
+            active: _active,
+            onSelect: _selectTab,
+            onClose: _closeTab,
+            onNew: _newRequest,
+          ),
+        ),
+        const Divider(height: 1),
+        // Everything below the strip belongs to the tab showing, and is
+        // built afresh for another so that nothing typed leaks across.
+        Expanded(
+          child: KeyedSubtree(key: ValueKey(_tab.id), child: editor),
         ),
       ],
     );

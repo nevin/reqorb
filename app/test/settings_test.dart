@@ -194,7 +194,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('unsaved')), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('new-request')));
+    await tester.tap(find.byKey(const Key('tab-close-0')));
     await tester.pumpAndSettle();
     expect(find.text('Save changes?'), findsNothing);
     expect(find.text('Untitled request'), findsOneWidget);

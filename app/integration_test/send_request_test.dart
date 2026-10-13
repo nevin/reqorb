@@ -1747,7 +1747,6 @@ void main() {
     await start(tester);
     await launch(tester);
     final url = 'http://127.0.0.1:${server.port}';
-    final newRequest = find.byKey(const Key('new-request'));
 
     // Sending with no URL says why nothing happened.
     await type(tester, find.byKey(const Key('url')), '');
@@ -1762,15 +1761,15 @@ void main() {
     await tester.tap(find.byKey(const Key('save-confirm')));
     await tester.pumpAndSettle();
 
-    // Leaving an edited request asks first; cancelling stays put.
+    // Closing an edited request asks first; cancelling stays put.
     await type(tester, find.byKey(const Key('url')), '$url/b');
-    await tester.tap(newRequest);
+    await tester.tap(find.byKey(const Key('tab-close-0')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(find.text('$url/b'), findsOneWidget);
 
-    await tester.tap(newRequest);
+    await tester.tap(find.byKey(const Key('tab-close-0')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('discard-changes')));
     await tester.pumpAndSettle();
@@ -1780,7 +1779,7 @@ void main() {
     await tester.tap(find.text('A'));
     await tester.pumpAndSettle();
     await type(tester, find.byKey(const Key('url')), '$url/c');
-    await tester.tap(newRequest);
+    await tester.tap(find.byKey(const Key('tab-close-0')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('save-changes')));
     await tester.pumpAndSettle();
