@@ -40,6 +40,9 @@ class RequestTab {
   /// The name given to a request that has not been saved yet.
   String? draftName;
 
+  /// Which part of the request is showing: params, headers and so on.
+  int section = 0;
+
   /// Notifies when any of the tab's conversations moves on.
   late final Listenable sessions = Listenable.merge([http, ws, grpc]);
 

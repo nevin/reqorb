@@ -89,6 +89,21 @@ void main() {
     expect(url(tester), 'https://api.test/ping');
   });
 
+  testWidgets('each tab comes back to the part it was showing', (tester) async {
+    await open(tester);
+    await tap(tester, find.text('Ping'));
+    await tap(tester, find.byKey(const Key('auth-tab')));
+    await tap(tester, find.text('Pong'));
+    expect(find.byKey(const Key('auth-kind')), findsNothing);
+    await tap(tester, find.byKey(const Key('headers-tab')));
+
+    await tap(tester, find.byKey(const Key('tab-0')));
+    expect(find.byKey(const Key('auth-kind')), findsOneWidget);
+    await tap(tester, find.byKey(const Key('tab-1')));
+    expect(find.byKey(const Key('auth-kind')), findsNothing);
+    expect(find.byKey(const Key('headers-bulk-toggle')), findsOneWidget);
+  });
+
   testWidgets('a new tab starts empty, and an empty one is not doubled', (
     tester,
   ) async {

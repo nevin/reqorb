@@ -579,7 +579,11 @@ void main() {
     await tester.tap(find.byKey(const Key('params-tab')));
     await tester.pumpAndSettle();
     expect(cell('params-key-0'), '');
+    // Its tab is still open, on the part it was left showing.
     await tester.tap(find.text('GET /search'));
+    await tester.pumpAndSettle();
+    expect(cell('headers'), 'X-One: 1\nX-Two: a: b');
+    await tester.tap(find.byKey(const Key('params-tab')));
     await tester.pumpAndSettle();
     expect(cell('params-key-1'), 'limit');
     expect(cell('params-value-1'), '5');
@@ -1094,8 +1098,16 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('query').last);
     await tester.pumpAndSettle();
+    // The tab still shows the last response, so wait for the request itself.
+    seen.path = null;
     await tester.tap(find.byKey(const Key('send')));
-    await waitFor(tester, find.byKey(const Key('status')));
+    for (var i = 0; i < 50 && seen.path == null; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
     expect(seen.path, '/secure?api_key=k%201');
     expect(seen.headers!['authorization'], ['x']);
 

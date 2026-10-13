@@ -789,6 +789,8 @@ class _RequestPageState extends State<RequestPage> {
     required VoidCallback onMenu,
   }) {
     final request = RequestEditor(
+      section: _tab.section,
+      onSectionChanged: (index) => _tab.section = index,
       params: _params,
       headers: _headers,
       variables: _variableNames,

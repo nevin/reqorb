@@ -31,7 +31,14 @@ class RequestEditor extends StatelessWidget {
     required this.badges,
     this.message,
     this.variables = const [],
+    this.section = 0,
+    this.onSectionChanged,
   });
+
+  /// The tab shown first, and word of the one moved to, so that each open
+  /// request comes back to the part of it that was being worked on.
+  final int section;
+  final ValueChanged<int>? onSectionChanged;
 
   /// Names of the variables in reach, offered after `{{`.
   final List<String> variables;
@@ -68,89 +75,93 @@ class RequestEditor extends StatelessWidget {
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 7,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ListenableBuilder(
-            listenable: edits,
-            builder: (context, _) {
-              final has = badges();
-              return TabBar(
-                // Tabs sit together at the start instead of stretching out.
-                isScrollable: true,
-                tabAlignment: TabAlignment.start,
-                tabs: [
-                  Tab(
-                    key: const Key('params-tab'),
-                    height: 40,
-                    child: TabLabel('Params', count: has.params),
-                  ),
-                  Tab(
-                    key: const Key('headers-tab'),
-                    height: 40,
-                    child: TabLabel('Headers', count: has.headers),
-                  ),
-                  Tab(
-                    key: const Key('body-tab'),
-                    height: 40,
-                    child: TabLabel(
-                      message == null ? 'Body' : 'Message',
-                      set: has.body,
+      initialIndex: section,
+      child: _SectionWatcher(
+        onChanged: onSectionChanged,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ListenableBuilder(
+              listenable: edits,
+              builder: (context, _) {
+                final has = badges();
+                return TabBar(
+                  // Tabs sit together at the start instead of stretching out.
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                  tabs: [
+                    Tab(
+                      key: const Key('params-tab'),
+                      height: 40,
+                      child: TabLabel('Params', count: has.params),
                     ),
-                  ),
-                  Tab(
-                    key: const Key('auth-tab'),
-                    height: 40,
-                    child: TabLabel('Auth', set: has.auth),
-                  ),
-                  Tab(
-                    key: const Key('cookies-tab'),
-                    height: 40,
-                    child: TabLabel('Cookies', count: has.cookies),
-                  ),
-                  Tab(
-                    key: const Key('request-settings-tab'),
-                    height: 40,
-                    child: TabLabel('Settings', set: has.settings),
-                  ),
-                  Tab(
-                    key: const Key('tests-tab'),
-                    height: 40,
-                    child: TabLabel('Tests', count: has.tests),
-                  ),
-                ],
-              );
-            },
-          ),
-          Expanded(
-            child: TabBarView(
-              children: [
-                KeyValueEditor(
-                  controller: params,
-                  name: 'params',
-                  bulk: bulk.contains('params'),
-                  onBulkChanged: (value) => onBulkChanged('params', value),
-                  separator: ':',
-                  bulkHint: 'page:1\nlimit:{{pageSize}}',
-                  variables: variables,
-                ),
-                KeyValueEditor(
-                  controller: headers,
-                  name: 'headers',
-                  bulk: bulk.contains('headers'),
-                  onBulkChanged: (value) => onBulkChanged('headers', value),
-                  bulkHint: 'Accept: application/json\nX-Request-Id: {{id}}',
-                  variables: variables,
-                ),
-                message ?? body,
-                _form(auth),
-                cookies,
-                _form(settings),
-                _form(tests),
-              ],
+                    Tab(
+                      key: const Key('headers-tab'),
+                      height: 40,
+                      child: TabLabel('Headers', count: has.headers),
+                    ),
+                    Tab(
+                      key: const Key('body-tab'),
+                      height: 40,
+                      child: TabLabel(
+                        message == null ? 'Body' : 'Message',
+                        set: has.body,
+                      ),
+                    ),
+                    Tab(
+                      key: const Key('auth-tab'),
+                      height: 40,
+                      child: TabLabel('Auth', set: has.auth),
+                    ),
+                    Tab(
+                      key: const Key('cookies-tab'),
+                      height: 40,
+                      child: TabLabel('Cookies', count: has.cookies),
+                    ),
+                    Tab(
+                      key: const Key('request-settings-tab'),
+                      height: 40,
+                      child: TabLabel('Settings', set: has.settings),
+                    ),
+                    Tab(
+                      key: const Key('tests-tab'),
+                      height: 40,
+                      child: TabLabel('Tests', count: has.tests),
+                    ),
+                  ],
+                );
+              },
             ),
-          ),
-        ],
+            Expanded(
+              child: TabBarView(
+                children: [
+                  KeyValueEditor(
+                    controller: params,
+                    name: 'params',
+                    bulk: bulk.contains('params'),
+                    onBulkChanged: (value) => onBulkChanged('params', value),
+                    separator: ':',
+                    bulkHint: 'page:1\nlimit:{{pageSize}}',
+                    variables: variables,
+                  ),
+                  KeyValueEditor(
+                    controller: headers,
+                    name: 'headers',
+                    bulk: bulk.contains('headers'),
+                    onBulkChanged: (value) => onBulkChanged('headers', value),
+                    bulkHint: 'Accept: application/json\nX-Request-Id: {{id}}',
+                    variables: variables,
+                  ),
+                  message ?? body,
+                  _form(auth),
+                  cookies,
+                  _form(settings),
+                  _form(tests),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -189,4 +200,39 @@ class TabLabel extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Reports the tab being shown, however it was reached.
+class _SectionWatcher extends StatefulWidget {
+  const _SectionWatcher({required this.onChanged, required this.child});
+
+  final ValueChanged<int>? onChanged;
+  final Widget child;
+
+  @override
+  State<_SectionWatcher> createState() => _SectionWatcherState();
+}
+
+class _SectionWatcherState extends State<_SectionWatcher> {
+  TabController? _controller;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final controller = DefaultTabController.of(context);
+    if (controller == _controller) return;
+    _controller?.removeListener(_report);
+    _controller = controller..addListener(_report);
+  }
+
+  void _report() => widget.onChanged?.call(_controller!.index);
+
+  @override
+  void dispose() {
+    _controller?.removeListener(_report);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
