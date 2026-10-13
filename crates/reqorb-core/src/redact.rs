@@ -312,7 +312,7 @@ fn redact_response(response: &mut Response) {
 
 fn redact_variables(variables: &mut [Variable]) {
     for variable in variables {
-        if is_sensitive(&variable.key) {
+        if variable.secret || is_sensitive(&variable.key) {
             variable.value = mask(&variable.value);
         }
     }

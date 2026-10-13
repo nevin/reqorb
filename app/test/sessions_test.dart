@@ -69,7 +69,9 @@ void main() {
       answer.complete(
         sentWith(
           response(),
-          captured: const [Variable(key: 'token', value: 't', enabled: true)],
+          captured: const [
+            Variable(key: 'token', value: 't', enabled: true, secret: false),
+          ],
         ),
       );
       await sending;

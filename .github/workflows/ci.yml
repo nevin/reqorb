@@ -49,9 +49,7 @@ jobs:
   app:
     name: App end-to-end (macOS)
     runs-on: macos-latest
-    # These drive the real window and depend on it holding focus, so a
-    # failure here is reported without failing the run.
-    continue-on-error: true
+    # These drive the real window, which a clean runner leaves in front.
     defaults:
       run:
         working-directory: app

@@ -267,7 +267,7 @@ pub fn export_environment(
             "values": environment.variables.iter().map(|v| json!({
                 "key": v.key,
                 "value": v.value,
-                "type": "default",
+                "type": if v.secret { "secret" } else { "default" },
                 "enabled": v.enabled,
             })).collect::<Vec<_>>(),
             "_postman_variable_scope": "environment",

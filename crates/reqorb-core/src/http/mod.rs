@@ -19,6 +19,7 @@ use crate::auth::{self, AuthKind};
 use crate::checks::{TestResult, capture, run_tests};
 use crate::graphql::{self, graphql_errors};
 use crate::vars::resolve;
+use crate::vault::LOCKED;
 use crate::{
     BodyMode, Cookie, Error, Exchange, HttpMode, Request, RequestSettings, Response, SendOptions,
     Variable,
@@ -64,7 +65,28 @@ pub async fn send_with(
     if unusable && !resolved.unresolved.is_empty() {
         return Err(Error::UnresolvedVariables(resolved.unresolved));
     }
-    let mut jar = cookies.to_vec();
+    // Sending the encrypted form of a credential would help nobody.
+    let sent = &resolved.request;
+    let locked = sent.url.contains(LOCKED)
+        || sent.headers.iter().any(|h| h.value.contains(LOCKED))
+        || sent.body.as_deref().is_some_and(|b| b.contains(LOCKED))
+        || sent
+            .auth
+            .iter()
+            .flat_map(|a| &a.params)
+            .any(|p| p.value.contains(LOCKED));
+    if locked {
+        return Err(Error::Auth(
+            "this request uses a credential that is still locked: its key could not be read \
+             from the system keychain. Enter the value again, or open Settings to see why."
+                .into(),
+        ));
+    }
+    let mut jar: Vec<Cookie> = cookies
+        .iter()
+        .filter(|c| !c.value.starts_with(LOCKED))
+        .cloned()
+        .collect();
     let (response, exchanges) = send_logged(resolved.request, options, &mut jar).await?;
     let tests = run_tests(&request.tests, &response, variables);
     let (captured, capture_problems) = capture(&request.captures, &response);

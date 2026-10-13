@@ -22,6 +22,8 @@ view. One Rust core does the networking and powers all three front ends.
 - **Export:** Postman, Bruno, curl, `.env`, and the session as a HAR file.
 - **HAR analysis:** totals, a timeline and findings (failures, slow or oversized
   responses, credentials in URLs) for any HAR file or the current session.
+- **Credentials at rest:** saved passwords, tokens and cookies are encrypted with a key
+  kept in the system keychain.
 - **Redaction:** one checkbox on any export replaces tokens, passwords, cookies and
   keys with `[REDACTED]`.
 - **CLI:** send requests, run whole collections, and convert between formats.
@@ -132,6 +134,33 @@ SSL verification and redirects are defaults: a request that changes anything on 
 Settings tab keeps its own choices. The proxy applies to HTTP requests only. The CLI has
 the same controls as flags: `-k`, `--no-follow`, `--max-size MB`, `-x/--proxy URL`,
 `--no-proxy`, `--working-dir DIR` and `--allow-outside`.
+
+### Saved credentials
+
+The workspace is a readable JSON file, so reqorb encrypts the credentials in it before
+saving: passwords, tokens and keys on the Auth tab, headers such as `Authorization` and
+`X-Api-Key`, every cookie's value, a proxy address with a password in it, and
+environment or collection variables that are named like a credential (`token`,
+`password`, `api_key`, …) or marked with the word `secret`:
+
+```text
+base_url=https://api.example.com
+secret session=abc123
+```
+
+The key is made on first use and kept in the system keychain, never in the file, so a
+copied or backed-up workspace gives nothing away. Everything else in the file stays
+readable, and an unchanged workspace saves to an unchanged file.
+
+- **Another machine:** opened without its key, a workspace loads in full except for the
+  encrypted values, which stay locked. Settings says how many; a request that uses one
+  is stopped before it is sent, and saving does not destroy them.
+- **Switching it off:** **Settings › General › Security › Encrypt saved credentials**.
+  The next save writes everything as plain text.
+- **Where it works:** macOS and iPad. On Linux and Windows reqorb cannot use the
+  keychain yet; Settings says so, and credentials are saved as plain text.
+- **What it does not cover:** credentials typed into a URL or a request body, and files
+  you export; use **Redact** for those.
 
 ### Working directory
 
@@ -310,6 +339,7 @@ crates/reqorb-core/src/     the request engine, used by everything else
   formats/                  one module per format, each with its import and export
   vars.rs  checks.rs        variable substitution; tests and captures
   redact.rs  analyze.rs     redaction; the HAR report
+  vault.rs                  the workspace on disk, its credentials encrypted
 crates/reqorb-cli/src/      the `reqorb` command
   cli.rs                    every command, argument and option
   input.rs  output.rs       reading what the user gave; printing and writing files
@@ -346,8 +376,8 @@ cd app && caffeinate -d flutter test integration_test -d macos   # the real app,
 cd app && flutter_rust_bridge_codegen generate       # after changing app/rust/src/api
 ```
 
-GitHub Actions runs all of these on every push (`.github/workflows/ci.yml`); the
-end-to-end job is reported but does not fail the run.
+GitHub Actions runs all of these on every push (`.github/workflows/ci.yml`), and a
+failure in any of them, the end-to-end job included, fails the run.
 
 The end-to-end tests drive the real window and need it to stay in front: they stall if
 the display sleeps (`caffeinate -d` prevents that) and taps go astray if another window

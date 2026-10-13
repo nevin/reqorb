@@ -81,7 +81,9 @@ void main() {
         TestResult(test: 'status == 200', passed: true, detail: ''),
         TestResult(test: 'time < 1', passed: false, detail: 'was 12'),
       ],
-      captured: const [Variable(key: 'token', value: 't-1', enabled: true)],
+      captured: const [
+        Variable(key: 'token', value: 't-1', enabled: true, secret: false),
+      ],
     );
     await enterUrl(tester, 'https://api.test/login');
     await tapSend(tester);

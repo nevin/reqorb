@@ -245,6 +245,11 @@ pub struct Variable {
     pub value: String,
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     pub enabled: bool,
+    /// Holds a credential, whatever its name suggests: its value is
+    /// encrypted in the workspace file and always left out of redacted
+    /// exports.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub secret: bool,
 }
 
 impl Variable {
@@ -253,6 +258,7 @@ impl Variable {
             key: key.into(),
             value: value.into(),
             enabled: true,
+            secret: false,
         }
     }
 }
@@ -403,6 +409,9 @@ pub struct Settings {
     pub working_dir_grant: String,
     /// Whether requests may read files outside the working directory.
     pub allow_outside_working_dir: bool,
+    /// Encrypt credentials in the workspace file with a key kept in the
+    /// system keychain.
+    pub protect_secrets: bool,
 }
 
 impl Default for Settings {
@@ -424,6 +433,7 @@ impl Default for Settings {
             working_dir: String::new(),
             working_dir_grant: String::new(),
             allow_outside_working_dir: false,
+            protect_secrets: true,
         }
     }
 }

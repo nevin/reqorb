@@ -65,7 +65,7 @@ void main() {
     var changes = 0;
     store.addListener(() => changes++);
     Variable variable(String key, String value) =>
-        Variable(key: key, value: value, enabled: true);
+        Variable(key: key, value: value, enabled: true, secret: false);
 
     store.capture([variable('token', 'one'), variable('id', '7')]);
     store.capture([variable('token', 'two')]);

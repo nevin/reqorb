@@ -97,6 +97,7 @@ mod tests {
                 key: "token".into(),
                 value: "secret".into(),
                 enabled: false,
+                secret: false,
             },
         ];
         let resolved = resolve(&request, &vars);

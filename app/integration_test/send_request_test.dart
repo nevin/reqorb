@@ -223,6 +223,9 @@ void main() {
       });
     });
     store = WorkspaceStore('${tmp.path}/workspace.json');
+    // The tests read the saved file as it is, and must not depend on the
+    // keychain of whichever machine runs them.
+    store.updateSettings(store.settings.copyWith(protectSecrets: false));
     addTearDown(() async {
       await server.close(force: true);
       await tmp.delete(recursive: true);
@@ -471,7 +474,7 @@ void main() {
     late Workspace reloaded;
     await tester.runAsync(() async {
       await store.flush();
-      reloaded = await loadWorkspace(path: store.path);
+      reloaded = (await loadWorkspace(path: store.path)).workspace;
     });
     expect(reloaded.requests.single.request!.headers.single.name, 'X-Solo');
 
@@ -639,7 +642,7 @@ void main() {
     late Workspace reloaded;
     await tester.runAsync(() async {
       await store.flush();
-      reloaded = await loadWorkspace(path: store.path);
+      reloaded = (await loadWorkspace(path: store.path)).workspace;
     });
     expect(reloaded.settings.theme, AppTheme.light);
     expect(reloaded.settings.httpMode, HttpMode.http2);
@@ -736,7 +739,7 @@ void main() {
     late Workspace reloaded;
     await tester.runAsync(() async {
       await store.flush();
-      reloaded = await loadWorkspace(path: store.path);
+      reloaded = (await loadWorkspace(path: store.path)).workspace;
     });
     expect(reloaded.cookies.map((c) => c.name), ['sid', 'theme']);
 
@@ -1056,7 +1059,7 @@ void main() {
     late Workspace reloaded;
     await tester.runAsync(() async {
       await store.flush();
-      reloaded = await loadWorkspace(path: store.path);
+      reloaded = (await loadWorkspace(path: store.path)).workspace;
     });
     final saved = reloaded.requests.single.request!.auth!;
     expect(saved.kind, AuthKind.basic);
@@ -1291,7 +1294,7 @@ void main() {
     late String exported;
     await tester.runAsync(() async {
       await store.flush();
-      reloaded = await loadWorkspace(path: store.path);
+      reloaded = (await loadWorkspace(path: store.path)).workspace;
       exported = await exportCollection(
         collection: reloaded.collections.single,
         format: ExportFormat.curl,
@@ -1660,7 +1663,9 @@ void main() {
       find.byKey(const Key('graphql-variables')),
       '{"id": {{userId}}}',
     );
-    store.capture(const [Variable(key: 'userId', value: '7', enabled: true)]);
+    store.capture(const [
+      Variable(key: 'userId', value: '7', enabled: true, secret: false),
+    ]);
     await tester.tap(find.byKey(const Key('send')));
     await waitFor(tester, find.byKey(const Key('status')));
     await tester.pumpAndSettle();

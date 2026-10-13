@@ -96,11 +96,21 @@ abstract class Engine {
   /// Tries a folder out: whether it is there, can be listed and written to.
   DirAccess checkDirectory({required String path});
 
-  Future<Workspace> loadWorkspace({required String path});
-  Future<void> saveWorkspace({
+  /// Reads the workspace, decrypting its credentials with the key in the
+  /// system keychain.
+  Future<LoadedWorkspace> loadWorkspace({required String path});
+
+  /// Writes the workspace. Returns why its credentials were left
+  /// unencrypted, when its settings asked for them to be and the keychain
+  /// could not be used.
+  Future<String?> saveWorkspace({
     required String path,
     required Workspace workspace,
   });
+
+  /// How many values in the workspace are still encrypted, for want of
+  /// the key.
+  int lockedSecrets({required Workspace workspace});
 
   // ------------------------------------------------------ import and export
 
@@ -244,14 +254,18 @@ class RustEngine extends Engine {
       rust.checkDirectory(path: path);
 
   @override
-  Future<Workspace> loadWorkspace({required String path}) =>
+  Future<LoadedWorkspace> loadWorkspace({required String path}) =>
       rust.loadWorkspace(path: path);
 
   @override
-  Future<void> saveWorkspace({
+  Future<String?> saveWorkspace({
     required String path,
     required Workspace workspace,
   }) => rust.saveWorkspace(path: path, workspace: workspace);
+
+  @override
+  int lockedSecrets({required Workspace workspace}) =>
+      rust.lockedSecrets(workspace: workspace);
 
   @override
   Future<ImportResult> importText({

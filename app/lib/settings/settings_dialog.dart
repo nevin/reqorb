@@ -182,6 +182,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
         ),
       ),
     ]);
+    final security = _security(context);
     final headers = _Section('Headers', [
       _Row(
         label: 'Send no-cache header',
@@ -279,7 +280,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
       builder: (context, constraints) {
         // Two columns when there is room, as there is on a desktop.
         final wide = constraints.maxWidth >= 720;
-        final left = [request];
+        final left = [request, security];
         final right = [headers, interface, editor];
         return SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
@@ -307,6 +308,55 @@ class _SettingsDialogState extends State<SettingsDialog> {
         );
       },
     );
+  }
+
+  // --------------------------------------------------------------- security
+
+  /// Whether saved credentials are encrypted, and what stands in the way
+  /// when they are not.
+  Widget _security(BuildContext context) {
+    final theme = Theme.of(context);
+    final warning = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.error,
+    );
+    final on = _settings.protectSecrets;
+    final locked = _store.lockedSecrets;
+    return _Section('Security', [
+      _Row(
+        label: 'Encrypt saved credentials',
+        help: on
+            ? 'Passwords, tokens, cookies and secret variables are encrypted '
+                  'in the workspace file. The key is kept in the system '
+                  'keychain, so the file alone gives nothing away.'
+            : 'Passwords, tokens and cookies are saved in the workspace '
+                  'file as plain text.',
+        control: _switch(
+          const Key('settings-protect-secrets'),
+          on,
+          (on) => _update((c) => c.copyWith(protectSecrets: on)),
+        ),
+      ),
+      if (on && _store.unprotected != null)
+        Text(
+          'Not encrypted: ${_store.unprotected}. Credentials are being '
+          'saved as plain text.',
+          key: const Key('settings-secrets-unprotected'),
+          style: warning,
+        ),
+      if (locked > 0)
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(
+            '$locked saved ${locked == 1 ? 'credential is' : 'credentials are'}'
+            ' locked: ${_store.keyProblem ?? 'the key could not be read'}. '
+            'This happens when the workspace file comes from another '
+            'machine. Nothing is lost, but each must be entered again '
+            'before a request can use it.',
+            key: const Key('settings-secrets-locked'),
+            style: warning,
+          ),
+        ),
+    ]);
   }
 
   // ------------------------------------------------------ working directory

@@ -8,6 +8,7 @@
 //! - `formats`: import and export, one module per format.
 //! - `vars`, `checks`, `redact`, `analyze`: work done on requests and
 //!   responses without touching the network.
+//! - `vault`: the workspace on disk, with its credentials encrypted.
 
 mod analyze;
 mod auth;
@@ -22,6 +23,7 @@ mod model;
 mod redact;
 mod time;
 mod vars;
+mod vault;
 mod ws;
 
 pub use analyze::{HarCount, HarEntry, HarFinding, HarPhase, HarReport, HarSeverity, analyze_har};
@@ -49,4 +51,7 @@ pub use model::{
 };
 pub use redact::{REDACTED, redact_collection, redact_environment, redact_exchanges, redact_text};
 pub use vars::{Resolved, resolve};
+pub use vault::{
+    KeyStore, Keychain, LOCKED, Loaded, check_keys, load_workspace, locked_secrets, save_workspace,
+};
 pub use ws::{WsEvent, WsEventKind, WsHandle, ws_connect};

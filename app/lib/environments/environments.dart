@@ -7,10 +7,12 @@ import 'package:reqorb/src/rust/api/core.dart';
 import 'package:reqorb/shared/theme.dart';
 import 'package:reqorb/workspace/workspace_store.dart';
 
-/// `KEY=value` per line; a leading `#` marks a disabled variable.
-String variablesToText(List<Variable> variables) =>
-    [for (final v in variables) '${v.enabled ? '' : '# '}${v.key}=${v.value}']
-        .join('\n');
+/// `KEY=value` per line. A leading `#` marks a disabled variable, and the
+/// word `secret` before the name one that holds a credential.
+String variablesToText(List<Variable> variables) => [
+  for (final v in variables)
+    '${v.enabled ? '' : '# '}${v.secret ? 'secret ' : ''}${v.key}=${v.value}',
+].join('\n');
 
 List<Variable> textToVariables(String text) {
   final variables = <Variable>[];
@@ -18,6 +20,8 @@ List<Variable> textToVariables(String text) {
     line = line.trim();
     final enabled = !line.startsWith('#');
     if (!enabled) line = line.substring(1).trim();
+    final secret = line.startsWith('secret ');
+    if (secret) line = line.substring(7).trim();
     final i = line.indexOf('=');
     if (i <= 0) continue;
     variables.add(
@@ -25,6 +29,7 @@ List<Variable> textToVariables(String text) {
         key: line.substring(0, i).trim(),
         value: line.substring(i + 1).trim(),
         enabled: enabled,
+        secret: secret,
       ),
     );
   }
@@ -311,10 +316,15 @@ class _EnvironmentsPageState extends State<EnvironmentsPage> {
                   decoration: const InputDecoration(
                     labelText: 'Variables',
                     alignLabelWithHint: true,
-                    hintText: 'base_url=https://api.example.com\ntoken=abc123',
+                    hintText:
+                        'base_url=https://api.example.com\n'
+                        'secret session=abc123',
                     helperText:
-                        'One KEY=value per line. Start a line with # '
-                        'to disable it. Use {{KEY}} in a request.',
+                        'One KEY=value per line. Start a line with # to '
+                        'disable it, or with the word secret to keep its '
+                        'value encrypted on disk and out of redacted '
+                        'exports. Use {{KEY}} in a request.',
+                    helperMaxLines: 3,
                   ),
                   onChanged: (_) => _edited(),
                 ),

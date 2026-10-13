@@ -27,6 +27,7 @@ pub(super) fn postman_variables(values: &Value) -> Vec<Variable> {
                 key: str_field(v, "key")?.to_string(),
                 value: v.get("value").map(loose_string).unwrap_or_default(),
                 enabled: is_enabled(v),
+                secret: str_field(v, "type") == Some("secret"),
             })
         })
         .collect()

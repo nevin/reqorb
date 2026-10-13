@@ -52,6 +52,15 @@ class WorkspaceStore extends ChangeNotifier {
   /// The last load or save failure, if any.
   String? error;
 
+  /// How many saved credentials are still encrypted, because the key they
+  /// were encrypted with could not be read, and why it could not.
+  int lockedSecrets = 0;
+  String? keyProblem;
+
+  /// Why the last save left credentials unencrypted although the settings
+  /// ask for them to be; null when they were encrypted, or need not be.
+  String? unprotected;
+
   List<Collection> get collections => _workspace.collections;
 
   /// Saved requests that are not in any collection.
@@ -137,7 +146,10 @@ class WorkspaceStore extends ChangeNotifier {
 
   Future<void> load() async {
     try {
-      _workspace = await engine.loadWorkspace(path: path);
+      final loaded = await engine.loadWorkspace(path: path);
+      _workspace = loaded.workspace;
+      lockedSecrets = loaded.locked;
+      keyProblem = loaded.problem;
       error = null;
     } catch (e) {
       error = e.toString();
@@ -155,7 +167,18 @@ class WorkspaceStore extends ChangeNotifier {
 
   Future<void> _save() async {
     try {
-      await engine.saveWorkspace(path: path, workspace: _workspace);
+      final saving = _workspace;
+      final why = await engine.saveWorkspace(path: path, workspace: saving);
+      // Entering a locked credential again replaces it, so the count of
+      // those still locked can only be known by looking.
+      final locked = lockedSecrets == 0
+          ? 0
+          : engine.lockedSecrets(workspace: saving);
+      if (why != unprotected || locked != lockedSecrets) {
+        unprotected = why;
+        lockedSecrets = locked;
+        notifyListeners();
+      }
     } catch (e) {
       error = e.toString();
       notifyListeners();
@@ -505,6 +528,7 @@ extension SettingsCopy on Settings {
     String? workingDir,
     String? workingDirGrant,
     bool? allowOutsideWorkingDir,
+    bool? protectSecrets,
   }) => Settings(
     theme: theme ?? this.theme,
     httpMode: httpMode ?? this.httpMode,
@@ -523,5 +547,6 @@ extension SettingsCopy on Settings {
     workingDirGrant: workingDirGrant ?? this.workingDirGrant,
     allowOutsideWorkingDir:
         allowOutsideWorkingDir ?? this.allowOutsideWorkingDir,
+    protectSecrets: protectSecrets ?? this.protectSecrets,
   );
 }

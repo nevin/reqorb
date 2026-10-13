@@ -124,16 +124,30 @@ Future<GrpcReply> grpcCall({
 }) =>
     RustLib.instance.api.crateApiCoreGrpcCall(call: call, variables: variables);
 
-Future<Workspace> loadWorkspace({required String path}) =>
+/// Loads the workspace, decrypting its credentials with the key in the
+/// system keychain.
+Future<LoadedWorkspace> loadWorkspace({required String path}) =>
     RustLib.instance.api.crateApiCoreLoadWorkspace(path: path);
 
-Future<void> saveWorkspace({
+/// Saves the workspace, with its credentials encrypted when its settings
+/// ask for that. Returns why they were not, if the keychain could not be
+/// used; the workspace is saved either way.
+Future<String?> saveWorkspace({
   required String path,
   required Workspace workspace,
 }) => RustLib.instance.api.crateApiCoreSaveWorkspace(
   path: path,
   workspace: workspace,
 );
+
+/// Why credentials cannot be encrypted on this machine, or `None` when
+/// they can. Makes the key in the keychain if there is none yet.
+Future<String?> keychainProblem() =>
+    RustLib.instance.api.crateApiCoreKeychainProblem();
+
+/// How many values in the workspace are still encrypted.
+int lockedSecrets({required Workspace workspace}) =>
+    RustLib.instance.api.crateApiCoreLockedSecrets(workspace: workspace);
 
 /// Imports reqorb, Postman or OpenAPI/Swagger documents, a curl command,
 /// or a `.env` file.
@@ -1080,6 +1094,35 @@ class Item {
 
 enum Layout { auto, sideBySide, stacked }
 
+/// A workspace read from disk, and what could not be read with it.
+class LoadedWorkspace {
+  final Workspace workspace;
+
+  /// Credentials left encrypted because their key could not be read.
+  final int locked;
+
+  /// Why the key could not be read, when it could not.
+  final String? problem;
+
+  const LoadedWorkspace({
+    required this.workspace,
+    required this.locked,
+    this.problem,
+  });
+
+  @override
+  int get hashCode => workspace.hashCode ^ locked.hashCode ^ problem.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LoadedWorkspace &&
+          runtimeType == other.runtimeType &&
+          workspace == other.workspace &&
+          locked == other.locked &&
+          problem == other.problem;
+}
+
 enum ProxyMode { system, none, custom }
 
 class Request {
@@ -1323,6 +1366,7 @@ class Settings {
   final String workingDir;
   final String workingDirGrant;
   final bool allowOutsideWorkingDir;
+  final bool protectSecrets;
 
   const Settings({
     required this.theme,
@@ -1341,6 +1385,7 @@ class Settings {
     required this.workingDir,
     required this.workingDirGrant,
     required this.allowOutsideWorkingDir,
+    required this.protectSecrets,
   });
 
   @override
@@ -1360,7 +1405,8 @@ class Settings {
       proxyUrl.hashCode ^
       workingDir.hashCode ^
       workingDirGrant.hashCode ^
-      allowOutsideWorkingDir.hashCode;
+      allowOutsideWorkingDir.hashCode ^
+      protectSecrets.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1382,7 +1428,8 @@ class Settings {
           proxyUrl == other.proxyUrl &&
           workingDir == other.workingDir &&
           workingDirGrant == other.workingDirGrant &&
-          allowOutsideWorkingDir == other.allowOutsideWorkingDir;
+          allowOutsideWorkingDir == other.allowOutsideWorkingDir &&
+          protectSecrets == other.protectSecrets;
 }
 
 class TestResult {
@@ -1413,15 +1460,18 @@ class Variable {
   final String key;
   final String value;
   final bool enabled;
+  final bool secret;
 
   const Variable({
     required this.key,
     required this.value,
     required this.enabled,
+    required this.secret,
   });
 
   @override
-  int get hashCode => key.hashCode ^ value.hashCode ^ enabled.hashCode;
+  int get hashCode =>
+      key.hashCode ^ value.hashCode ^ enabled.hashCode ^ secret.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1430,7 +1480,8 @@ class Variable {
           runtimeType == other.runtimeType &&
           key == other.key &&
           value == other.value &&
-          enabled == other.enabled;
+          enabled == other.enabled &&
+          secret == other.secret;
 }
 
 class Workspace {

@@ -983,3 +983,30 @@ async fn sends_through_the_chosen_proxy() {
     .unwrap_err();
     assert!(error.to_string().starts_with("invalid proxy address"));
 }
+
+#[tokio::test]
+async fn refuses_to_send_a_credential_that_is_still_locked() {
+    let locked = format!("{}abc:def", crate::LOCKED);
+    let mut header = Request::new("GET", "http://127.0.0.1:1/");
+    header.add_header("Authorization", format!("Bearer {locked}"));
+    let mut auth = Request::new("GET", "http://127.0.0.1:1/");
+    auth.auth = Some(Auth::new(AuthKind::Bearer, &[("token", &locked)]));
+    // A locked variable is as locked once it has been filled in.
+    let variable = Request::new("GET", "http://127.0.0.1:1/?key={{key}}");
+    for request in [header, auth, variable] {
+        let error = send_with(
+            &request,
+            &[Variable::new("key", &locked)],
+            &SendOptions::default(),
+            &[],
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .starts_with("this request uses a credential that is still locked"),
+            "{error}"
+        );
+    }
+}

@@ -265,6 +265,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<Variable> dco_decode_list_variable(dynamic raw);
 
   @protected
+  LoadedWorkspace dco_decode_loaded_workspace(dynamic raw);
+
+  @protected
   int? dco_decode_opt_CastedPrimitive_i_64(dynamic raw);
 
   @protected
@@ -594,6 +597,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<Variable> sse_decode_list_variable(SseDeserializer deserializer);
+
+  @protected
+  LoadedWorkspace sse_decode_loaded_workspace(SseDeserializer deserializer);
 
   @protected
   int? sse_decode_opt_CastedPrimitive_i_64(SseDeserializer deserializer);
@@ -997,6 +1003,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_list_variable(List<Variable> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_loaded_workspace(
+    LoadedWorkspace self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_opt_CastedPrimitive_i_64(int? self, SseSerializer serializer);

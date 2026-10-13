@@ -256,6 +256,7 @@ class FakeEngine extends Engine {
     workingDir: '',
     workingDirGrant: '',
     allowOutsideWorkingDir: false,
+    protectSecrets: true,
   );
 
   @override
@@ -300,15 +301,31 @@ class FakeEngine extends Engine {
   /// What was last written, as the app would find it on the next launch.
   Workspace? saved;
 
-  @override
-  Future<Workspace> loadWorkspace({required String path}) async =>
-      saved ?? (throw StateError('no workspace saved'));
+  /// Stands in for a keychain that cannot be used, with the reason.
+  String? keychainFailure;
+
+  /// How many credentials the saved workspace holds that cannot be read.
+  int locked = 0;
 
   @override
-  Future<void> saveWorkspace({
+  Future<LoadedWorkspace> loadWorkspace({required String path}) async =>
+      LoadedWorkspace(
+        workspace: saved ?? (throw StateError('no workspace saved')),
+        locked: locked,
+        problem: locked > 0 ? 'its key is not in this keychain' : null,
+      );
+
+  @override
+  Future<String?> saveWorkspace({
     required String path,
     required Workspace workspace,
-  }) async => saved = workspace;
+  }) async {
+    saved = workspace;
+    return workspace.settings.protectSecrets ? keychainFailure : null;
+  }
+
+  @override
+  int lockedSecrets({required Workspace workspace}) => locked;
 
   // ------------------------------------------- not needed by the tests yet
 

@@ -8,6 +8,7 @@ use std::sync::{LazyLock, Mutex};
 use flutter_rust_bridge::frb;
 
 use crate::frb_generated::StreamSink;
+use reqorb_core::Keychain;
 pub use reqorb_core::{
     AppTheme, Auth, AuthField, AuthKind, AuthParam, BodyMode, Collection, Cookie, DirAccess,
     DisabledTls, Environment, Exchange, ExportFormat, FormField, GraphQlArg, GraphQlDraft,
@@ -105,6 +106,7 @@ pub struct _Settings {
     pub working_dir: String,
     pub working_dir_grant: String,
     pub allow_outside_working_dir: bool,
+    pub protect_secrets: bool,
 }
 
 #[frb(mirror(DirAccess))]
@@ -279,6 +281,7 @@ pub struct _Variable {
     pub key: String,
     pub value: String,
     pub enabled: bool,
+    pub secret: bool,
 }
 
 #[frb(mirror(Environment))]
@@ -558,12 +561,44 @@ pub async fn grpc_call(call: GrpcCall, variables: Vec<Variable>) -> Result<GrpcR
         .map_err(|e| e.to_string())
 }
 
-pub fn load_workspace(path: String) -> Result<Workspace, String> {
-    Workspace::load(Path::new(&path)).map_err(|e| e.to_string())
+/// A workspace read from disk, and what could not be read with it.
+pub struct LoadedWorkspace {
+    pub workspace: Workspace,
+    /// Credentials left encrypted because their key could not be read.
+    pub locked: u32,
+    /// Why the key could not be read, when it could not.
+    pub problem: Option<String>,
 }
 
-pub fn save_workspace(path: String, workspace: Workspace) -> Result<(), String> {
-    workspace.save(Path::new(&path)).map_err(|e| e.to_string())
+/// Loads the workspace, decrypting its credentials with the key in the
+/// system keychain.
+pub fn load_workspace(path: String) -> Result<LoadedWorkspace, String> {
+    let loaded =
+        reqorb_core::load_workspace(Path::new(&path), &Keychain).map_err(|e| e.to_string())?;
+    Ok(LoadedWorkspace {
+        workspace: loaded.workspace,
+        locked: loaded.locked,
+        problem: loaded.problem,
+    })
+}
+
+/// Saves the workspace, with its credentials encrypted when its settings
+/// ask for that. Returns why they were not, if the keychain could not be
+/// used; the workspace is saved either way.
+pub fn save_workspace(path: String, workspace: Workspace) -> Result<Option<String>, String> {
+    reqorb_core::save_workspace(&workspace, Path::new(&path), &Keychain).map_err(|e| e.to_string())
+}
+
+/// Why credentials cannot be encrypted on this machine, or `None` when
+/// they can. Makes the key in the keychain if there is none yet.
+pub fn keychain_problem() -> Option<String> {
+    reqorb_core::check_keys(&Keychain).err()
+}
+
+/// How many values in the workspace are still encrypted.
+#[frb(sync)]
+pub fn locked_secrets(workspace: Workspace) -> u32 {
+    reqorb_core::locked_secrets(&workspace)
 }
 
 /// Imports reqorb, Postman or OpenAPI/Swagger documents, a curl command,

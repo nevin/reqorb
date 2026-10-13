@@ -18,6 +18,7 @@ pub(super) fn sample() -> Collection {
                 key: "off".into(),
                 value: "1".into(),
                 enabled: false,
+                secret: false,
             },
         ],
         items: vec![
@@ -49,6 +50,7 @@ fn sample_env() -> Environment {
                 key: "debug".into(),
                 value: "1".into(),
                 enabled: false,
+                secret: false,
             },
         ],
     }
