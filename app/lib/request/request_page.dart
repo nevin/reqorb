@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:reqorb/graphql/graphql_editor.dart';
 import 'package:reqorb/graphql/graphql_session.dart';
 import 'package:reqorb/graphql/schema_browser.dart';
+import 'package:reqorb/history/history_page.dart';
 import 'package:reqorb/protocols/grpc_session.dart';
 import 'package:reqorb/protocols/ws_session.dart';
 import 'package:reqorb/request/environment_picker.dart';
@@ -414,6 +415,58 @@ class _RequestPageState extends State<RequestPage> {
     }
   }
 
+  // -------------------------------------------------------------- history
+
+  /// Shows the requests sent before, and opens the one chosen.
+  Future<void> _openHistory() async {
+    if (_scaffold.currentState?.isDrawerOpen ?? false) {
+      _scaffold.currentState!.closeDrawer();
+    }
+    final entry = await showHistory(context, _store);
+    if (entry == null || !mounted) return;
+    await _leave(() => _showPast(entry));
+  }
+
+  /// Puts a request from the history in the editor as a new, unsaved one,
+  /// with the response it got then.
+  Future<void> _showPast(HistoryEntry entry) async {
+    var request = entry.source;
+    if (request == null) {
+      // A redirect or an authorization round trip was never written by
+      // hand, so it is read back from what was sent.
+      final engine = _store.engine;
+      try {
+        final read = await engine.importHar(
+          text: engine.exportHar(exchanges: [entry.exchange]),
+          name: 'History',
+          entries: [0],
+        );
+        request = read.collections.first.items.first.request;
+      } catch (_) {
+        // What was sent will do as it is.
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _wsReset();
+      _grpcReset();
+      _draft.load(request ?? entry.exchange.request);
+      _draft.saved = null;
+      _origin = null;
+      _http.show(entry.exchange);
+      _graphql.reset();
+      _draftName = entry.name.isEmpty ? null : entry.name;
+    });
+    final sent = DateTime.fromMillisecondsSinceEpoch(entry.exchange.startedMs);
+    showMessage(
+      context,
+      'From history: sent ${dayOf(sent, DateTime.now()).toLowerCase()} at '
+      '${sent.hour.toString().padLeft(2, '0')}:'
+      '${sent.minute.toString().padLeft(2, '0')}'
+      '${entry.cut ? '. The body was too large to keep whole.' : ''}',
+    );
+  }
+
   Future<void> _send() async {
     final request = _request();
     if (_sending) return;
@@ -423,7 +476,7 @@ class _RequestPageState extends State<RequestPage> {
       showMessage(context, 'Enter a URL to send the request');
       return;
     }
-    await _http.send(request, _variables);
+    await _http.send(request, _variables, name: _name ?? '');
   }
 
   void _cancel() => _http.cancel();
@@ -515,6 +568,7 @@ class _RequestPageState extends State<RequestPage> {
               _origin = null;
               _draft.saved = null;
             }),
+            onHistory: _openHistory,
             onCollapse: docked ? toggle : null,
           );
           const width = _sidebarWidth + 1;

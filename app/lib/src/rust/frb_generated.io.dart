@@ -172,6 +172,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Header dco_decode_header(dynamic raw);
 
   @protected
+  HistoryEntry dco_decode_history_entry(dynamic raw);
+
+  @protected
   HttpMode dco_decode_http_mode(dynamic raw);
 
   @protected
@@ -247,6 +250,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<Header> dco_decode_list_header(dynamic raw);
 
   @protected
+  List<HistoryEntry> dco_decode_list_history_entry(dynamic raw);
+
+  @protected
   List<Item> dco_decode_list_item(dynamic raw);
 
   @protected
@@ -263,6 +269,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<Variable> dco_decode_list_variable(dynamic raw);
+
+  @protected
+  LoadedHistory dco_decode_loaded_history(dynamic raw);
 
   @protected
   LoadedWorkspace dco_decode_loaded_workspace(dynamic raw);
@@ -504,6 +513,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Header sse_decode_header(SseDeserializer deserializer);
 
   @protected
+  HistoryEntry sse_decode_history_entry(SseDeserializer deserializer);
+
+  @protected
   HttpMode sse_decode_http_mode(SseDeserializer deserializer);
 
   @protected
@@ -581,6 +593,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<Header> sse_decode_list_header(SseDeserializer deserializer);
 
   @protected
+  List<HistoryEntry> sse_decode_list_history_entry(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<Item> sse_decode_list_item(SseDeserializer deserializer);
 
   @protected
@@ -597,6 +614,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<Variable> sse_decode_list_variable(SseDeserializer deserializer);
+
+  @protected
+  LoadedHistory sse_decode_loaded_history(SseDeserializer deserializer);
 
   @protected
   LoadedWorkspace sse_decode_loaded_workspace(SseDeserializer deserializer);
@@ -867,6 +887,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_header(Header self, SseSerializer serializer);
 
   @protected
+  void sse_encode_history_entry(HistoryEntry self, SseSerializer serializer);
+
+  @protected
   void sse_encode_http_mode(HttpMode self, SseSerializer serializer);
 
   @protected
@@ -975,6 +998,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_list_header(List<Header> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_history_entry(
+    List<HistoryEntry> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_item(List<Item> self, SseSerializer serializer);
 
   @protected
@@ -1003,6 +1032,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_list_variable(List<Variable> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_loaded_history(LoadedHistory self, SseSerializer serializer);
 
   @protected
   void sse_encode_loaded_workspace(

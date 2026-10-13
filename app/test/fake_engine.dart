@@ -257,6 +257,7 @@ class FakeEngine extends Engine {
     workingDirGrant: '',
     allowOutsideWorkingDir: false,
     protectSecrets: true,
+    historyLimit: 500,
   );
 
   @override
@@ -301,6 +302,25 @@ class FakeEngine extends Engine {
   /// What was last written, as the app would find it on the next launch.
   Workspace? saved;
 
+  /// The history file: what has been recorded, oldest first.
+  List<HistoryEntry> history = [];
+  int unreadableHistory = 0;
+
+  @override
+  Future<LoadedHistory> loadHistory({required String path}) async =>
+      LoadedHistory(entries: [...history], unreadable: unreadableHistory);
+
+  @override
+  Future<void> appendHistory({
+    required String path,
+    required List<HistoryEntry> entries,
+    required int limit,
+    required bool protect,
+  }) async => history = [...history, ...entries];
+
+  @override
+  Future<void> clearHistory({required String path}) async => history = [];
+
   /// Stands in for a keychain that cannot be used, with the reason.
   String? keychainFailure;
 
@@ -326,6 +346,18 @@ class FakeEngine extends Engine {
 
   @override
   int lockedSecrets({required Workspace workspace}) => locked;
+
+  // ---------------------------------------------------------------- import
+
+  /// What reading a HAR archive gives back; null makes it fail.
+  ImportResult? importResult;
+
+  @override
+  Future<ImportResult> importHar({
+    required String text,
+    required String name,
+    required List<int> entries,
+  }) async => importResult ?? (throw 'not a HAR archive');
 
   // ------------------------------------------- not needed by the tests yet
 

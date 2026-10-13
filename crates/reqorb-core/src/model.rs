@@ -412,6 +412,9 @@ pub struct Settings {
     /// Encrypt credentials in the workspace file with a key kept in the
     /// system keychain.
     pub protect_secrets: bool,
+    /// How many sent requests are kept, with their responses, from one
+    /// launch to the next; 0 keeps none.
+    pub history_limit: u32,
 }
 
 impl Default for Settings {
@@ -434,6 +437,7 @@ impl Default for Settings {
             working_dir_grant: String::new(),
             allow_outside_working_dir: false,
             protect_secrets: true,
+            history_limit: 500,
         }
     }
 }

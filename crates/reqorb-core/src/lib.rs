@@ -8,7 +8,8 @@
 //! - `formats`: import and export, one module per format.
 //! - `vars`, `checks`, `redact`, `analyze`: work done on requests and
 //!   responses without touching the network.
-//! - `vault`: the workspace on disk, with its credentials encrypted.
+//! - `vault`, `history`: what is kept on disk: the workspace, with its
+//!   credentials encrypted, and the requests sent.
 
 mod analyze;
 mod auth;
@@ -18,6 +19,7 @@ mod files;
 mod formats;
 mod graphql;
 mod grpc;
+mod history;
 mod http;
 mod model;
 mod redact;
@@ -42,6 +44,7 @@ pub use graphql::{
 pub use grpc::{
     GrpcCall, GrpcMethod, GrpcReply, GrpcSchema, grpc_call, grpc_load_proto, grpc_reflect,
 };
+pub use history::{History, HistoryEntry, append_history, clear_history, load_history};
 pub use http::cookies::{Cookie, cookie_header, store_set_cookie};
 pub use http::{Sent, send, send_opts, send_with};
 pub use model::{

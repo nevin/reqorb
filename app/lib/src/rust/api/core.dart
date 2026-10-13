@@ -140,6 +140,27 @@ Future<String?> saveWorkspace({
   workspace: workspace,
 );
 
+/// Reads the history kept at `path`; a missing file is an empty history.
+Future<LoadedHistory> loadHistory({required String path}) =>
+    RustLib.instance.api.crateApiCoreLoadHistory(path: path);
+
+/// Adds entries to the history at `path`, keeping about `limit` in all,
+/// encrypted when `protect` is set and the keychain can be used.
+Future<void> appendHistory({
+  required String path,
+  required List<HistoryEntry> entries,
+  required int limit,
+  required bool protect,
+}) => RustLib.instance.api.crateApiCoreAppendHistory(
+  path: path,
+  entries: entries,
+  limit: limit,
+  protect: protect,
+);
+
+Future<void> clearHistory({required String path}) =>
+    RustLib.instance.api.crateApiCoreClearHistory(path: path);
+
 /// Why credentials cannot be encrypted on this machine, or `None` when
 /// they can. Makes the key in the keychain if there is none yet.
 Future<String?> keychainProblem() =>
@@ -1037,6 +1058,34 @@ class Header {
           value == other.value;
 }
 
+class HistoryEntry {
+  final Exchange exchange;
+  final Request? source;
+  final String name;
+  final bool cut;
+
+  const HistoryEntry({
+    required this.exchange,
+    this.source,
+    required this.name,
+    required this.cut,
+  });
+
+  @override
+  int get hashCode =>
+      exchange.hashCode ^ source.hashCode ^ name.hashCode ^ cut.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is HistoryEntry &&
+          runtimeType == other.runtimeType &&
+          exchange == other.exchange &&
+          source == other.source &&
+          name == other.name &&
+          cut == other.cut;
+}
+
 enum HttpMode { auto, http1, http2 }
 
 class ImportResult {
@@ -1093,6 +1142,26 @@ class Item {
 }
 
 enum Layout { auto, sideBySide, stacked }
+
+/// The requests sent before, and how many could not be read.
+class LoadedHistory {
+  /// Oldest first.
+  final List<HistoryEntry> entries;
+  final int unreadable;
+
+  const LoadedHistory({required this.entries, required this.unreadable});
+
+  @override
+  int get hashCode => entries.hashCode ^ unreadable.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LoadedHistory &&
+          runtimeType == other.runtimeType &&
+          entries == other.entries &&
+          unreadable == other.unreadable;
+}
 
 /// A workspace read from disk, and what could not be read with it.
 class LoadedWorkspace {
@@ -1367,6 +1436,7 @@ class Settings {
   final String workingDirGrant;
   final bool allowOutsideWorkingDir;
   final bool protectSecrets;
+  final int historyLimit;
 
   const Settings({
     required this.theme,
@@ -1386,6 +1456,7 @@ class Settings {
     required this.workingDirGrant,
     required this.allowOutsideWorkingDir,
     required this.protectSecrets,
+    required this.historyLimit,
   });
 
   @override
@@ -1406,7 +1477,8 @@ class Settings {
       workingDir.hashCode ^
       workingDirGrant.hashCode ^
       allowOutsideWorkingDir.hashCode ^
-      protectSecrets.hashCode;
+      protectSecrets.hashCode ^
+      historyLimit.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1429,7 +1501,8 @@ class Settings {
           workingDir == other.workingDir &&
           workingDirGrant == other.workingDirGrant &&
           allowOutsideWorkingDir == other.allowOutsideWorkingDir &&
-          protectSecrets == other.protectSecrets;
+          protectSecrets == other.protectSecrets &&
+          historyLimit == other.historyLimit;
 }
 
 class TestResult {

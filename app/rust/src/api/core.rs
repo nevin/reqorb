@@ -13,9 +13,10 @@ pub use reqorb_core::{
     AppTheme, Auth, AuthField, AuthKind, AuthParam, BodyMode, Collection, Cookie, DirAccess,
     DisabledTls, Environment, Exchange, ExportFormat, FormField, GraphQlArg, GraphQlDraft,
     GraphQlField, GraphQlQuery, GraphQlSchema, GraphQlType, GrpcCall, GrpcMethod, GrpcReply,
-    GrpcSchema, HarCount, HarEntry, HarFinding, HarPhase, HarReport, HarSeverity, Header, HttpMode,
-    ImportResult, Indent, Item, Layout, ProxyMode, Request, RequestSettings, Response, Sent,
-    Settings, TestResult, Variable, Workspace, WsEvent, WsEventKind,
+    GrpcSchema, HarCount, HarEntry, HarFinding, HarPhase, HarReport, HarSeverity, Header,
+    HistoryEntry, HttpMode, ImportResult, Indent, Item, Layout, ProxyMode, Request,
+    RequestSettings, Response, Sent, Settings, TestResult, Variable, Workspace, WsEvent,
+    WsEventKind,
 };
 
 #[frb(mirror(AppTheme))]
@@ -107,6 +108,7 @@ pub struct _Settings {
     pub working_dir_grant: String,
     pub allow_outside_working_dir: bool,
     pub protect_secrets: bool,
+    pub history_limit: u32,
 }
 
 #[frb(mirror(DirAccess))]
@@ -587,6 +589,47 @@ pub fn load_workspace(path: String) -> Result<LoadedWorkspace, String> {
 /// used; the workspace is saved either way.
 pub fn save_workspace(path: String, workspace: Workspace) -> Result<Option<String>, String> {
     reqorb_core::save_workspace(&workspace, Path::new(&path), &Keychain).map_err(|e| e.to_string())
+}
+
+#[frb(mirror(HistoryEntry))]
+pub struct _HistoryEntry {
+    pub exchange: Exchange,
+    pub source: Option<Request>,
+    pub name: String,
+    pub cut: bool,
+}
+
+/// The requests sent before, and how many could not be read.
+pub struct LoadedHistory {
+    /// Oldest first.
+    pub entries: Vec<HistoryEntry>,
+    pub unreadable: u32,
+}
+
+/// Reads the history kept at `path`; a missing file is an empty history.
+pub fn load_history(path: String) -> Result<LoadedHistory, String> {
+    let history =
+        reqorb_core::load_history(Path::new(&path), &Keychain).map_err(|e| e.to_string())?;
+    Ok(LoadedHistory {
+        entries: history.entries,
+        unreadable: history.unreadable,
+    })
+}
+
+/// Adds entries to the history at `path`, keeping about `limit` in all,
+/// encrypted when `protect` is set and the keychain can be used.
+pub fn append_history(
+    path: String,
+    entries: Vec<HistoryEntry>,
+    limit: u32,
+    protect: bool,
+) -> Result<(), String> {
+    reqorb_core::append_history(Path::new(&path), &entries, limit, protect, &Keychain)
+        .map_err(|e| e.to_string())
+}
+
+pub fn clear_history(path: String) -> Result<(), String> {
+    reqorb_core::clear_history(Path::new(&path)).map_err(|e| e.to_string())
 }
 
 /// Why credentials cannot be encrypted on this machine, or `None` when

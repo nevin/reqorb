@@ -69,7 +69,17 @@ class WorkspaceStore extends ChangeNotifier {
   String? get activeEnvironment => _workspace.activeEnvironment;
   Settings get settings => _workspace.settings;
 
-  void updateSettings(Settings settings) => _set(settings: settings);
+  void updateSettings(Settings settings) {
+    final limit = settings.historyLimit;
+    _set(settings: settings);
+    // A smaller history takes effect at once, not at the next send.
+    if (limit == 0 && (_history.isNotEmpty || unreadableHistory > 0)) {
+      clearHistory();
+    } else if (_history.length > limit) {
+      _history = _history.sublist(_history.length - limit);
+      notifyListeners();
+    }
+  }
 
   /// Takes up the permission to use the working directory again, as a
   /// sandboxed app must after every start. Follows the folder if it moved.
@@ -207,6 +217,92 @@ class WorkspaceStore extends ChangeNotifier {
     _saveTimer?.cancel();
     _saveTimer = Timer(const Duration(milliseconds: 300), _save);
   }
+
+  // -------------------------------------------------------------- history
+
+  /// Where the history is kept: beside the workspace file.
+  String get historyPath {
+    final slash = path.lastIndexOf(RegExp(r'[/\\]'));
+    return '${path.substring(0, slash + 1)}history.jsonl';
+  }
+
+  /// Every request sent and what came back, oldest first, kept from one
+  /// launch to the next up to the limit in the settings.
+  List<HistoryEntry> get history => _history;
+  List<HistoryEntry> _history = const [];
+
+  /// Entries in the history file that could not be read, for want of the
+  /// key they were encrypted with.
+  int unreadableHistory = 0;
+
+  /// Writes to the history file one after another, in the order asked.
+  Future<void> _historyWrites = Future.value();
+
+  Future<void> loadHistory() async {
+    try {
+      final loaded = await engine.loadHistory(path: historyPath);
+      _history = loaded.entries;
+      unreadableHistory = loaded.unreadable;
+    } catch (e) {
+      error = e.toString();
+    }
+    notifyListeners();
+  }
+
+  /// Records what a send did: [exchanges] in the order they happened, the
+  /// last of them being the answer to [source], the request as written.
+  void record(
+    List<Exchange> exchanges, {
+    required Request source,
+    String name = '',
+  }) {
+    addExchanges(exchanges);
+    final limit = settings.historyLimit;
+    if (exchanges.isEmpty || limit == 0) return;
+    final entries = [
+      for (final (i, exchange) in exchanges.indexed)
+        HistoryEntry(
+          exchange: exchange,
+          source: i == exchanges.length - 1 ? source : null,
+          name: i == exchanges.length - 1 ? name : '',
+          cut: false,
+        ),
+    ];
+    final all = [..._history, ...entries];
+    _history = all.length > limit ? all.sublist(all.length - limit) : all;
+    notifyListeners();
+    final protect = settings.protectSecrets;
+    _historyWrites = _historyWrites.then((_) async {
+      try {
+        await engine.appendHistory(
+          path: historyPath,
+          entries: entries,
+          limit: limit,
+          protect: protect,
+        );
+      } catch (e) {
+        error = e.toString();
+        notifyListeners();
+      }
+    });
+  }
+
+  void clearHistory() {
+    _history = const [];
+    unreadableHistory = 0;
+    notifyListeners();
+    _historyWrites = _historyWrites.then((_) async {
+      try {
+        await engine.clearHistory(path: historyPath);
+      } catch (e) {
+        error = e.toString();
+        notifyListeners();
+      }
+    });
+  }
+
+  /// Completes when everything recorded so far is on disk.
+  Future<void> historyWritten() => _historyWrites;
 
   // ------------------------------------------------------------ variables
 
@@ -529,6 +625,7 @@ extension SettingsCopy on Settings {
     String? workingDirGrant,
     bool? allowOutsideWorkingDir,
     bool? protectSecrets,
+    int? historyLimit,
   }) => Settings(
     theme: theme ?? this.theme,
     httpMode: httpMode ?? this.httpMode,
@@ -548,5 +645,6 @@ extension SettingsCopy on Settings {
     allowOutsideWorkingDir:
         allowOutsideWorkingDir ?? this.allowOutsideWorkingDir,
     protectSecrets: protectSecrets ?? this.protectSecrets,
+    historyLimit: historyLimit ?? this.historyLimit,
   );
 }

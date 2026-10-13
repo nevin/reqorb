@@ -45,7 +45,13 @@ class SendSession extends ChangeNotifier {
 
   /// Sends [request], which must have a URL. Cookies, the session log and
   /// captured variables are kept even if the result is no longer wanted.
-  Future<void> send(Request request, List<Variable> variables) async {
+  ///
+  /// [name] is what the request is saved as, for the history.
+  Future<void> send(
+    Request request,
+    List<Variable> variables, {
+    String name = '',
+  }) async {
     if (sending) return;
     final url = withScheme(request.url);
     final id = ++_current;
@@ -61,7 +67,7 @@ class SendSession extends ChangeNotifier {
       );
       // Keep whatever the server set, even if this send was abandoned.
       _store.setCookies(result.cookies);
-      _store.addExchanges(result.exchanges);
+      _store.record(result.exchanges, source: request, name: name);
       _store.capture(result.captured);
       // Cancelled, or overtaken by a later send.
       if (id != _current) return;
@@ -76,6 +82,24 @@ class SendSession extends ChangeNotifier {
         _notify();
       }
     }
+  }
+
+  /// Shows a response from the history in place of a fresh one.
+  void show(Exchange exchange) {
+    _current++;
+    sending = false;
+    error = null;
+    sent = Sent(
+      response: exchange.response,
+      unresolved: const [],
+      cookies: const [],
+      exchanges: [exchange],
+      tests: const [],
+      captured: const [],
+      captureProblems: const [],
+      graphqlErrors: const [],
+    );
+    _notify();
   }
 
   /// Stops waiting for the request in flight; its response is discarded.

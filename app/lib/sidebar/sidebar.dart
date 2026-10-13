@@ -19,6 +19,7 @@ class Sidebar extends StatefulWidget {
     required this.onOpen,
     required this.onNewRequest,
     required this.onRemoved,
+    required this.onHistory,
     this.onCollapse,
   });
 
@@ -31,6 +32,9 @@ class Sidebar extends StatefulWidget {
 
   /// Called after anything is deleted, since saved positions may have moved.
   final VoidCallback onRemoved;
+
+  /// Shows the requests sent before.
+  final VoidCallback onHistory;
 
   /// Hides the sidebar; null when it is shown as a drawer instead.
   final VoidCallback? onCollapse;
@@ -191,7 +195,7 @@ class _SidebarState extends State<Sidebar> {
                 key: const Key('session'),
                 dense: true,
                 onTap: () => analyzeSession(context, store),
-                leading: const Icon(Icons.history, size: 20),
+                leading: const Icon(Icons.timeline, size: 20),
                 title: Text(
                   'Session · ${store.session.length} '
                   '${store.session.length == 1 ? 'request' : 'requests'}',
@@ -221,6 +225,17 @@ class _SidebarState extends State<Sidebar> {
                   ],
                 ),
               ),
+            ListTile(
+              key: const Key('history'),
+              dense: true,
+              leading: const Icon(Icons.history, size: 20),
+              title: Text(
+                store.history.isEmpty
+                    ? 'History'
+                    : 'History · ${store.history.length}',
+              ),
+              onTap: widget.onHistory,
+            ),
             ListTile(
               key: const Key('settings'),
               dense: true,

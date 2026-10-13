@@ -14,6 +14,7 @@ Future<void> main() async {
   final directory = await getApplicationSupportDirectory();
   final store = WorkspaceStore('${directory.path}/workspace.json');
   await store.load();
+  await store.loadHistory();
   await store.restoreWorkingDir(folders);
   runApp(ReqorbApp(store: store));
 }

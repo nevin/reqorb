@@ -38,10 +38,19 @@ class _SettingsDialogState extends State<SettingsDialog> {
   );
   late final _fontSize = TextEditingController(text: '${_settings.fontSize}');
   late final _proxyUrl = TextEditingController(text: _settings.proxyUrl);
+  late final _history = TextEditingController(
+    text: '${_settings.historyLimit}',
+  );
 
   @override
   void dispose() {
-    for (final controller in [_timeout, _maxSize, _fontSize, _proxyUrl]) {
+    for (final controller in [
+      _timeout,
+      _maxSize,
+      _fontSize,
+      _proxyUrl,
+      _history,
+    ]) {
       controller.dispose();
     }
     super.dispose();
@@ -183,6 +192,20 @@ class _SettingsDialogState extends State<SettingsDialog> {
       ),
     ]);
     final security = _security(context);
+    final history = _Section('History', [
+      _Row(
+        label: 'Requests kept in history',
+        help: s.historyLimit == 0
+            ? 'Nothing is kept: requests are forgotten when reqorb closes.'
+            : 'The last ${s.historyLimit} requests and their responses are '
+                  'kept between launches. 0 keeps none.',
+        control: _number(
+          const Key('settings-history-limit'),
+          _history,
+          (value) => _update((c) => c.copyWith(historyLimit: value)),
+        ),
+      ),
+    ]);
     final headers = _Section('Headers', [
       _Row(
         label: 'Send no-cache header',
@@ -280,7 +303,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
       builder: (context, constraints) {
         // Two columns when there is room, as there is on a desktop.
         final wide = constraints.maxWidth >= 720;
-        final left = [request, security];
+        final left = [request, security, history];
         final right = [headers, interface, editor];
         return SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),

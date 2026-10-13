@@ -25,7 +25,7 @@ use crate::{Error, Item, Request, Variable, Workspace};
 /// it can change without old files becoming unreadable.
 pub const LOCKED: &str = "reqorb-enc:1:";
 
-const KEY_BYTES: usize = 32;
+pub(crate) const KEY_BYTES: usize = 32;
 const NONCE_BYTES: usize = 24;
 
 /// Where the key that encrypts a workspace's secrets is kept.
@@ -107,7 +107,10 @@ impl KeyStore for Keychain {
 
 /// The key from `keys`, made and stored first if there is none and
 /// `create` is set.
-fn key_from(keys: &dyn KeyStore, create: bool) -> Result<Option<[u8; KEY_BYTES]>, String> {
+pub(crate) fn key_from(
+    keys: &dyn KeyStore,
+    create: bool,
+) -> Result<Option<[u8; KEY_BYTES]>, String> {
     let stored = match keys.load()? {
         Some(key) => key,
         None if create => {
@@ -145,7 +148,7 @@ fn as_nonce(bytes: &[u8]) -> XNonce {
 /// same value always encrypts to the same text and an unchanged workspace
 /// saves to an unchanged file. A nonce is then only ever reused for the
 /// value it was first used with, which gives nothing away.
-fn lock(key: &[u8; KEY_BYTES], plain: &str) -> String {
+pub(crate) fn lock(key: &[u8; KEY_BYTES], plain: &str) -> String {
     let nonce = &mac(key, b"nonce", plain.as_bytes())[..NONCE_BYTES];
     let sealed = cipher(key)
         .encrypt(&as_nonce(nonce), plain.as_bytes())
@@ -156,7 +159,7 @@ fn lock(key: &[u8; KEY_BYTES], plain: &str) -> String {
 
 /// Decrypts a value made by [`lock`]; `None` when the key is not the one
 /// it was encrypted with or the text has been altered.
-fn unlock(key: &[u8; KEY_BYTES], locked: &str) -> Option<String> {
+pub(crate) fn unlock(key: &[u8; KEY_BYTES], locked: &str) -> Option<String> {
     let (nonce, sealed) = locked.strip_prefix(LOCKED)?.split_once(':')?;
     let decode = |text: &str| {
         base64::engine::general_purpose::STANDARD_NO_PAD

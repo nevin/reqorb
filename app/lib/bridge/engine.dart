@@ -112,6 +112,21 @@ abstract class Engine {
   /// the key.
   int lockedSecrets({required Workspace workspace});
 
+  // ---------------------------------------------------------------- history
+
+  /// The requests sent before, oldest first.
+  Future<LoadedHistory> loadHistory({required String path});
+
+  /// Adds [entries] to the history, keeping about [limit] in all and
+  /// encrypting them when [protect] is set.
+  Future<void> appendHistory({
+    required String path,
+    required List<HistoryEntry> entries,
+    required int limit,
+    required bool protect,
+  });
+  Future<void> clearHistory({required String path});
+
   // ------------------------------------------------------ import and export
 
   Future<ImportResult> importText({
@@ -266,6 +281,27 @@ class RustEngine extends Engine {
   @override
   int lockedSecrets({required Workspace workspace}) =>
       rust.lockedSecrets(workspace: workspace);
+
+  @override
+  Future<LoadedHistory> loadHistory({required String path}) =>
+      rust.loadHistory(path: path);
+
+  @override
+  Future<void> appendHistory({
+    required String path,
+    required List<HistoryEntry> entries,
+    required int limit,
+    required bool protect,
+  }) => rust.appendHistory(
+    path: path,
+    entries: entries,
+    limit: limit,
+    protect: protect,
+  );
+
+  @override
+  Future<void> clearHistory({required String path}) =>
+      rust.clearHistory(path: path);
 
   @override
   Future<ImportResult> importText({

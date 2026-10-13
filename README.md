@@ -22,6 +22,8 @@ view. One Rust core does the networking and powers all three front ends.
 - **Export:** Postman, Bruno, curl, `.env`, and the session as a HAR file.
 - **HAR analysis:** totals, a timeline and findings (failures, slow or oversized
   responses, credentials in URLs) for any HAR file or the current session.
+- **History:** every request sent is kept with its response, searchable, and opens
+  again as it was written.
 - **Credentials at rest:** saved passwords, tokens and cookies are encrypted with a key
   kept in the system keychain.
 - **Redaction:** one checkbox on any export replaces tokens, passwords, cookies and
@@ -134,6 +136,24 @@ SSL verification and redirects are defaults: a request that changes anything on 
 Settings tab keeps its own choices. The proxy applies to HTTP requests only. The CLI has
 the same controls as flags: `-k`, `--no-follow`, `--max-size MB`, `-x/--proxy URL`,
 `--no-proxy`, `--working-dir DIR` and `--allow-outside`.
+
+### History
+
+Every HTTP request you send is recorded with its response and kept between launches.
+**History** in the sidebar lists them newest first, grouped by day; search by address,
+method, status or name. Opening one puts the request back in the editor as it was
+written, `{{variables}}` and authorization included, beside the response it got, without
+sending anything. The same view can analyse the whole history as a HAR report, or clear
+it.
+
+- **How much:** the last 500 requests by default; **Settings › General › History**
+  changes that, and 0 keeps none and forgets what was kept.
+- **What is kept:** redirects and authorization round trips are recorded as well as the
+  final answer. Bodies over 512 KB are cut short and binary bodies are left out.
+- **Privacy:** responses hold as much that is private as requests do, so with
+  **Encrypt saved credentials** on, each entry is encrypted whole. The file,
+  `history.jsonl`, sits beside the workspace file.
+- WebSocket and gRPC calls are not recorded yet.
 
 ### Saved credentials
 
@@ -339,7 +359,8 @@ crates/reqorb-core/src/     the request engine, used by everything else
   formats/                  one module per format, each with its import and export
   vars.rs  checks.rs        variable substitution; tests and captures
   redact.rs  analyze.rs     redaction; the HAR report
-  vault.rs                  the workspace on disk, its credentials encrypted
+  vault.rs  history.rs      what is kept on disk: the workspace, its credentials
+                            encrypted, and the requests sent
 crates/reqorb-cli/src/      the `reqorb` command
   cli.rs                    every command, argument and option
   input.rs  output.rs       reading what the user gave; printing and writing files
@@ -349,7 +370,7 @@ app/lib/                    the Flutter UI, one folder per feature
   request/                  the main page, the request model, the send session and the editors
   response/  protocols/     the response pane; WebSocket and gRPC sessions and views
   graphql/                  the GraphQL editor, schema browser and schema session
-  sidebar/  environments/  settings/  har/
+  sidebar/  environments/  settings/  har/  history/
   transfer/                 import and export actions
   workspace/                the saved workspace and collection actions
   shared/                   theme, messages and small reusable widgets
