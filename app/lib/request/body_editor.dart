@@ -1,6 +1,9 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart' hide FormField;
 
+import 'package:reqorb/editor/code_controller.dart';
+import 'package:reqorb/editor/code_editor.dart';
+import 'package:reqorb/editor/syntax.dart';
 import 'package:reqorb/shared/folders.dart';
 import 'package:reqorb/request/key_value_editor.dart';
 import 'package:reqorb/src/rust/api/core.dart';
@@ -45,6 +48,7 @@ class BodyEditor extends StatelessWidget {
     required this.onModeChanged,
     required this.raw,
     required this.rawLanguage,
+    this.variables = const [],
     required this.onRawLanguageChanged,
     required this.urlEncoded,
     required this.urlEncodedBulk,
@@ -57,10 +61,13 @@ class BodyEditor extends StatelessWidget {
   final BodyMode mode;
   final ValueChanged<BodyMode> onModeChanged;
 
-  final TextEditingController raw;
+  final CodeController raw;
 
   /// The name from [rawLanguages] matching the Content-Type header, if any.
   final String? rawLanguage;
+
+  /// Names of the variables in reach, offered after `{{`.
+  final List<String> variables;
   final ValueChanged<String> onRawLanguageChanged;
 
   /// Url-encoded fields as `key: value` lines.
@@ -137,24 +144,15 @@ class BodyEditor extends StatelessWidget {
                 style: TextStyle(color: scheme.onSurfaceVariant),
               ),
             ),
-            BodyMode.raw => TextField(
-              key: const Key('body'),
+            BodyMode.raw => CodeEditor(
+              name: 'body',
               controller: raw,
-              maxLines: null,
-              expands: true,
-              autocorrect: false,
-              enableSuggestions: false,
-              smartQuotesType: SmartQuotesType.disabled,
-              smartDashesType: SmartDashesType.disabled,
-              textAlignVertical: TextAlignVertical.top,
-              style: mono,
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                contentPadding: EdgeInsets.all(12),
-                hintText: '{\n  "name": "reqorb"\n}',
-              ),
+              // As labelled; otherwise as it looks.
+              language: rawLanguage == null
+                  ? null
+                  : CodeLanguage.ofContentType(rawLanguages[rawLanguage]!),
+              variables: variables,
+              hint: '{ "name": "reqorb" }',
             ),
             BodyMode.urlEncoded => KeyValueEditor(
               controller: urlEncoded,

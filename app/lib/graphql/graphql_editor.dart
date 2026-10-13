@@ -2,8 +2,12 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:reqorb/bridge/engine.dart';
+import 'package:reqorb/editor/code_controller.dart';
+import 'package:reqorb/editor/code_editor.dart';
+import 'package:reqorb/editor/syntax.dart';
+import 'package:reqorb/graphql/graphql_complete.dart';
 import 'package:reqorb/shared/messages.dart';
-import 'package:reqorb/shared/theme.dart';
+import 'package:reqorb/src/rust/api/core.dart';
 
 /// Why [text] cannot be sent as GraphQL variables, or null when it can.
 /// Text with `{{variables}}` in it is judged once they are filled in.
@@ -27,22 +31,27 @@ class GraphqlEditor extends StatelessWidget {
     required this.variables,
     required this.operation,
     required this.onOperationChanged,
-    required this.hasSchema,
+    required this.schema,
+    this.variableNames = const [],
     required this.loadingSchema,
     required this.schemaError,
     required this.onSchema,
     required this.onRefreshSchema,
   });
 
-  final TextEditingController query;
-  final TextEditingController variables;
+  final CodeController query;
+  final CodeController variables;
 
   /// Which of the query's operations is sent; empty for the only one.
   final String operation;
   final ValueChanged<String> onOperationChanged;
 
-  /// Whether the server's schema has been fetched.
-  final bool hasSchema;
+  /// The server's schema, once it has been fetched. Fields and arguments
+  /// are completed from it.
+  final GraphQlSchema? schema;
+
+  /// Names of the variables in reach, offered after `{{`.
+  final List<String> variableNames;
   final bool loadingSchema;
 
   /// Why the schema could not be fetched, when that was tried and failed.
@@ -58,6 +67,7 @@ class GraphqlEditor extends StatelessWidget {
     final scheme = theme.colorScheme;
     final engine = Engine.of(context);
     final small = theme.textTheme.bodySmall;
+    final hasSchema = schema != null;
     return ListenableBuilder(
       listenable: Listenable.merge([query, variables]),
       builder: (context, _) {
@@ -152,10 +162,16 @@ class GraphqlEditor extends StatelessWidget {
               ),
             Expanded(
               flex: 3,
-              child: _field(
-                const Key('graphql-query'),
-                query,
-                'query { user(id: 1) { name } }',
+              child: CodeEditor(
+                name: 'graphql-query',
+                controller: query,
+                language: CodeLanguage.graphql,
+                variables: variableNames,
+                complete: schema == null
+                    ? null
+                    : (text, caret, {required asked}) =>
+                          completeGraphql(schema!, text, caret, asked: asked),
+                hint: 'query { user(id: 1) { name } }',
               ),
             ),
             if (found.problem.isNotEmpty ||
@@ -193,10 +209,12 @@ class GraphqlEditor extends StatelessWidget {
             ),
             Expanded(
               flex: 2,
-              child: _field(
-                const Key('graphql-variables'),
-                variables,
-                '{ "id": {{userId}} }',
+              child: CodeEditor(
+                name: 'graphql-variables',
+                controller: variables,
+                language: CodeLanguage.json,
+                variables: variableNames,
+                hint: '{ "id": {{userId}} }',
               ),
             ),
           ],
@@ -204,28 +222,4 @@ class GraphqlEditor extends StatelessWidget {
       },
     );
   }
-
-  Widget _field(Key key, TextEditingController controller, String hint) =>
-      TextField(
-        key: key,
-        controller: controller,
-        maxLines: null,
-        expands: true,
-        autocorrect: false,
-        enableSuggestions: false,
-        smartQuotesType: SmartQuotesType.disabled,
-        smartDashesType: SmartDashesType.disabled,
-        textAlignVertical: TextAlignVertical.top,
-        style: mono,
-        decoration: InputDecoration(
-          border: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          focusedBorder: InputBorder.none,
-          contentPadding: const EdgeInsets.all(12),
-          hintText: hint,
-          // One line, so it cannot spill out of a pane cut short by the
-          // on-screen keyboard.
-          hintMaxLines: 1,
-        ),
-      );
 }

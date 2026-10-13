@@ -11,7 +11,8 @@ import 'package:reqorb/workspace/workspace_store.dart';
 /// open at once, each keeping its own response.
 class RequestTab {
   RequestTab(Engine engine, WorkspaceStore store, {String url = ''})
-    : draft = RequestDraft(url: url),
+    : _startUrl = url,
+      draft = RequestDraft(url: url),
       http = SendSession(engine, store),
       ws = WsSession(engine),
       grpc = GrpcSession(engine);
@@ -20,6 +21,9 @@ class RequestTab {
 
   /// Tells this tab from every other, however they are reordered.
   final int id = _count++;
+
+  /// The address the tab started with, which counts as nothing written.
+  final String _startUrl;
 
   final RequestDraft draft;
   final SendSession http;
@@ -49,7 +53,7 @@ class RequestTab {
     if (origin != null || http.sent != null || http.sending) return false;
     final request = draft.toRequest();
     return request.method == 'GET' &&
-        request.url.isEmpty &&
+        request.url == _startUrl &&
         request.headers.isEmpty &&
         request.body == null &&
         request.form.isEmpty &&

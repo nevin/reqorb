@@ -1,0 +1,292 @@
+import 'package:flutter/material.dart';
+
+/// The languages the editor can colour.
+enum CodeLanguage {
+  plain,
+  json,
+  graphql,
+  xml,
+  javascript;
+
+  /// The language a body of the given content type is written in.
+  static CodeLanguage ofContentType(String type) {
+    final t = type.toLowerCase();
+    if (t.contains('json')) return json;
+    if (t.contains('graphql')) return graphql;
+    if (t.contains('xml') || t.contains('html')) return xml;
+    if (t.contains('javascript') || t.contains('ecmascript')) return javascript;
+    return plain;
+  }
+
+  /// A guess from how the text starts, for a body nobody has labelled.
+  static CodeLanguage sniff(String text) {
+    final start = text.trimLeft();
+    if (start.isEmpty) return plain;
+    if (start.startsWith('<')) return xml;
+    if (start.startsWith('{') || start.startsWith('[')) return json;
+    return plain;
+  }
+}
+
+/// What a stretch of code is, as far as colouring it goes.
+enum TokenKind {
+  key,
+  string,
+  number,
+  keyword,
+  comment,
+  type,
+  tag,
+  attribute,
+  parameter,
+
+  /// A `{{name}}` placeholder, in any language.
+  variable,
+}
+
+/// A coloured stretch of the text, from [start] up to [end].
+class Token {
+  const Token(this.start, this.end, this.kind);
+
+  final int start;
+  final int end;
+  final TokenKind kind;
+
+  @override
+  String toString() => '$kind($start-$end)';
+}
+
+/// Colouring every token of a very large text would make typing slow.
+const highlightLimit = 200 * 1024;
+
+/// The colour a kind of token is shown in.
+Color tokenColor(TokenKind kind, Brightness brightness) {
+  final dark = brightness == Brightness.dark;
+  return switch (kind) {
+    TokenKind.key ||
+    TokenKind.tag => dark ? const Color(0xFF9CC4FF) : const Color(0xFF0B63C5),
+    TokenKind.string =>
+      dark ? const Color(0xFF8FD6A4) : const Color(0xFF1A7F42),
+    TokenKind.number || TokenKind.attribute =>
+      dark ? const Color(0xFFE5B454) : const Color(0xFF9A6700),
+    TokenKind.keyword =>
+      dark ? const Color(0xFFD0A8FF) : const Color(0xFF6E43C9),
+    TokenKind.comment =>
+      dark ? const Color(0xFF8B949E) : const Color(0xFF6E7781),
+    TokenKind.type => dark ? const Color(0xFF5CC8C2) : const Color(0xFF0F766E),
+    TokenKind.parameter =>
+      dark ? const Color(0xFFF2A0C8) : const Color(0xFFB0307A),
+    TokenKind.variable =>
+      dark ? const Color(0xFFFFA657) : const Color(0xFFB5560B),
+  };
+}
+
+final _variable = RegExp(r'\{\{[^{}\n]*\}\}');
+
+const _number = r'(?<![\w.])-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?';
+
+final _json = RegExp(
+  r'("(?:[^"\\\n]|\\.)*"?)(?=(\s*:)?)'
+  '|($_number)'
+  r'|\b(true|false|null)\b',
+);
+
+final _graphql = RegExp(
+  r'(#[^\n]*)'
+  r'|("""[\s\S]*?(?:"""|$)|"(?:[^"\\\n]|\\.)*"?)'
+  r'|(\$[A-Za-z_]\w*)'
+  r'|(@[A-Za-z_]\w*)'
+  '|($_number)'
+  r'|([A-Za-z_]\w*)(?=(\s*:)?)',
+);
+
+const _graphqlKeywords = {
+  'query',
+  'mutation',
+  'subscription',
+  'fragment',
+  'on',
+  'true',
+  'false',
+  'null',
+  'schema',
+  'type',
+  'input',
+  'enum',
+  'interface',
+  'union',
+  'scalar',
+  'extend',
+  'directive',
+  'implements',
+};
+
+final _xml = RegExp(
+  r'(<!--[\s\S]*?(?:-->|$))'
+  r'|(<!\[CDATA\[[\s\S]*?(?:\]\]>|$))'
+  r'|(<[/?!]?[A-Za-z_][\w:.-]*)',
+);
+
+final _xmlInTag = RegExp(
+  r'''([A-Za-z_][\w:.-]*)(?=\s*=)|("[^"]*"?|'[^']*'?)|([/?]?>)|<''',
+);
+
+final _javascript = RegExp(
+  r'(//[^\n]*|/\*[\s\S]*?(?:\*/|$))'
+  r'''|("(?:[^"\\\n]|\\.)*"?|'(?:[^'\\\n]|\\.)*'?|`(?:[^`\\]|\\.)*`?)'''
+  '|($_number)'
+  r'|\b(const|let|var|function|return|if|else|for|while|do|switch|case|'
+  r'break|continue|new|delete|typeof|instanceof|in|of|class|extends|import|'
+  r'export|from|default|try|catch|finally|throw|async|await|yield|this|'
+  r'super|true|false|null|undefined)\b',
+);
+
+/// The coloured stretches of [text], in order and never overlapping.
+/// Anything not covered is shown plain.
+List<Token> tokenize(String text, CodeLanguage language) {
+  final tokens = switch (language) {
+    CodeLanguage.plain => const <Token>[],
+    CodeLanguage.json => _tokenizeJson(text),
+    CodeLanguage.graphql => _tokenizeGraphql(text),
+    CodeLanguage.xml => _tokenizeXml(text),
+    CodeLanguage.javascript => _tokenizeJavascript(text),
+  };
+  return _withVariables(text, tokens);
+}
+
+List<Token> _tokenizeJson(String text) {
+  final tokens = <Token>[];
+  for (final m in _json.allMatches(text)) {
+    final kind = m[1] != null
+        ? (m[2] != null ? TokenKind.key : TokenKind.string)
+        : m[3] != null
+        ? TokenKind.number
+        : TokenKind.keyword;
+    tokens.add(Token(m.start, m.end, kind));
+  }
+  return tokens;
+}
+
+List<Token> _tokenizeGraphql(String text) {
+  final tokens = <Token>[];
+  for (final m in _graphql.allMatches(text)) {
+    TokenKind? kind;
+    if (m[1] != null) {
+      kind = TokenKind.comment;
+    } else if (m[2] != null) {
+      kind = TokenKind.string;
+    } else if (m[3] != null) {
+      kind = TokenKind.parameter;
+    } else if (m[4] != null) {
+      kind = TokenKind.keyword;
+    } else if (m[5] != null) {
+      kind = TokenKind.number;
+    } else if (m[6] case final name?) {
+      if (m[7] != null) {
+        // An argument or an alias: whatever stands before a colon.
+        kind = TokenKind.key;
+      } else if (_graphqlKeywords.contains(name)) {
+        kind = TokenKind.keyword;
+      } else if (name.codeUnitAt(0) < 0x5B && name.codeUnitAt(0) > 0x40) {
+        kind = TokenKind.type;
+      }
+    }
+    if (kind != null) tokens.add(Token(m.start, m.end, kind));
+  }
+  return tokens;
+}
+
+List<Token> _tokenizeXml(String text) {
+  final tokens = <Token>[];
+  var at = 0;
+  while (at < text.length) {
+    final m = _firstFrom(_xml, text, at);
+    if (m == null) break;
+    at = m.end;
+    if (m[1] != null) {
+      tokens.add(Token(m.start, m.end, TokenKind.comment));
+      continue;
+    }
+    if (m[2] != null) {
+      tokens.add(Token(m.start, m.end, TokenKind.string));
+      continue;
+    }
+    tokens.add(Token(m.start, m.end, TokenKind.tag));
+    // Inside the tag: attributes and their values, up to where it closes.
+    while (at < text.length) {
+      final inner = _firstFrom(_xmlInTag, text, at);
+      if (inner == null) return tokens;
+      if (inner[0] == '<') {
+        // Another tag opened before this one closed.
+        at = inner.start;
+        break;
+      }
+      at = inner.end;
+      if (inner[1] != null) {
+        tokens.add(Token(inner.start, inner.end, TokenKind.attribute));
+      } else if (inner[2] != null) {
+        tokens.add(Token(inner.start, inner.end, TokenKind.string));
+      } else {
+        tokens.add(Token(inner.start, inner.end, TokenKind.tag));
+        break;
+      }
+    }
+  }
+  return tokens;
+}
+
+List<Token> _tokenizeJavascript(String text) {
+  final tokens = <Token>[];
+  for (final m in _javascript.allMatches(text)) {
+    final kind = m[1] != null
+        ? TokenKind.comment
+        : m[2] != null
+        ? TokenKind.string
+        : m[3] != null
+        ? TokenKind.number
+        : TokenKind.keyword;
+    tokens.add(Token(m.start, m.end, kind));
+  }
+  return tokens;
+}
+
+RegExpMatch? _firstFrom(RegExp pattern, String text, int start) {
+  final matches = pattern.allMatches(text, start).iterator;
+  return matches.moveNext() ? matches.current : null;
+}
+
+/// Lays `{{placeholders}}` over [tokens], cutting whatever they sit in.
+List<Token> _withVariables(String text, List<Token> tokens) {
+  if (!text.contains('{{')) return tokens;
+  final variables = [
+    for (final m in _variable.allMatches(text))
+      Token(m.start, m.end, TokenKind.variable),
+  ];
+  if (variables.isEmpty) return tokens;
+
+  final merged = <Token>[];
+  var v = 0;
+  for (final token in tokens) {
+    var start = token.start;
+    // A placeholder may have run past the end of the token before.
+    if (merged.isNotEmpty && merged.last.end > start) start = merged.last.end;
+    if (start >= token.end) continue;
+    // Placeholders wholly before this token.
+    while (v < variables.length && variables[v].end <= start) {
+      merged.add(variables[v++]);
+    }
+    // Placeholders that overlap it take their part of it.
+    while (v < variables.length && variables[v].start < token.end) {
+      final variable = variables[v];
+      if (variable.start > start) {
+        merged.add(Token(start, variable.start, token.kind));
+      }
+      merged.add(variable);
+      start = variable.end;
+      v++;
+    }
+    if (start < token.end) merged.add(Token(start, token.end, token.kind));
+  }
+  merged.addAll(variables.skip(v));
+  return merged;
+}

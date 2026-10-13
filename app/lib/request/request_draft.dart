@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' hide FormField;
 
+import 'package:reqorb/editor/code_controller.dart';
 import 'package:reqorb/request/body_editor.dart';
 import 'package:reqorb/request/key_value_editor.dart';
 import 'package:reqorb/src/rust/api/core.dart';
@@ -32,14 +33,14 @@ class RequestDraft extends ChangeNotifier {
   final params = TextEditingController();
 
   /// The raw body, or the message of a WebSocket or gRPC request.
-  final body = TextEditingController();
+  final body = CodeController();
 
   /// Url-encoded fields as `key: value` lines.
   final urlEncoded = TextEditingController();
 
   /// A GraphQL query and its variables, the latter as JSON.
-  final graphqlQuery = TextEditingController();
-  final graphqlVariables = TextEditingController();
+  final graphqlQuery = CodeController();
+  final graphqlVariables = CodeController();
 
   /// Which of the query's operations to run; empty when it has only one.
   String graphqlOperation = '';

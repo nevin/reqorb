@@ -30,7 +30,8 @@ class Sidebar extends StatefulWidget {
   /// Starts a blank request in the editor.
   final VoidCallback onNewRequest;
 
-  /// Called after anything is deleted, since saved positions may have moved.
+  /// Called after anything is deleted or put back, since saved positions
+  /// may have moved.
   final VoidCallback onRemoved;
 
   /// Shows the requests sent before.
@@ -59,11 +60,10 @@ class _SidebarState extends State<Sidebar> {
     if (item == null) return;
     store.removeItem(ref);
     widget.onRemoved();
-    showUndo(
-      context,
-      'Deleted "${item.name}"',
-      () => store.insertItem(ref, item),
-    );
+    showUndo(context, 'Deleted "${item.name}"', () {
+      store.insertItem(ref, item);
+      widget.onRemoved();
+    });
   }
 
   Future<void> _rename(RequestRef ref) async {
@@ -80,11 +80,10 @@ class _SidebarState extends State<Sidebar> {
     final collection = store.collections[index];
     store.removeCollection(index);
     widget.onRemoved();
-    showUndo(
-      context,
-      'Deleted collection "${collection.name}"',
-      () => store.insertCollection(index, collection),
-    );
+    showUndo(context, 'Deleted collection "${collection.name}"', () {
+      store.insertCollection(index, collection);
+      widget.onRemoved();
+    });
   }
 
   @override

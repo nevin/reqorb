@@ -12,6 +12,10 @@ view. One Rust core does the networking and powers all three front ends.
   authorization types, cookies, redirects and per-request settings.
 - **GraphQL:** a query and variables editor, the server's schema to browse and write
   queries from, and the errors a `200` response hides.
+- **Tabs:** several requests open at once, each keeping its own edits and response.
+- **Code editor:** bodies, GraphQL queries and responses are coloured by language, with
+  line numbers, matching brackets, search, and completion of `{{variables}}` and of
+  GraphQL fields from the server's schema.
 - **WebSocket:** connect, send messages and watch a timestamped log.
 - **gRPC:** load methods by server reflection or from a `.proto` file and call them with
   JSON messages, including streaming methods.
@@ -257,6 +261,36 @@ reqorb POST https://httpbin.org/post -F title=Hi -F doc=@notes.txt
 reqorb POST https://httpbin.org/post --binary photo.png
 ```
 
+## Tabs
+
+Each request opens in a tab of its own, with its own response, so one can be compared
+with another or left half-written while a second is sent. A request that is already
+open is brought forward rather than opened twice, and a tab nothing has been done in
+is reused. A dot marks a tab with unsaved changes to a saved request; closing it asks
+whether to save them. `⌘N` opens a tab and `⌘W` closes one (`Ctrl` elsewhere).
+
+## The code editor
+
+Raw bodies, GraphQL queries and variables, and response bodies share one editor.
+
+- **Colouring** for JSON, GraphQL, XML and HTML, and JavaScript. A raw body is coloured
+  as its **Type**, or by how it starts when none is chosen; a response by its
+  `Content-Type`. `{{variables}}` stand out in any of them. Text over 200 KB is shown
+  plain, so that scrolling stays quick.
+- **Line numbers** that stay with their lines when long ones wrap.
+- **Brackets:** the partner of the bracket beside the caret is marked. Typing `{`, `[`,
+  `(` or `"` adds the closing one, a new line keeps the indentation and goes a level
+  deeper after an opening bracket, and `Tab` / `Shift+Tab` indent and outdent the
+  selected lines by the indent chosen in Settings.
+- **Search:** `⌘F`, or the magnifier in the corner, finds text without regard to case;
+  `Enter` and `Shift+Enter` step through the matches. It works in responses too.
+- **Completion:** typing `{{` lists the variables in reach: the active environment's,
+  the collection's, and those captured this session. In a GraphQL query, once the
+  schema has been fetched, the fields of the type being selected from and the
+  arguments of the field being called are offered as you type, with their types;
+  `Ctrl+Space` asks for the list before anything is typed. Arrow keys and `Enter`
+  or a tap pick one, `Esc` dismisses.
+
 ## GraphQL
 
 Choose **GraphQL** on the Body tab. The query and its variables are written separately
@@ -369,6 +403,7 @@ app/lib/                    the Flutter UI, one folder per feature
   bridge/                   Engine: the one interface to the Rust library
   request/                  the main page, the request model, the send session and the editors
   response/  protocols/     the response pane; WebSocket and gRPC sessions and views
+  editor/                   the code editor: colouring, typing aids, search, completion
   graphql/                  the GraphQL editor, schema browser and schema session
   sidebar/  environments/  settings/  har/  history/
   transfer/                 import and export actions

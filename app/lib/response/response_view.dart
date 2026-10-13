@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:reqorb/editor/code_editor.dart';
+import 'package:reqorb/editor/syntax.dart';
 import 'package:reqorb/shared/messages.dart';
 import 'package:reqorb/transfer/export_actions.dart';
 import 'package:reqorb/src/rust/api/core.dart';
@@ -419,7 +421,7 @@ class _Loaded extends StatelessWidget {
                             style: TextStyle(color: scheme.onSurfaceVariant),
                           ),
                         )
-                      : _Body(text: body, json: _isJson(response)),
+                      : _Body(text: body, contentType: _contentType(response)),
                 _Headers(headers: response.headers),
                 if (hasTests)
                   _Tests(
@@ -620,31 +622,19 @@ class _Fact extends StatelessWidget {
 }
 
 class _Body extends StatelessWidget {
-  const _Body({required this.text, required this.json});
+  const _Body({required this.text, required this.contentType});
 
   final String text;
-  final bool json;
-
-  /// Colouring every token of a very large body would make scrolling slow.
-  static const _highlightLimit = 200 * 1024;
+  final String contentType;
 
   @override
   Widget build(BuildContext context) {
-    final highlight = json && text.length <= _highlightLimit;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(12),
-      child: SizedBox(
-        width: double.infinity,
-        child: highlight
-            ? SelectableText.rich(
-                TextSpan(
-                  style: mono,
-                  children: jsonSpans(text, Theme.of(context).brightness),
-                ),
-                key: const Key('responseBody'),
-              )
-            : SelectableText(text, key: const Key('responseBody'), style: mono),
-      ),
+    final named = CodeLanguage.ofContentType(contentType);
+    return CodeView(
+      name: 'responseBody',
+      text: text,
+      // As the server labelled it; otherwise as it looks.
+      language: named == CodeLanguage.plain ? null : named,
     );
   }
 }

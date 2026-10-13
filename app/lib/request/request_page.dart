@@ -5,6 +5,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart' hide FormField;
 import 'package:flutter/services.dart';
+import 'package:reqorb/editor/code_controller.dart';
 import 'package:reqorb/graphql/graphql_editor.dart';
 import 'package:reqorb/graphql/graphql_session.dart';
 import 'package:reqorb/graphql/schema_browser.dart';
@@ -64,7 +65,7 @@ class _RequestPageState extends State<RequestPage> {
   TextEditingController get _headers => _draft.headers;
   TextEditingController get _tests => _draft.tests;
   TextEditingController get _captures => _draft.captures;
-  TextEditingController get _body => _draft.body;
+  CodeController get _body => _draft.body;
   TextEditingController get _urlEncoded => _draft.urlEncoded;
   TextEditingController get _binary => _draft.binary;
   TextEditingController get _params => _draft.params;
@@ -133,6 +134,12 @@ class _RequestPageState extends State<RequestPage> {
   String? get _grpcError => _grpc.error;
 
   List<Variable> get _variables => _store.variablesFor(_origin?.collection);
+
+  /// What can be written between `{{` and `}}` in the open request.
+  List<String> get _variableNames => [
+    for (final variable in _variables)
+      if (variable.enabled) variable.key,
+  ];
 
   void _sessionChanged() => setState(() {});
 
@@ -229,20 +236,39 @@ class _RequestPageState extends State<RequestPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) => tab.dispose());
   }
 
-  /// After saved requests were removed, positions may have moved. A tab
-  /// whose request is no longer where it was carries on as an unsaved one.
+  /// After saved requests were removed or put back, positions may have
+  /// moved. A tab follows its request to where it is now; one whose
+  /// request has gone carries on as an unsaved one.
   void _reconcileTabs() => setState(() {
     for (final tab in _tabs) {
       final origin = tab.origin;
       if (origin == null) continue;
-      final item = _store.itemAt(origin);
       final was = tab.draft.saved;
-      final same =
-          item?.request != null &&
-          item!.name == tab.savedName &&
-          item.request!.method.toUpperCase() == was?.method &&
-          item.request!.url == was?.url;
-      if (!same) {
+      bool isAt(RequestRef ref) {
+        final item = _store.itemAt(ref);
+        return item?.request != null &&
+            item!.name == tab.savedName &&
+            item.request!.method.toUpperCase() == was?.method &&
+            item.request!.url == was?.url;
+      }
+
+      if (isAt(origin)) continue;
+      // One removal or one return moves what follows it by one place, at
+      // whichever level it happened.
+      final moved = [
+        for (final by in const [-1, 1]) ...[
+          if (origin.collection != RequestRef.noCollection)
+            RequestRef(origin.collection + by, origin.path),
+          for (var level = 0; level < origin.path.length; level++)
+            RequestRef(origin.collection, [
+              for (final (i, index) in origin.path.indexed)
+                i == level ? index + by : index,
+            ]),
+        ],
+      ].where((ref) => !ref.path.contains(-1) && isAt(ref)).firstOrNull;
+      if (moved != null) {
+        tab.origin = moved;
+      } else {
         tab.origin = null;
         tab.draftName = tab.savedName;
         tab.savedName = null;
@@ -770,6 +796,7 @@ class _RequestPageState extends State<RequestPage> {
         onModeChanged: _setBodyMode,
         raw: _body,
         rawLanguage: _rawLanguage(),
+        variables: _variableNames,
         onRawLanguageChanged: _setRawLanguage,
         urlEncoded: _urlEncoded,
         urlEncodedBulk: _bulk.contains('urlencoded'),
@@ -793,7 +820,8 @@ class _RequestPageState extends State<RequestPage> {
             _draft.graphqlOperation = name;
             _touch();
           }),
-          hasSchema: _graphql.schemaFor(_url.text) != null,
+          schema: _graphql.schemaFor(_url.text),
+          variableNames: _variableNames,
           loadingSchema: _graphql.loading != null,
           schemaError: _graphql.error,
           onSchema: _graphqlBrowse,
