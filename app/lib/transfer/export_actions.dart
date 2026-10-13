@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:reqorb/bridge/engine.dart';
 import 'package:reqorb/shared/messages.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 import 'package:reqorb/workspace/workspace_store.dart';
@@ -90,18 +91,20 @@ class _ExportDialogState extends State<_ExportDialog> {
 }
 
 /// Saves every exchange of the session as an HTTP Archive.
-Future<void> exportSessionHar(BuildContext context, WorkspaceStore store) =>
-    _saveExport(
-      context,
-      'session.har',
-      what: 'session as HAR',
-      covers: 'headers, URLs and JSON or form bodies',
-      (redact) async => exportHar(
-        exchanges: redact
-            ? redactExchanges(exchanges: store.session)
-            : store.session,
-      ),
-    );
+Future<void> exportSessionHar(BuildContext context, WorkspaceStore store) {
+  final engine = Engine.of(context);
+  return _saveExport(
+    context,
+    'session.har',
+    what: 'session as HAR',
+    covers: 'headers, URLs and JSON or form bodies',
+    (redact) async => engine.exportHar(
+      exchanges: redact
+          ? engine.redactExchanges(exchanges: store.session)
+          : store.session,
+    ),
+  );
+}
 
 /// Saves [bytes] as they are to a file the user chooses.
 Future<void> saveBytesFile(
@@ -119,14 +122,16 @@ Future<void> saveBytesFile(
 }
 
 /// Saves [text] to a file the user chooses, suggesting [fileName].
-Future<void> saveTextFile(BuildContext context, String fileName, String text) =>
-    _saveExport(
-      context,
-      fileName,
-      what: 'response body',
-      covers: 'a JSON body',
-      (redact) async => redact ? redactText(text: text) : text,
-    );
+Future<void> saveTextFile(BuildContext context, String fileName, String text) {
+  final engine = Engine.of(context);
+  return _saveExport(
+    context,
+    fileName,
+    what: 'response body',
+    covers: 'a JSON body',
+    (redact) async => redact ? engine.redactText(text: text) : text,
+  );
+}
 
 Future<void> _saveExport(
   BuildContext context,
@@ -162,15 +167,16 @@ Future<void> exportCollectionFile(
     ExportFormat.bruno => '.bruno',
     _ => '',
   };
-  final extension = exportExtension(format: format);
+  final engine = Engine.of(context);
+  final extension = engine.exportExtension(format: format);
   return _saveExport(
     context,
     '${_fileSafe(collection.name)}$suffix.$extension',
     what: 'collection',
     covers: 'headers, URLs, authorization, bodies and variables',
-    (redact) => exportCollection(
+    (redact) => engine.exportCollection(
       collection: redact
-          ? redactCollection(collection: collection)
+          ? engine.redactCollection(collection: collection)
           : collection,
       format: format,
     ),
@@ -183,15 +189,16 @@ Future<void> exportEnvironmentFile(
   ExportFormat format,
 ) {
   final suffix = format == ExportFormat.postman ? '.postman_environment' : '';
-  final extension = exportExtension(format: format);
+  final engine = Engine.of(context);
+  final extension = engine.exportExtension(format: format);
   return _saveExport(
     context,
     '${_fileSafe(environment.name)}$suffix.$extension',
     what: 'environment',
     covers: 'variables',
-    (redact) => exportEnvironment(
+    (redact) => engine.exportEnvironment(
       environment: redact
-          ? redactEnvironment(environment: environment)
+          ? engine.redactEnvironment(environment: environment)
           : environment,
       format: format,
     ),

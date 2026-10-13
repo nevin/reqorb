@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:reqorb/bridge/engine.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 
 /// Where a saved request lives: a collection and the item indices leading to it.
@@ -30,7 +31,10 @@ class RequestRef {
 
 /// Holds the workspace and writes it to disk shortly after every change.
 class WorkspaceStore extends ChangeNotifier {
-  WorkspaceStore(this.path);
+  WorkspaceStore(this.path, {this.engine = const RustEngine()});
+
+  /// Reads and writes the workspace file.
+  final Engine engine;
 
   /// Location of `workspace.json`.
   final String path;
@@ -125,7 +129,7 @@ class WorkspaceStore extends ChangeNotifier {
 
   Future<void> load() async {
     try {
-      _workspace = await loadWorkspace(path: path);
+      _workspace = await engine.loadWorkspace(path: path);
       error = null;
     } catch (e) {
       error = e.toString();
@@ -143,7 +147,7 @@ class WorkspaceStore extends ChangeNotifier {
 
   Future<void> _save() async {
     try {
-      await saveWorkspace(path: path, workspace: _workspace);
+      await engine.saveWorkspace(path: path, workspace: _workspace);
     } catch (e) {
       error = e.toString();
       notifyListeners();

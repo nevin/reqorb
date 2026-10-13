@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:reqorb/bridge/engine.dart';
 import 'package:reqorb/request/request_page.dart';
 import 'package:reqorb/shared/theme.dart';
 import 'package:reqorb/src/rust/api/core.dart';
@@ -23,19 +24,22 @@ class ReqorbApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Rebuilt when settings change, so a new theme applies immediately.
-    return ListenableBuilder(
-      listenable: store,
-      builder: (context, _) => MaterialApp(
-        title: 'reqorb',
-        debugShowCheckedModeBanner: false,
-        theme: buildTheme(Brightness.light),
-        darkTheme: buildTheme(Brightness.dark),
-        themeMode: switch (store.settings.theme) {
-          AppTheme.system => ThemeMode.system,
-          AppTheme.light => ThemeMode.light,
-          AppTheme.dark => ThemeMode.dark,
-        },
-        home: RequestPage(store: store),
+    return EngineScope(
+      engine: store.engine,
+      child: ListenableBuilder(
+        listenable: store,
+        builder: (context, _) => MaterialApp(
+          title: 'reqorb',
+          debugShowCheckedModeBanner: false,
+          theme: buildTheme(Brightness.light),
+          darkTheme: buildTheme(Brightness.dark),
+          themeMode: switch (store.settings.theme) {
+            AppTheme.system => ThemeMode.system,
+            AppTheme.light => ThemeMode.light,
+            AppTheme.dark => ThemeMode.dark,
+          },
+          home: RequestPage(store: store),
+        ),
       ),
     );
   }

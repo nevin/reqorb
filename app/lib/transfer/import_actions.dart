@@ -6,6 +6,7 @@ import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:reqorb/bridge/engine.dart';
 import 'package:reqorb/shared/messages.dart';
 import 'package:reqorb/shared/text_dialog.dart';
 import 'package:reqorb/src/rust/api/core.dart';
@@ -64,8 +65,14 @@ Future<void> importFromText(
   WorkspaceStore store,
   String text,
   String nameHint,
-) =>
-    runImport(context, store, () => importText(text: text, nameHint: nameHint));
+) {
+  final engine = Engine.of(context);
+  return runImport(
+    context,
+    store,
+    () => engine.importText(text: text, nameHint: nameHint),
+  );
+}
 
 /// Asks for a URL, such as a served `swagger.json`, and imports it.
 Future<void> importFromUrl(BuildContext context, WorkspaceStore store) async {
@@ -82,10 +89,13 @@ Future<void> importFromUrl(BuildContext context, WorkspaceStore store) async {
   );
   if (url == null || url.trim().isEmpty || !context.mounted) return;
   final address = url.trim();
+  final engine = Engine.of(context);
   await runImport(
     context,
     store,
-    () => importUrl(url: address.contains('://') ? address : 'http://$address'),
+    () => engine.importUrl(
+      url: address.contains('://') ? address : 'http://$address',
+    ),
   );
 }
 

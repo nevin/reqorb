@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:reqorb/bridge/engine.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 import 'package:reqorb/shared/theme.dart';
 
@@ -21,10 +22,11 @@ class AuthEditor extends StatefulWidget {
 }
 
 class _AuthEditorState extends State<AuthEditor> {
-  static final _choices = authChoices();
+  late final _engine = Engine.of(context);
+  late final _choices = _engine.authChoices();
 
   late AuthKind _kind = widget.auth?.kind ?? AuthKind.none;
-  late List<AuthField> _fields = authFields(kind: _kind);
+  late List<AuthField> _fields = _engine.authFields(kind: _kind);
   final _controllers = <String, TextEditingController>{};
   final _selected = <String, String>{};
   final _revealed = <String>{};
@@ -76,7 +78,7 @@ class _AuthEditorState extends State<AuthEditor> {
   void _setKind(AuthKind kind) {
     setState(() {
       _kind = kind;
-      _fields = authFields(kind: kind);
+      _fields = _engine.authFields(kind: kind);
       _load(const []);
     });
     _emit();

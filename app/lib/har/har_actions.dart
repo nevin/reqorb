@@ -6,6 +6,7 @@ import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:reqorb/bridge/engine.dart';
 import 'package:reqorb/har/har_analysis.dart';
 import 'package:reqorb/shared/messages.dart';
 import 'package:reqorb/src/rust/api/core.dart';
@@ -32,7 +33,7 @@ Future<void> analyzeSession(BuildContext context, WorkspaceStore store) =>
       context,
       store,
       name: 'Session',
-      text: exportHar(exchanges: store.session),
+      text: Engine.of(context).exportHar(exchanges: store.session),
     );
 
 /// Analyses [text], a HAR archive called [name], and shows the report.
@@ -43,9 +44,10 @@ Future<void> showHarAnalysis(
   required String text,
 }) async {
   final messenger = ScaffoldMessenger.of(context);
+  final engine = Engine.of(context);
   final HarReport report;
   try {
-    report = await analyzeHar(text: text);
+    report = await engine.analyzeHar(text: text);
   } catch (e) {
     notify(messenger, 'Could not analyse $name: $e');
     return;
@@ -60,8 +62,11 @@ Future<void> showHarAnalysis(
         onImport: (context, entries) => runImport(
           context,
           store,
-          () =>
-              importHar(text: text, name: nameHintFor(name), entries: entries),
+          () => engine.importHar(
+            text: text,
+            name: nameHintFor(name),
+            entries: entries,
+          ),
         ),
       ),
     ),

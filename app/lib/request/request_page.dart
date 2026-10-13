@@ -5,6 +5,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart' hide FormField;
 import 'package:flutter/services.dart';
+import 'package:reqorb/protocols/grpc_session.dart';
+import 'package:reqorb/protocols/ws_session.dart';
+import 'package:reqorb/request/send_session.dart';
 import 'package:reqorb/environments/environments.dart';
 import 'package:reqorb/protocols/grpc_view.dart';
 import 'package:reqorb/protocols/ws_view.dart';
@@ -78,9 +81,6 @@ class _RequestPageState extends State<RequestPage> {
 
   /// Key-value tabs currently in Bulk Edit mode.
   final _bulk = <String>{};
-  bool _sending = false;
-  Sent? _sent;
-  String? _error;
 
   /// The saved request being edited, if the editor was opened from one.
   RequestRef? _origin;
@@ -101,9 +101,6 @@ class _RequestPageState extends State<RequestPage> {
   final _titleText = TextEditingController();
   final _titleFocus = FocusNode();
 
-  /// Identifies the send in flight, so a cancelled one is ignored on return.
-  int _sendId = 0;
-
   /// Notifies on any edit to the request, for the title and the tab badges.
   Listenable get _edits => _draft;
 
@@ -111,9 +108,33 @@ class _RequestPageState extends State<RequestPage> {
 
   WorkspaceStore get _store => widget.store;
 
+  // The three kinds of request each have a session that does the talking
+  // and holds what came back; the names below are shorthand for their state.
+  late final _http = SendSession(_store.engine, _store);
+  late final _ws = WsSession(_store.engine);
+  late final _grpc = GrpcSession(_store.engine);
+
+  bool get _sending => _http.sending;
+  Sent? get _sent => _http.sent;
+  String? get _error => _http.error;
+  bool get _wsOpen => _ws.open;
+  bool get _wsConnecting => _ws.connecting;
+  List<WsEntry> get _wsLog => _ws.log;
+  GrpcSchema? get _grpcSchema => _grpc.schema;
+  bool get _grpcBusy => _grpc.busy;
+  GrpcReply? get _grpcReply => _grpc.reply;
+  String? get _grpcError => _grpc.error;
+
+  List<Variable> get _variables => _store.variablesFor(_origin?.collection);
+
+  void _sessionChanged() => setState(() {});
+
   @override
   void initState() {
     super.initState();
+    for (final session in [_http, _ws, _grpc]) {
+      session.addListener(_sessionChanged);
+    }
     // Clicking away from the title keeps what was typed.
     _titleFocus.addListener(() {
       if (!_titleFocus.hasFocus && _editingTitle) _commitTitle();
@@ -123,9 +144,9 @@ class _RequestPageState extends State<RequestPage> {
   @override
   void dispose() {
     _draft.dispose();
-    final socket = _socket;
-    if (socket != null) wsClose(id: socket);
-    _socketEvents?.cancel();
+    _http.dispose();
+    _ws.dispose();
+    _grpc.dispose();
     _urlFocus.dispose();
     _titleText.dispose();
     _titleFocus.dispose();
@@ -139,15 +160,6 @@ class _RequestPageState extends State<RequestPage> {
 
   // ------------------------------------------------------------ websocket
 
-  static int _nextSocket = 1;
-
-  /// The connection this page opened, if any.
-  int? _socket;
-  StreamSubscription<WsEvent>? _socketEvents;
-  bool _wsOpen = false;
-  bool _wsConnecting = false;
-  final _wsLog = <WsEntry>[];
-
   void _wsConnect() {
     final request = _request();
     if (request.url.isEmpty) {
@@ -155,104 +167,24 @@ class _RequestPageState extends State<RequestPage> {
       showMessage(context, 'Enter an address to connect to');
       return;
     }
-    final url = request.url.contains('://') || request.url.startsWith('{{')
-        ? request.url
-        : 'ws://${request.url}';
-    final id = _nextSocket++;
-    setState(() {
-      _socket = id;
-      _wsConnecting = true;
-    });
-    _socketEvents =
-        wsOpen(
-          id: id,
-          request: Request(
-            method: 'GET',
-            url: url,
-            headers: request.headers,
-            form: const [],
-            auth: request.auth,
-            settings: request.settings,
-            tests: const [],
-            captures: const [],
-          ),
-          variables: _store.variablesFor(_origin?.collection),
-        ).listen(
-          (event) {
-            if (!mounted || id != _socket) return;
-            setState(() {
-              _wsConnecting = false;
-              if (event.kind == WsEventKind.open) _wsOpen = true;
-              if (event.kind == WsEventKind.closed ||
-                  event.kind == WsEventKind.error) {
-                _wsOpen = false;
-              }
-              _wsLog.add(WsEntry.received(event));
-            });
-          },
-          onDone: () {
-            if (!mounted || id != _socket) return;
-            setState(() {
-              _wsOpen = false;
-              _wsConnecting = false;
-            });
-          },
-        );
+    _ws.connect(request, _variables);
   }
 
-  /// Closes the connection, or gives up on one still being opened.
-  void _wsDisconnect() {
-    final id = _socket;
-    if (id == null) return;
-    if (!wsClose(id: id)) {
-      _socketEvents?.cancel();
-      setState(() {
-        _socket = null;
-        _wsOpen = false;
-        _wsConnecting = false;
-      });
-    }
-  }
+  void _wsDisconnect() => _ws.disconnect();
 
-  void _wsSend() {
-    final id = _socket;
-    final text = _body.text;
-    if (id == null || !_wsOpen || text.isEmpty) return;
-    if (wsSend(id: id, text: text)) {
-      setState(() => _wsLog.add(WsEntry.sent(text)));
-    }
-  }
+  void _wsSend() => _ws.send(_body.text);
 
-  /// Drops the connection and its log, as when another request is opened.
-  void _wsReset() {
-    final id = _socket;
-    if (id != null) wsClose(id: id);
-    _socketEvents?.cancel();
-    _socket = null;
-    _socketEvents = null;
-    _wsOpen = false;
-    _wsConnecting = false;
-    _wsLog.clear();
-  }
+  void _wsReset() => _ws.reset();
 
   // ----------------------------------------------------------------- grpc
 
   bool get _isGrpc => _method == 'GRPC';
 
-  /// The server's methods, once loaded by reflection or from a file.
-  GrpcSchema? _grpcSchema;
-
-  bool _grpcBusy = false;
-  GrpcReply? _grpcReply;
-  String? _grpcError;
-
+  /// Forgets the server's methods and the method chosen from them.
   void _grpcReset() {
-    _grpcSchema = null;
+    _grpc.reset();
     _grpcMethod = null;
     _protoPath = null;
-    _grpcBusy = false;
-    _grpcReply = null;
-    _grpcError = null;
   }
 
   /// Chooses a method, offering its blank message unless one is being written.
@@ -279,41 +211,18 @@ class _RequestPageState extends State<RequestPage> {
       showMessage(context, 'Enter the server address first');
       return false;
     }
-    final generation = _generation;
-    setState(() {
-      _grpcBusy = true;
-      _grpcError = null;
-    });
-    try {
-      final schema = proto != null
-          ? await grpcLoadProto(path: proto)
-          : await grpcReflect(
-              url: request.url,
-              metadata: request.headers,
-              auth: request.auth,
-              variables: _store.variablesFor(_origin?.collection),
-            );
-      // Another request may have been opened while this was loading.
-      if (!mounted || generation != _generation) return false;
-      setState(() {
-        _grpcSchema = schema;
-        _protoPath = proto;
-        _grpcBusy = false;
-      });
-      final known = schema.methods.any((m) => m.path == _grpcMethod);
-      if (!known && schema.methods.isNotEmpty) {
-        _grpcSelect(schema.methods.first.path);
-      }
-      return true;
-    } catch (e) {
-      if (!mounted || generation != _generation) return false;
-      setState(() {
-        _grpcBusy = false;
-        _grpcReply = null;
-        _grpcError = e.toString();
-      });
-      return false;
+    final schema = await _grpc.load(
+      proto: proto,
+      request: request,
+      variables: _variables,
+    );
+    if (schema == null || !mounted) return false;
+    setState(() => _protoPath = proto);
+    final known = schema.methods.any((m) => m.path == _grpcMethod);
+    if (!known && schema.methods.isNotEmpty) {
+      _grpcSelect(schema.methods.first.path);
     }
+    return true;
   }
 
   Future<void> _grpcChooseProto() async {
@@ -325,44 +234,18 @@ class _RequestPageState extends State<RequestPage> {
     if (_grpcBusy) return;
     // Loading the methods first saves a step the first time round.
     if (_grpcSchema == null && !await _grpcLoad(proto: _protoPath)) return;
-    final schema = _grpcSchema;
     final method = _grpcMethod;
-    if (schema == null || !mounted) return;
+    if (_grpcSchema == null || !mounted) return;
     if (method == null) {
       showMessage(context, 'Choose a method to call');
       return;
     }
-    final request = _request();
-    final generation = _generation;
-    setState(() {
-      _grpcBusy = true;
-      _grpcError = null;
-    });
-    try {
-      final reply = await grpcCall(
-        call: GrpcCall(
-          url: request.url,
-          method: method,
-          messages: grpcMessages(_body.text),
-          metadata: request.headers,
-          auth: request.auth,
-          descriptors: schema.descriptors,
-        ),
-        variables: _store.variablesFor(_origin?.collection),
-      );
-      if (!mounted || generation != _generation) return;
-      setState(() => _grpcReply = reply);
-    } catch (e) {
-      if (!mounted || generation != _generation) return;
-      setState(() {
-        _grpcReply = null;
-        _grpcError = e.toString();
-      });
-    } finally {
-      if (mounted && generation == _generation) {
-        setState(() => _grpcBusy = false);
-      }
-    }
+    await _grpc.call(
+      request: _request(),
+      method: method,
+      messages: grpcMessages(_body.text),
+      variables: _variables,
+    );
   }
 
   /// What the main button and its shortcut do for the kind of request open.
@@ -464,8 +347,7 @@ class _RequestPageState extends State<RequestPage> {
       _grpcReset();
       _draft.load(request);
       _origin = ref;
-      _sent = null;
-      _error = null;
+      _http.reset();
       _draftName = null;
       _editingTitle = false;
     });
@@ -481,8 +363,7 @@ class _RequestPageState extends State<RequestPage> {
       _grpcReset();
       _origin = null;
       _draft.clear();
-      _sent = null;
-      _error = null;
+      _http.reset();
       _draftName = null;
       _editingTitle = false;
     });
@@ -501,58 +382,10 @@ class _RequestPageState extends State<RequestPage> {
       showMessage(context, 'Enter a URL to send the request');
       return;
     }
-    // A leading variable usually holds the scheme already.
-    final url = request.url.contains('://') || request.url.startsWith('{{')
-        ? request.url
-        : 'http://${request.url}';
-
-    final id = ++_sendId;
-    setState(() {
-      _sending = true;
-      _error = null;
-    });
-    try {
-      final sent = await sendRequest(
-        request: Request(
-          method: request.method,
-          url: url,
-          headers: request.headers,
-          body: request.body,
-          bodyMode: request.bodyMode,
-          form: request.form,
-          auth: request.auth,
-          settings: request.settings,
-          tests: request.tests,
-          captures: request.captures,
-        ),
-        variables: _store.variablesFor(_origin?.collection),
-        settings: _store.settings,
-        cookies: _store.cookies,
-      );
-      // Cancelled, or overtaken by a later send.
-      if (id != _sendId) return;
-      // Keep whatever the server set, even if this page has gone away.
-      _store.setCookies(sent.cookies);
-      _store.addExchanges(sent.exchanges);
-      _store.capture(sent.captured);
-      if (!mounted) return;
-      setState(() => _sent = sent);
-    } catch (e) {
-      if (!mounted || id != _sendId) return;
-      setState(() {
-        _sent = null;
-        _error = e.toString();
-      });
-    } finally {
-      if (mounted && id == _sendId) setState(() => _sending = false);
-    }
+    await _http.send(request, _variables);
   }
 
-  /// Stops waiting for the request in flight; its response is discarded.
-  void _cancel() {
-    _sendId++;
-    setState(() => _sending = false);
-  }
+  void _cancel() => _http.cancel();
 
   Future<void> _save() async {
     final request = _request();
@@ -1047,7 +880,7 @@ class _RequestPageState extends State<RequestPage> {
             entries: _wsLog,
             connected: _wsOpen,
             connecting: _wsConnecting,
-            onClear: () => setState(_wsLog.clear),
+            onClear: _ws.clearLog,
           )
         : ResponseView(
             sent: _sent,
