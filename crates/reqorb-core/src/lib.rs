@@ -6,8 +6,8 @@
 //! - `graphql`: queries carried over `http`, and the schema behind them.
 //! - `auth`: authorization, applied by all three.
 //! - `formats`: import and export, one module per format.
-//! - `vars`, `checks`, `redact`, `analyze`: work done on requests and
-//!   responses without touching the network.
+//! - `vars`, `checks`, `redact`, `analyze`, `data`: work done on requests
+//!   and responses without touching the network.
 //! - `vault`, `history`: what is kept on disk: the workspace, with its
 //!   credentials encrypted, and the requests sent.
 
@@ -15,6 +15,7 @@ mod analyze;
 mod auth;
 mod checks;
 mod codegen;
+mod data;
 mod error;
 mod files;
 mod formats;
@@ -33,6 +34,7 @@ pub use analyze::{HarCount, HarEntry, HarFinding, HarPhase, HarReport, HarSeveri
 pub use auth::{Auth, AuthField, AuthKind, AuthParam, auth_fields};
 pub use checks::{TestResult, capture, run_tests};
 pub use codegen::{CodeTarget, generate_code};
+pub use data::parse_run_data;
 pub use error::Error;
 pub use files::{DirAccess, FileAccess, check_directory};
 pub use formats::{

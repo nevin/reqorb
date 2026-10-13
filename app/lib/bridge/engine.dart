@@ -160,6 +160,13 @@ abstract class Engine {
     required List<Variable> variables,
     required CodeTarget target,
   });
+
+  /// The rows of a CSV or JSON data file, each as the variables it sets
+  /// for one time through a run; throws when the file cannot be read.
+  List<List<Variable>> parseRunData({
+    required String name,
+    required String text,
+  });
   Future<HarReport> analyzeHar({required String text});
 
   // -------------------------------------------------------------- redaction
@@ -361,6 +368,12 @@ class RustEngine extends Engine {
     required CodeTarget target,
   }) =>
       rust.generateCode(request: request, variables: variables, target: target);
+
+  @override
+  List<List<Variable>> parseRunData({
+    required String name,
+    required String text,
+  }) => rust.parseRunData(name: name, text: text);
 
   @override
   Future<HarReport> analyzeHar({required String text}) =>

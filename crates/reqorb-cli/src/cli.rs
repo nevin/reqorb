@@ -319,6 +319,24 @@ pub(crate) struct RunArgs {
     /// Only run requests with this name or `Folder/Name` path
     pub(crate) name: Option<String>,
 
+    /// Go through the requests once for each row of this CSV or JSON file,
+    /// with the row's columns as variables
+    #[arg(long, value_name = "FILE")]
+    pub(crate) data: Option<String>,
+
+    /// How many times to go through the requests; with --data, how many
+    /// of its rows to use
+    #[arg(short = 'n', long, value_name = "COUNT", value_parser = clap::value_parser!(u32).range(1..))]
+    pub(crate) iterations: Option<u32>,
+
+    /// Wait this many milliseconds between requests
+    #[arg(long, value_name = "MS", default_value_t = 0)]
+    pub(crate) delay: u64,
+
+    /// Stop at the first request that fails
+    #[arg(long)]
+    pub(crate) bail: bool,
+
     #[command(flatten)]
     pub(crate) vars: VarArgs,
 

@@ -267,6 +267,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<Item> dco_decode_list_item(dynamic raw);
 
   @protected
+  List<List<Variable>> dco_decode_list_list_variable(dynamic raw);
+
+  @protected
   List<int> dco_decode_list_prim_u_32_loose(dynamic raw);
 
   @protected
@@ -619,6 +622,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<Item> sse_decode_list_item(SseDeserializer deserializer);
+
+  @protected
+  List<List<Variable>> sse_decode_list_list_variable(
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<int> sse_decode_list_prim_u_32_loose(SseDeserializer deserializer);
@@ -1037,6 +1045,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_list_item(List<Item> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_list_variable(
+    List<List<Variable>> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_prim_u_32_loose(

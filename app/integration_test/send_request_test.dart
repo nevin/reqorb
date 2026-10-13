@@ -1640,6 +1640,66 @@ void main() {
     expect(find.byKey(const Key('test-results-tab')), findsNothing);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('runs a collection, passing captured values on', (tester) async {
+    await start(tester);
+    await launch(tester);
+    final base = 'http://127.0.0.1:${server.port}';
+    Item saved(String name, String url, List<String> tests, String? capture) =>
+        Item(
+          name: name,
+          request: Request(
+            method: 'GET',
+            url: url,
+            headers: const [],
+            form: const [],
+            tests: tests,
+            captures: [?capture],
+          ),
+          items: const [],
+        );
+    store.merge(
+      ImportResult(
+        source: 'test',
+        collections: [
+          Collection(
+            name: 'Chain',
+            variables: [
+              Variable(key: 'base', value: base, enabled: true, secret: false),
+            ],
+            items: [
+              saved('Login', '{{base}}/login', [
+                'status == 201',
+                'body.ok == true',
+              ], 'flag = body.ok'),
+              saved('Ping', '{{base}}/ping?ok={{flag}}', [
+                'status == 500',
+              ], null),
+            ],
+          ),
+        ],
+        environments: const [],
+        warnings: const [],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Collection actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('run-collection')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('run-start')));
+    await waitFor(tester, find.text('Run again'));
+    await tester.pumpAndSettle();
+
+    expect(seen.path, '/ping?ok=true');
+    expect(
+      tester.widget<Text>(find.byKey(const Key('run-summary'))).data,
+      startsWith('2 run · 1 failed · 3 tests, 1 failed'),
+    );
+    expect(find.text('2/2 tests'), findsOneWidget);
+    expect(find.textContaining('✗ status == 500'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('writes a GraphQL query from the schema and sends it', (
     tester,
   ) async {

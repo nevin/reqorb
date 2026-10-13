@@ -213,6 +213,13 @@ String generateCode({
   target: target,
 );
 
+/// The rows of a CSV or JSON data file, each as the variables it sets
+/// for one time through a run.
+List<List<Variable>> parseRunData({
+  required String name,
+  required String text,
+}) => RustLib.instance.api.crateApiCoreParseRunData(name: name, text: text);
+
 /// Reports on the text of a HAR archive: totals, breakdowns and findings.
 Future<HarReport> analyzeHar({required String text}) =>
     RustLib.instance.api.crateApiCoreAnalyzeHar(text: text);

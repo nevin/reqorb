@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:reqorb/runner/collection_run.dart';
+import 'package:reqorb/runner/runner_dialog.dart';
 import 'package:reqorb/shared/messages.dart';
 import 'package:reqorb/workspace/collection_actions.dart';
 import 'package:reqorb/transfer/import_actions.dart';
@@ -270,6 +272,19 @@ class _SidebarState extends State<Sidebar> {
           child: Row(
             children: [
               Expanded(child: Text('Requests', style: _heading(theme))),
+              if (store.requests.length > 1)
+                IconButton(
+                  key: const Key('run-requests'),
+                  tooltip: 'Run these requests',
+                  iconSize: 20,
+                  icon: const Icon(Icons.play_arrow_outlined),
+                  onPressed: () => showRunner(
+                    context,
+                    store: store,
+                    name: 'requests',
+                    steps: runSteps(store.requests, null),
+                  ),
+                ),
               IconButton(
                 key: const Key('new-request'),
                 tooltip: 'New request (${shortcutModifier}N)',
@@ -385,6 +400,16 @@ class _SidebarState extends State<Sidebar> {
         onSelected: (action) => action(),
         itemBuilder: (_) => [
           PopupMenuItem(
+            key: const Key('run-collection'),
+            value: () => showRunner(
+              context,
+              store: store,
+              name: collection.name,
+              steps: runSteps(collection.items, index),
+            ),
+            child: const Text('Run…'),
+          ),
+          PopupMenuItem(
             key: const Key('rename-collection'),
             value: () => renameCollection(context, store, index),
             child: const Text('Rename…'),
@@ -447,6 +472,19 @@ class _SidebarState extends State<Sidebar> {
               items[i].name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
+            ),
+            trailing: IconButton(
+              key: Key('run-folder-${[...parent, i].join('-')}'),
+              tooltip: 'Run this folder',
+              iconSize: 18,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.play_arrow_outlined),
+              onPressed: () => showRunner(
+                context,
+                store: store,
+                name: items[i].name,
+                steps: runSteps(items[i].items, collection),
+              ),
             ),
             children: _items(collection, items[i].items, [
               ...parent,

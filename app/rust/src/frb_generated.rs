@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 122994482;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 910961605;
 
 // Section: executor
 
@@ -1013,6 +1013,37 @@ fn wire__crate__api__core__locked_secrets_impl(
             deserializer.end();
             transform_result_sse::<_, ()>((move || {
                 let output_ok = Ok::<_, ()>(crate::api::core::locked_secrets(api_workspace))?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__core__parse_run_data_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "parse_run_data",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_name = <String>::sse_decode(&mut deserializer);
+            let api_text = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, String>((move || {
+                let output_ok = crate::api::core::parse_run_data(api_name, api_text)?;
                 std::result::Result::Ok(output_ok)
             })())
         },
@@ -2608,6 +2639,18 @@ impl SseDecode for Vec<crate::api::core::Item> {
     }
 }
 
+impl SseDecode for Vec<Vec<crate::api::core::Variable>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<Vec<crate::api::core::Variable>>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<u32> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -3111,9 +3154,9 @@ fn pde_ffi_dispatcher_primary_impl(
         26 => wire__crate__api__core__keychain_problem_impl(port, ptr, rust_vec_len, data_len),
         27 => wire__crate__api__core__load_history_impl(port, ptr, rust_vec_len, data_len),
         28 => wire__crate__api__core__load_workspace_impl(port, ptr, rust_vec_len, data_len),
-        34 => wire__crate__api__core__save_workspace_impl(port, ptr, rust_vec_len, data_len),
-        35 => wire__crate__api__core__send_request_impl(port, ptr, rust_vec_len, data_len),
-        37 => wire__crate__api__core__ws_open_impl(port, ptr, rust_vec_len, data_len),
+        35 => wire__crate__api__core__save_workspace_impl(port, ptr, rust_vec_len, data_len),
+        36 => wire__crate__api__core__send_request_impl(port, ptr, rust_vec_len, data_len),
+        38 => wire__crate__api__core__ws_open_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -3139,12 +3182,13 @@ fn pde_ffi_dispatcher_sync_impl(
         16 => wire__crate__api__core__graphql_format_impl(ptr, rust_vec_len, data_len),
         17 => wire__crate__api__core__graphql_inspect_impl(ptr, rust_vec_len, data_len),
         29 => wire__crate__api__core__locked_secrets_impl(ptr, rust_vec_len, data_len),
-        30 => wire__crate__api__core__redact_collection_impl(ptr, rust_vec_len, data_len),
-        31 => wire__crate__api__core__redact_environment_impl(ptr, rust_vec_len, data_len),
-        32 => wire__crate__api__core__redact_exchanges_impl(ptr, rust_vec_len, data_len),
-        33 => wire__crate__api__core__redact_text_impl(ptr, rust_vec_len, data_len),
-        36 => wire__crate__api__core__ws_close_impl(ptr, rust_vec_len, data_len),
-        38 => wire__crate__api__core__ws_send_impl(ptr, rust_vec_len, data_len),
+        30 => wire__crate__api__core__parse_run_data_impl(ptr, rust_vec_len, data_len),
+        31 => wire__crate__api__core__redact_collection_impl(ptr, rust_vec_len, data_len),
+        32 => wire__crate__api__core__redact_environment_impl(ptr, rust_vec_len, data_len),
+        33 => wire__crate__api__core__redact_exchanges_impl(ptr, rust_vec_len, data_len),
+        34 => wire__crate__api__core__redact_text_impl(ptr, rust_vec_len, data_len),
+        37 => wire__crate__api__core__ws_close_impl(ptr, rust_vec_len, data_len),
+        39 => wire__crate__api__core__ws_send_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -5197,6 +5241,16 @@ impl SseEncode for Vec<crate::api::core::Item> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::api::core::Item>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<Vec<crate::api::core::Variable>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <Vec<crate::api::core::Variable>>::sse_encode(item, serializer);
         }
     }
 }

@@ -200,6 +200,49 @@ fn runs_a_collection_passing_captured_values_on() {
 }
 
 #[test]
+fn runs_a_collection_once_for_each_row_of_a_data_file() {
+    let base = serve();
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("rows.reqorb.json");
+    let data = dir.path().join("rows.csv");
+    let collection = serde_json::json!({
+        "reqorb": 1,
+        "collections": [{
+            "name": "Rows",
+            "items": [
+                { "name": "Me", "request": {
+                    "method": "GET", "url": format!("{base}/me?{{{{who}}}}"),
+                    "tests": ["body.query == {{expect}}"],
+                } },
+                { "name": "Lost", "request": { "method": "GET", "url": format!("{base}/nope") } },
+            ],
+        }],
+    });
+    std::fs::write(&file, collection.to_string()).unwrap();
+    std::fs::write(&data, "who,expect\nada,ada\nbob,ada\ncy,cy\n").unwrap();
+    let (file, data) = (file.to_str().unwrap(), data.to_str().unwrap());
+
+    // Every row, with the request that fails in each of them.
+    let all = reqorb(&["run", file, "Me", "--data", data]);
+    assert_eq!(all.status.code(), Some(1));
+    assert!(stdout(&all).contains("Iteration 3"), "{}", stdout(&all));
+    assert!(stderr(&all).contains("3 run, 1 failed"), "{}", stderr(&all));
+    assert!(stderr(&all).contains("(was bob)"), "{}", stderr(&all));
+
+    // Only so many rows, and no further than the first failure.
+    let some = reqorb(&["run", file, "--data", data, "-n", "2", "--bail"]);
+    assert!(stderr(&some).contains("2 of 4 run, 1 failed; stopped at the first failure"));
+
+    // Without a data file the requests are simply repeated.
+    let twice = reqorb(&["run", file, "Lost", "-n", "2"]);
+    assert!(
+        stderr(&twice).contains("2 run, 2 failed"),
+        "{}",
+        stderr(&twice)
+    );
+}
+
+#[test]
 fn records_redacts_analyses_and_imports_a_har_file() {
     let base = serve();
     let dir = tempfile::tempdir().unwrap();

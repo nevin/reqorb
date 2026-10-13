@@ -22,6 +22,8 @@ view. One Rust core does the networking and powers all three front ends.
 - **Tests and chaining:** check each response with one-line tests, and capture values
   from it to use in later requests.
 - **Collections and environments:** `{{variables}}`, folders and standalone requests.
+- **Runner:** run a collection or a folder and see how each request came out, once or
+  once for each row of a CSV or JSON data file.
 - **Import:** Postman, OpenAPI / Swagger (file or URL), HAR, curl and `.env`.
 - **Export:** Postman, Bruno, curl, `.env`, and the session as a HAR file.
 - **Code generation:** any request as code to copy or save: curl, JavaScript,
@@ -93,6 +95,7 @@ reqorb POST https://countries.trevorblades.com/graphql --schema   # the server's
 reqorb import shop.postman_collection.json -o shop.reqorb.json
 reqorb import https://petstore.swagger.io/v2/swagger.json -o petstore.reqorb.json
 reqorb run shop.reqorb.json -e dev.env                   # or one request by name
+reqorb run shop.reqorb.json --data users.csv --bail      # once per row, stop at a failure
 reqorb export shop.reqorb.json -f bruno                  # reqorb | postman | bruno | curl | dotenv
 reqorb export shop.reqorb.json -f postman --redact       # safe to share
 reqorb import session.har -o session.reqorb.json         # a HAR from reqorb or a browser
@@ -242,6 +245,31 @@ to the ones after it, which is how a login request hands its token on.
 request with tests passes or fails by them alone, so `status == 404` can be a pass.
 Tests and captures are kept in reqorb's own format; Postman, Bruno and curl exports
 leave them out.
+
+## Running a collection
+
+**Run…** in a collection's menu, the arrow beside a folder, or the arrow above the
+standalone requests opens the runner. It lists what it will send, each of which can be
+unticked, and then sends them in order.
+
+- **Passing values on:** cookies and captured variables go from each request to the
+  ones after it, so a login request can hand its token to the rest.
+- **Pass or fail:** a request with tests is judged by them alone; one without passes
+  on any status below 400. A failed request is shown open, with its tests, the error
+  or the start of the response.
+- **Iterations** repeats the whole list. **Delay** waits between requests. **Stop at
+  the first failure** ends the run there.
+- **Data file:** a CSV file with a header row, or a JSON array of objects. The
+  requests are gone through once for each row, with the row's columns as variables.
+  They outrank the environment's and the collection's; a value captured during the run
+  outranks them. With a data file, Iterations says how many of its rows to use.
+- **Stop** ends the run once the request in flight has been answered.
+- WebSocket and gRPC requests are listed but left out, since a run cannot hold a
+  conversation. Everything sent is in the history and the session, like any request.
+
+`reqorb run` does the same from the command line with `--data`, `-n/--iterations`,
+`--delay` and `--bail`. In the app the list of results is not kept after the runner is
+closed.
 
 ## Authorization
 
@@ -450,6 +478,7 @@ crates/reqorb-core/src/     the request engine, used by everything else
   codegen/                  a request as code: one generator per language
   vars.rs  checks.rs        variable substitution; tests and captures
   redact.rs  analyze.rs     redaction; the HAR report
+  data.rs                   the data file of a run: CSV or JSON rows as variables
   vault.rs  history.rs      what is kept on disk: the workspace, its credentials
                             encrypted, and the requests sent
 crates/reqorb-cli/src/      the `reqorb` command
@@ -464,6 +493,7 @@ app/lib/                    the Flutter UI, one folder per feature
   editor/                   the code editor: colouring, typing aids, find and replace,
                             folding, completion
   graphql/                  the GraphQL editor, schema browser and schema session
+  runner/                   running a collection: the run and its dialog
   sidebar/  environments/  settings/  har/  history/
   transfer/                 import and export actions
   workspace/                the saved workspace and collection actions

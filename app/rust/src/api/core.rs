@@ -719,6 +719,13 @@ pub fn generate_code(
     reqorb_core::generate_code(&request, &variables, target).map_err(|e| e.to_string())
 }
 
+/// The rows of a CSV or JSON data file, each as the variables it sets
+/// for one time through a run.
+#[frb(sync)]
+pub fn parse_run_data(name: String, text: String) -> Result<Vec<Vec<Variable>>, String> {
+    reqorb_core::parse_run_data(&name, &text).map_err(|e| e.to_string())
+}
+
 #[frb(mirror(HarSeverity))]
 pub enum _HarSeverity {
     Error,
