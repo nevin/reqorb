@@ -336,6 +336,10 @@ saved requests with the collection and folder they are in, environments to switc
 and the app's actions, such as running a collection or importing a file. The arrows
 move through the list and Return chooses.
 
+The line between the request and the response has a grip in the middle: drag it to
+give either more room, or double-click it to put it back. The sidebar's list keeps its
+scrollbar on show, so it is plain when there are more requests below.
+
 ## The code editor
 
 Raw bodies, GraphQL queries and variables, WebSocket and gRPC messages, tests and

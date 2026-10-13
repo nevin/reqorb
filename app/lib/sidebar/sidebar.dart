@@ -48,12 +48,16 @@ class Sidebar extends StatefulWidget {
 
 class _SidebarState extends State<Sidebar> {
   final _filter = TextEditingController();
+  final _treeScroll = ScrollController();
+  final _resultsScroll = ScrollController();
 
   WorkspaceStore get store => widget.store;
 
   @override
   void dispose() {
     _filter.dispose();
+    _treeScroll.dispose();
+    _resultsScroll.dispose();
     super.dispose();
   }
 
@@ -256,52 +260,64 @@ class _SidebarState extends State<Sidebar> {
     letterSpacing: 0.4,
   );
 
-  Widget _tree(ThemeData theme) {
-    return ListView(
-      children: [
-        if (store.collections.isEmpty)
-          _hint(
-            theme,
-            'Import a swagger.json, a Postman collection, a HAR file or '
-            'a curl command, or save a request into a new collection.',
-          ),
-        for (var i = 0; i < store.collections.length; i++) _collection(i),
-        const Divider(height: 24),
-        Padding(
-          padding: const EdgeInsets.only(left: 16, right: 4),
-          child: Row(
-            children: [
-              Expanded(child: Text('Requests', style: _heading(theme))),
-              if (store.requests.length > 1)
-                IconButton(
-                  key: const Key('run-requests'),
-                  tooltip: 'Run these requests',
-                  iconSize: 20,
-                  icon: const Icon(Icons.play_arrow_outlined),
-                  onPressed: () => showRunner(
-                    context,
-                    store: store,
-                    name: 'requests',
-                    steps: runSteps(store.requests, null),
-                  ),
-                ),
-              IconButton(
-                key: const Key('new-request'),
-                tooltip: 'New request (${shortcutModifier}N)',
-                iconSize: 20,
-                icon: const Icon(Icons.add),
-                onPressed: widget.onNewRequest,
-              ),
-            ],
-          ),
+  /// A list with its scrollbar always on show, so that it is plain when
+  /// there is more below than fits.
+  Widget _scrolling(ScrollController controller, List<Widget> children) =>
+      Scrollbar(
+        controller: controller,
+        thumbVisibility: true,
+        child: ListView(
+          controller: controller,
+          // Room for the bar, clear of the buttons at the end of each row.
+          padding: const EdgeInsets.only(right: 6),
+          children: children,
         ),
-        if (store.requests.isEmpty)
-          _hint(theme, 'Requests saved without a collection appear here.'),
-        for (var i = 0; i < store.requests.length; i++)
-          if (store.requests[i].request case final request?)
-            _tile(RequestRef.standalone(i), store.requests[i], request, 0),
-      ],
-    );
+      );
+
+  Widget _tree(ThemeData theme) {
+    return _scrolling(_treeScroll, [
+      if (store.collections.isEmpty)
+        _hint(
+          theme,
+          'Import a swagger.json, a Postman collection, a HAR file or '
+          'a curl command, or save a request into a new collection.',
+        ),
+      for (var i = 0; i < store.collections.length; i++) _collection(i),
+      const Divider(height: 24),
+      Padding(
+        padding: const EdgeInsets.only(left: 16, right: 4),
+        child: Row(
+          children: [
+            Expanded(child: Text('Requests', style: _heading(theme))),
+            if (store.requests.length > 1)
+              IconButton(
+                key: const Key('run-requests'),
+                tooltip: 'Run these requests',
+                iconSize: 20,
+                icon: const Icon(Icons.play_arrow_outlined),
+                onPressed: () => showRunner(
+                  context,
+                  store: store,
+                  name: 'requests',
+                  steps: runSteps(store.requests, null),
+                ),
+              ),
+            IconButton(
+              key: const Key('new-request'),
+              tooltip: 'New request (${shortcutModifier}N)',
+              iconSize: 20,
+              icon: const Icon(Icons.add),
+              onPressed: widget.onNewRequest,
+            ),
+          ],
+        ),
+      ),
+      if (store.requests.isEmpty)
+        _hint(theme, 'Requests saved without a collection appear here.'),
+      for (var i = 0; i < store.requests.length; i++)
+        if (store.requests[i].request case final request?)
+          _tile(RequestRef.standalone(i), store.requests[i], request, 0),
+    ]);
   }
 
   /// Every request matching [query], listed flat with where it lives.
@@ -343,7 +359,7 @@ class _SidebarState extends State<Sidebar> {
         child: _hint(theme, 'No requests match "${_filter.text.trim()}".'),
       );
     }
-    return ListView(children: found);
+    return _scrolling(_resultsScroll, found);
   }
 
   Widget _tile(

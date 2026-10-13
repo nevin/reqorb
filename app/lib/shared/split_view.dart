@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:reqorb/shared/theme.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 
 /// Where the response goes for a [layout] setting in a pane [width] wide:
@@ -14,7 +15,8 @@ Axis responseAxis(Layout layout, double width) => switch (layout) {
 };
 
 /// Two panes with a divider between them that can be dragged to resize.
-class SplitView extends StatelessWidget {
+/// The divider carries a grip, so that it is seen to be something to drag.
+class SplitView extends StatefulWidget {
   const SplitView({
     super.key,
     required this.axis,
@@ -32,54 +34,95 @@ class SplitView extends StatelessWidget {
   final Widget first;
   final Widget second;
 
-  static const _handle = 7.0;
+  @override
+  State<SplitView> createState() => _SplitViewState();
+}
+
+class _SplitViewState extends State<SplitView> {
+  /// Whether the pointer is over the divider, or dragging it.
+  bool _hover = false;
+  bool _dragging = false;
+
+  // A finger needs more to take hold of than a pointer does.
+  static final _handle = isDesktop ? 11.0 : 22.0;
   static const _minPane = 120.0;
 
   @override
   Widget build(BuildContext context) {
-    final horizontal = axis == Axis.horizontal;
+    final horizontal = widget.axis == Axis.horizontal;
+    final scheme = Theme.of(context).colorScheme;
+    final active = _hover || _dragging;
     return LayoutBuilder(
       builder: (context, constraints) {
         final total =
             (horizontal ? constraints.maxWidth : constraints.maxHeight) -
             _handle;
-        var size = total * fraction;
+        var size = total * widget.fraction;
         // Neither pane may be dragged out of reach.
         if (total > _minPane * 2) {
           size = size.clamp(_minPane, total - _minPane);
         }
-        final line = horizontal
-            ? const VerticalDivider(width: 1)
-            : const Divider(height: 1);
+        final line = AnimatedContainer(
+          // A line that turns from lying to standing is another line, not
+          // one to be animated between the two.
+          key: ValueKey(horizontal),
+          duration: const Duration(milliseconds: 120),
+          width: horizontal ? (active ? 2 : 1) : null,
+          height: horizontal ? null : (active ? 2 : 1),
+          color: active ? scheme.primary : scheme.outlineVariant,
+        );
+        final grip = AnimatedContainer(
+          key: const Key('split-grip'),
+          duration: const Duration(milliseconds: 120),
+          width: horizontal ? 5 : 40,
+          height: horizontal ? 40 : 5,
+          decoration: BoxDecoration(
+            color: active ? scheme.primary : scheme.outline,
+            borderRadius: BorderRadius.circular(3),
+            border: Border.all(color: scheme.surface),
+          ),
+        );
         return Flex(
-          direction: axis,
+          direction: widget.axis,
           children: [
             SizedBox(
               width: horizontal ? size : null,
               height: horizontal ? null : size,
-              child: first,
+              child: widget.first,
             ),
             MouseRegion(
               cursor: horizontal
                   ? SystemMouseCursors.resizeColumn
                   : SystemMouseCursors.resizeRow,
-              child: GestureDetector(
-                key: const Key('split-handle'),
-                behavior: HitTestBehavior.opaque,
-                onPanUpdate: (drag) {
-                  if (total <= 0) return;
-                  final moved = horizontal ? drag.delta.dx : drag.delta.dy;
-                  onChanged(((size + moved) / total).clamp(0.1, 0.9));
-                },
-                onDoubleTap: () => onChanged(0.4),
-                child: SizedBox(
-                  width: horizontal ? _handle : null,
-                  height: horizontal ? null : _handle,
-                  child: Center(child: line),
+              onEnter: (_) => setState(() => _hover = true),
+              onExit: (_) => setState(() => _hover = false),
+              child: Tooltip(
+                message: 'Drag to resize; double-click to reset',
+                waitDuration: const Duration(milliseconds: 700),
+                child: GestureDetector(
+                  key: const Key('split-handle'),
+                  behavior: HitTestBehavior.opaque,
+                  onPanStart: (_) => setState(() => _dragging = true),
+                  onPanEnd: (_) => setState(() => _dragging = false),
+                  onPanCancel: () => setState(() => _dragging = false),
+                  onPanUpdate: (drag) {
+                    if (total <= 0) return;
+                    final moved = horizontal ? drag.delta.dx : drag.delta.dy;
+                    widget.onChanged(((size + moved) / total).clamp(0.1, 0.9));
+                  },
+                  onDoubleTap: () => widget.onChanged(0.4),
+                  child: SizedBox(
+                    width: horizontal ? _handle : null,
+                    height: horizontal ? null : _handle,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [line, grip],
+                    ),
+                  ),
                 ),
               ),
             ),
-            Expanded(child: second),
+            Expanded(child: widget.second),
           ],
         );
       },
