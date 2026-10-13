@@ -226,14 +226,18 @@ file over before sharing it.
 ## Development
 
 ```bash
-cargo test                                           # core tests
-cargo clippy --workspace --all-targets
+cargo test --workspace                               # core tests, and the CLI run against a local server
+cargo clippy --workspace --all-targets -- -D warnings
 cd app && flutter analyze
-cd app && caffeinate -d flutter test integration_test -d macos
+cd app && flutter test                               # widget and logic tests, no window needed
+cd app && caffeinate -d flutter test integration_test -d macos   # the real app, end to end
 cd app && flutter_rust_bridge_codegen generate       # after changing app/rust/src/api
 ```
 
-The app tests drive the real UI and wait for screen frames, so they stall if the display
+GitHub Actions runs all of these on every push (`.github/workflows/ci.yml`); the
+end-to-end job is reported but does not fail the run.
+
+The end-to-end tests drive the real UI and wait for screen frames, so they stall if the display
 goes to sleep; `caffeinate -d` keeps it awake for the run.
 
 ## License
