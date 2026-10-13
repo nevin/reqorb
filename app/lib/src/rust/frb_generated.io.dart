@@ -73,6 +73,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Environment dco_decode_box_autoadd_environment(dynamic raw);
 
   @protected
+  GraphQlDraft dco_decode_box_autoadd_graph_ql_draft(dynamic raw);
+
+  @protected
+  GraphQlSchema dco_decode_box_autoadd_graph_ql_schema(dynamic raw);
+
+  @protected
   GrpcCall dco_decode_box_autoadd_grpc_call(dynamic raw);
 
   @protected
@@ -113,6 +119,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   FormField dco_decode_form_field(dynamic raw);
+
+  @protected
+  GraphQlArg dco_decode_graph_ql_arg(dynamic raw);
+
+  @protected
+  GraphQlDraft dco_decode_graph_ql_draft(dynamic raw);
+
+  @protected
+  GraphQlField dco_decode_graph_ql_field(dynamic raw);
+
+  @protected
+  GraphQlQuery dco_decode_graph_ql_query(dynamic raw);
+
+  @protected
+  GraphQlSchema dco_decode_graph_ql_schema(dynamic raw);
+
+  @protected
+  GraphQlType dco_decode_graph_ql_type(dynamic raw);
 
   @protected
   GrpcCall dco_decode_grpc_call(dynamic raw);
@@ -196,6 +220,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<FormField> dco_decode_list_form_field(dynamic raw);
 
   @protected
+  List<GraphQlArg> dco_decode_list_graph_ql_arg(dynamic raw);
+
+  @protected
+  List<GraphQlField> dco_decode_list_graph_ql_field(dynamic raw);
+
+  @protected
+  List<GraphQlType> dco_decode_list_graph_ql_type(dynamic raw);
+
+  @protected
   List<GrpcMethod> dco_decode_list_grpc_method(dynamic raw);
 
   @protected
@@ -245,6 +278,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   BodyMode? dco_decode_opt_box_autoadd_body_mode(dynamic raw);
+
+  @protected
+  GraphQlDraft? dco_decode_opt_box_autoadd_graph_ql_draft(dynamic raw);
 
   @protected
   HttpMode? dco_decode_opt_box_autoadd_http_mode(dynamic raw);
@@ -360,6 +396,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Environment sse_decode_box_autoadd_environment(SseDeserializer deserializer);
 
   @protected
+  GraphQlDraft sse_decode_box_autoadd_graph_ql_draft(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  GraphQlSchema sse_decode_box_autoadd_graph_ql_schema(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   GrpcCall sse_decode_box_autoadd_grpc_call(SseDeserializer deserializer);
 
   @protected
@@ -402,6 +448,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   FormField sse_decode_form_field(SseDeserializer deserializer);
+
+  @protected
+  GraphQlArg sse_decode_graph_ql_arg(SseDeserializer deserializer);
+
+  @protected
+  GraphQlDraft sse_decode_graph_ql_draft(SseDeserializer deserializer);
+
+  @protected
+  GraphQlField sse_decode_graph_ql_field(SseDeserializer deserializer);
+
+  @protected
+  GraphQlQuery sse_decode_graph_ql_query(SseDeserializer deserializer);
+
+  @protected
+  GraphQlSchema sse_decode_graph_ql_schema(SseDeserializer deserializer);
+
+  @protected
+  GraphQlType sse_decode_graph_ql_type(SseDeserializer deserializer);
 
   @protected
   GrpcCall sse_decode_grpc_call(SseDeserializer deserializer);
@@ -485,6 +549,17 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<FormField> sse_decode_list_form_field(SseDeserializer deserializer);
 
   @protected
+  List<GraphQlArg> sse_decode_list_graph_ql_arg(SseDeserializer deserializer);
+
+  @protected
+  List<GraphQlField> sse_decode_list_graph_ql_field(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<GraphQlType> sse_decode_list_graph_ql_type(SseDeserializer deserializer);
+
+  @protected
   List<GrpcMethod> sse_decode_list_grpc_method(SseDeserializer deserializer);
 
   @protected
@@ -534,6 +609,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   BodyMode? sse_decode_opt_box_autoadd_body_mode(SseDeserializer deserializer);
+
+  @protected
+  GraphQlDraft? sse_decode_opt_box_autoadd_graph_ql_draft(
+    SseDeserializer deserializer,
+  );
 
   @protected
   HttpMode? sse_decode_opt_box_autoadd_http_mode(SseDeserializer deserializer);
@@ -664,6 +744,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_graph_ql_draft(
+    GraphQlDraft self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_graph_ql_schema(
+    GraphQlSchema self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_grpc_call(
     GrpcCall self,
     SseSerializer serializer,
@@ -716,6 +808,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_form_field(FormField self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_graph_ql_arg(GraphQlArg self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_graph_ql_draft(GraphQlDraft self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_graph_ql_field(GraphQlField self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_graph_ql_query(GraphQlQuery self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_graph_ql_schema(GraphQlSchema self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_graph_ql_type(GraphQlType self, SseSerializer serializer);
 
   @protected
   void sse_encode_grpc_call(GrpcCall self, SseSerializer serializer);
@@ -817,6 +927,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_graph_ql_arg(
+    List<GraphQlArg> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_graph_ql_field(
+    List<GraphQlField> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_graph_ql_type(
+    List<GraphQlType> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_grpc_method(
     List<GrpcMethod> self,
     SseSerializer serializer,
@@ -885,6 +1013,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_body_mode(
     BodyMode? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_graph_ql_draft(
+    GraphQlDraft? self,
     SseSerializer serializer,
   );
 

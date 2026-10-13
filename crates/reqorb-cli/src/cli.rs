@@ -143,6 +143,22 @@ pub(crate) struct SendArgs {
     #[arg(long, value_name = "FILE", conflicts_with_all = ["data", "json"])]
     pub(crate) binary: Option<String>,
 
+    /// GraphQL query to send; `@file` reads a file, `@-` reads stdin
+    #[arg(long, value_name = "QUERY", conflicts_with_all = ["data", "json", "form", "binary"])]
+    pub(crate) graphql: Option<String>,
+
+    /// Variables for `--graphql` as a JSON object, or `@file`
+    #[arg(long, value_name = "JSON", requires = "graphql")]
+    pub(crate) variables: Option<String>,
+
+    /// Which operation to run when the `--graphql` query holds several
+    #[arg(long, value_name = "NAME", requires = "graphql")]
+    pub(crate) operation: Option<String>,
+
+    /// Print the GraphQL schema of the server at the URL instead of sending
+    #[arg(long, conflicts_with_all = ["data", "json", "form", "binary", "graphql"])]
+    pub(crate) schema: bool,
+
     /// Timeout in seconds
     #[arg(short, long, value_name = "SECS")]
     pub(crate) timeout: Option<f64>,

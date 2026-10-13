@@ -6,6 +6,7 @@ use serde_json::{Value, json};
 
 use super::ImportResult;
 use super::util::str_field;
+use crate::graphql;
 use crate::{BodyMode, Collection, Error, Exchange, FormField, Header, Item, REDACTED, Request};
 
 /// Renders `exchanges`, oldest first, as a HAR 1.2 document that browser
@@ -131,8 +132,16 @@ fn from_har_entries(value: &Value, name: &str, only: Option<&[u32]>) -> ImportRe
         }
 
         redacted |= entry["request"].to_string().contains(REDACTED);
+        // Every call to a GraphQL server has the same address, so the
+        // operation is what tells them apart.
+        let operation = request
+            .body
+            .as_deref()
+            .and_then(graphql::operation_of)
+            .filter(|operation| operation.contains(' '));
+        graphql::detect(&mut request);
         // Requests are found by name, so repeats of one call are numbered.
-        let base = format!("{} {}", request.method, short_path(url));
+        let base = operation.unwrap_or_else(|| format!("{} {}", request.method, short_path(url)));
         let mut name = base.clone();
         let mut n = 1;
         while items.iter().any(|item| item.name == name) {
@@ -200,7 +209,8 @@ pub(super) fn entry(exchange: &Exchange) -> Value {
     });
     let content_type = header(&request.headers, "content-type");
     match request.effective_body_mode() {
-        BodyMode::Raw | BodyMode::UrlEncoded => {
+        // A GraphQL request has become a raw one by the time it is sent.
+        BodyMode::Raw | BodyMode::UrlEncoded | BodyMode::GraphQl => {
             if let Some(body) = &request.body {
                 har_request["bodySize"] = json!(body.len());
                 har_request["postData"] = json!({

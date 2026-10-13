@@ -3,6 +3,7 @@
 //! - `model`: the data everything else works on: requests, collections,
 //!   environments, the workspace.
 //! - `http`, `ws`, `grpc`: sending, one module per protocol.
+//! - `graphql`: queries carried over `http`, and the schema behind them.
 //! - `auth`: authorization, applied by all three.
 //! - `formats`: import and export, one module per format.
 //! - `vars`, `checks`, `redact`, `analyze`: work done on requests and
@@ -14,6 +15,7 @@ mod checks;
 mod error;
 mod files;
 mod formats;
+mod graphql;
 mod grpc;
 mod http;
 mod model;
@@ -30,6 +32,10 @@ pub use files::{DirAccess, FileAccess, check_directory};
 pub use formats::{
     ExportFormat, ImportResult, export_collection, export_environment, export_native, import,
     import_har, import_url, to_curl, to_har,
+};
+pub use graphql::{
+    GraphQlArg, GraphQlDraft, GraphQlField, GraphQlQuery, GraphQlSchema, GraphQlType,
+    graphql_draft, graphql_errors, graphql_format, graphql_inspect, graphql_schema,
 };
 pub use grpc::{
     GrpcCall, GrpcMethod, GrpcReply, GrpcSchema, grpc_call, grpc_load_proto, grpc_reflect,

@@ -69,7 +69,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -315522784;
+  int get rustContentHash => 1686240465;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -106,6 +106,23 @@ abstract class RustLibApi extends BaseApi {
   String crateApiCoreExportExtension({required ExportFormat format});
 
   String crateApiCoreExportHar({required List<Exchange> exchanges});
+
+  GraphQlDraft? crateApiCoreGraphqlDraft({
+    required GraphQlSchema schema,
+    required String kind,
+    required String field,
+  });
+
+  String crateApiCoreGraphqlFormat({required String query});
+
+  GraphQlQuery crateApiCoreGraphqlInspect({required String query});
+
+  Future<GraphQlSchema> crateApiCoreGraphqlSchema({
+    required Request request,
+    required List<Variable> variables,
+    required Settings settings,
+    required List<Cookie> cookies,
+  });
 
   Future<GrpcReply> crateApiCoreGrpcCall({
     required GrpcCall call,
@@ -436,6 +453,121 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "export_har", argNames: ["exchanges"]);
 
   @override
+  GraphQlDraft? crateApiCoreGraphqlDraft({
+    required GraphQlSchema schema,
+    required String kind,
+    required String field,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_graph_ql_schema(schema, serializer);
+          sse_encode_String(kind, serializer);
+          sse_encode_String(field, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_box_autoadd_graph_ql_draft,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiCoreGraphqlDraftConstMeta,
+        argValues: [schema, kind, field],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiCoreGraphqlDraftConstMeta => const TaskConstMeta(
+    debugName: "graphql_draft",
+    argNames: ["schema", "kind", "field"],
+  );
+
+  @override
+  String crateApiCoreGraphqlFormat({required String query}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(query, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 12)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCoreGraphqlFormatConstMeta,
+        argValues: [query],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiCoreGraphqlFormatConstMeta =>
+      const TaskConstMeta(debugName: "graphql_format", argNames: ["query"]);
+
+  @override
+  GraphQlQuery crateApiCoreGraphqlInspect({required String query}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(query, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 13)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_graph_ql_query,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiCoreGraphqlInspectConstMeta,
+        argValues: [query],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiCoreGraphqlInspectConstMeta =>
+      const TaskConstMeta(debugName: "graphql_inspect", argNames: ["query"]);
+
+  @override
+  Future<GraphQlSchema> crateApiCoreGraphqlSchema({
+    required Request request,
+    required List<Variable> variables,
+    required Settings settings,
+    required List<Cookie> cookies,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_request(request, serializer);
+          sse_encode_list_variable(variables, serializer);
+          sse_encode_box_autoadd_settings(settings, serializer);
+          sse_encode_list_cookie(cookies, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 14,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_graph_ql_schema,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiCoreGraphqlSchemaConstMeta,
+        argValues: [request, variables, settings, cookies],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiCoreGraphqlSchemaConstMeta => const TaskConstMeta(
+    debugName: "graphql_schema",
+    argNames: ["request", "variables", "settings", "cookies"],
+  );
+
+  @override
   Future<GrpcReply> crateApiCoreGrpcCall({
     required GrpcCall call,
     required List<Variable> variables,
@@ -449,7 +581,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 15,
             port: port_,
           );
         },
@@ -479,7 +611,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 16,
             port: port_,
           );
         },
@@ -515,7 +647,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 17,
             port: port_,
           );
         },
@@ -551,7 +683,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 18,
             port: port_,
           );
         },
@@ -585,7 +717,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 15,
+            funcId: 19,
             port: port_,
           );
         },
@@ -615,7 +747,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 16,
+            funcId: 20,
             port: port_,
           );
         },
@@ -642,7 +774,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 17,
+            funcId: 21,
             port: port_,
           );
         },
@@ -670,7 +802,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 18,
+            funcId: 22,
             port: port_,
           );
         },
@@ -695,7 +827,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_box_autoadd_collection(collection, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 19)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 23)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_collection,
@@ -723,7 +855,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_box_autoadd_environment(environment, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 20)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 24)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_environment,
@@ -751,7 +883,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_list_exchange(exchanges, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 21)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 25)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_list_exchange,
@@ -777,7 +909,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(text, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 22)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 26)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -807,7 +939,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 23,
+            funcId: 27,
             port: port_,
           );
         },
@@ -845,7 +977,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 24,
+            funcId: 28,
             port: port_,
           );
         },
@@ -872,7 +1004,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_u_32(id, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 25)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 29)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -907,7 +1039,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 26,
+              funcId: 30,
               port: port_,
             );
           },
@@ -937,7 +1069,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_u_32(id, serializer);
           sse_encode_String(text, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 27)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 31)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -1089,6 +1221,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  GraphQlDraft dco_decode_box_autoadd_graph_ql_draft(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_graph_ql_draft(raw);
+  }
+
+  @protected
+  GraphQlSchema dco_decode_box_autoadd_graph_ql_schema(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_graph_ql_schema(raw);
+  }
+
+  @protected
   GrpcCall dco_decode_box_autoadd_grpc_call(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_grpc_call(raw);
@@ -1219,6 +1363,90 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  GraphQlArg dco_decode_graph_ql_arg(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return GraphQlArg(
+      name: dco_decode_String(arr[0]),
+      description: dco_decode_String(arr[1]),
+      typeName: dco_decode_String(arr[2]),
+      defaultValue: dco_decode_String(arr[3]),
+    );
+  }
+
+  @protected
+  GraphQlDraft dco_decode_graph_ql_draft(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return GraphQlDraft(
+      query: dco_decode_String(arr[0]),
+      variables: dco_decode_String(arr[1]),
+      operation: dco_decode_String(arr[2]),
+    );
+  }
+
+  @protected
+  GraphQlField dco_decode_graph_ql_field(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return GraphQlField(
+      name: dco_decode_String(arr[0]),
+      description: dco_decode_String(arr[1]),
+      typeName: dco_decode_String(arr[2]),
+      namedType: dco_decode_String(arr[3]),
+      args: dco_decode_list_graph_ql_arg(arr[4]),
+      deprecated: dco_decode_bool(arr[5]),
+    );
+  }
+
+  @protected
+  GraphQlQuery dco_decode_graph_ql_query(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return GraphQlQuery(
+      operations: dco_decode_list_String(arr[0]),
+      problem: dco_decode_String(arr[1]),
+    );
+  }
+
+  @protected
+  GraphQlSchema dco_decode_graph_ql_schema(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return GraphQlSchema(
+      queryType: dco_decode_String(arr[0]),
+      mutationType: dco_decode_String(arr[1]),
+      subscriptionType: dco_decode_String(arr[2]),
+      types: dco_decode_list_graph_ql_type(arr[3]),
+    );
+  }
+
+  @protected
+  GraphQlType dco_decode_graph_ql_type(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return GraphQlType(
+      name: dco_decode_String(arr[0]),
+      kind: dco_decode_String(arr[1]),
+      description: dco_decode_String(arr[2]),
+      fields: dco_decode_list_graph_ql_field(arr[3]),
+      members: dco_decode_list_String(arr[4]),
+    );
+  }
+
+  @protected
   GrpcCall dco_decode_grpc_call(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -1296,8 +1524,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   HarEntry dco_decode_har_entry(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 16)
-      throw Exception('unexpected arr length: expect 16 but see ${arr.length}');
+    if (arr.length != 17)
+      throw Exception('unexpected arr length: expect 17 but see ${arr.length}');
     return HarEntry(
       offsetMs: dco_decode_CastedPrimitive_u_64(arr[0]),
       method: dco_decode_String(arr[1]),
@@ -1312,9 +1540,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       requestHeaders: dco_decode_list_header(arr[10]),
       responseHeaders: dco_decode_list_header(arr[11]),
       requestBody: dco_decode_opt_String(arr[12]),
-      responseBody: dco_decode_opt_String(arr[13]),
-      bodyNote: dco_decode_opt_String(arr[14]),
-      phases: dco_decode_list_har_phase(arr[15]),
+      operation: dco_decode_opt_String(arr[13]),
+      responseBody: dco_decode_opt_String(arr[14]),
+      bodyNote: dco_decode_opt_String(arr[15]),
+      phases: dco_decode_list_har_phase(arr[16]),
     );
   }
 
@@ -1494,6 +1723,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<GraphQlArg> dco_decode_list_graph_ql_arg(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_graph_ql_arg).toList();
+  }
+
+  @protected
+  List<GraphQlField> dco_decode_list_graph_ql_field(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_graph_ql_field).toList();
+  }
+
+  @protected
+  List<GraphQlType> dco_decode_list_graph_ql_type(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_graph_ql_type).toList();
+  }
+
+  @protected
   List<GrpcMethod> dco_decode_list_grpc_method(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_grpc_method).toList();
@@ -1596,6 +1843,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  GraphQlDraft? dco_decode_opt_box_autoadd_graph_ql_draft(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_graph_ql_draft(raw);
+  }
+
+  @protected
   HttpMode? dco_decode_opt_box_autoadd_http_mode(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_http_mode(raw);
@@ -1629,8 +1882,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Request dco_decode_request(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 13)
-      throw Exception('unexpected arr length: expect 13 but see ${arr.length}');
+    if (arr.length != 15)
+      throw Exception('unexpected arr length: expect 15 but see ${arr.length}');
     return Request(
       method: dco_decode_String(arr[0]),
       url: dco_decode_String(arr[1]),
@@ -1643,8 +1896,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       form: dco_decode_list_form_field(arr[8]),
       grpcMethod: dco_decode_opt_String(arr[9]),
       protoPath: dco_decode_opt_String(arr[10]),
-      tests: dco_decode_list_String(arr[11]),
-      captures: dco_decode_list_String(arr[12]),
+      graphqlVariables: dco_decode_opt_String(arr[11]),
+      graphqlOperation: dco_decode_opt_String(arr[12]),
+      tests: dco_decode_list_String(arr[13]),
+      captures: dco_decode_list_String(arr[14]),
     );
   }
 
@@ -1690,8 +1945,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Sent dco_decode_sent(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 7)
-      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return Sent(
       response: dco_decode_response(arr[0]),
       unresolved: dco_decode_list_String(arr[1]),
@@ -1700,6 +1955,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       tests: dco_decode_list_test_result(arr[4]),
       captured: dco_decode_list_variable(arr[5]),
       captureProblems: dco_decode_list_String(arr[6]),
+      graphqlErrors: dco_decode_list_String(arr[7]),
     );
   }
 
@@ -1956,6 +2212,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  GraphQlDraft sse_decode_box_autoadd_graph_ql_draft(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_graph_ql_draft(deserializer));
+  }
+
+  @protected
+  GraphQlSchema sse_decode_box_autoadd_graph_ql_schema(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_graph_ql_schema(deserializer));
+  }
+
+  @protected
   GrpcCall sse_decode_box_autoadd_grpc_call(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_grpc_call(deserializer));
@@ -2087,6 +2359,93 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  GraphQlArg sse_decode_graph_ql_arg(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_name = sse_decode_String(deserializer);
+    var var_description = sse_decode_String(deserializer);
+    var var_typeName = sse_decode_String(deserializer);
+    var var_defaultValue = sse_decode_String(deserializer);
+    return GraphQlArg(
+      name: var_name,
+      description: var_description,
+      typeName: var_typeName,
+      defaultValue: var_defaultValue,
+    );
+  }
+
+  @protected
+  GraphQlDraft sse_decode_graph_ql_draft(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_query = sse_decode_String(deserializer);
+    var var_variables = sse_decode_String(deserializer);
+    var var_operation = sse_decode_String(deserializer);
+    return GraphQlDraft(
+      query: var_query,
+      variables: var_variables,
+      operation: var_operation,
+    );
+  }
+
+  @protected
+  GraphQlField sse_decode_graph_ql_field(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_name = sse_decode_String(deserializer);
+    var var_description = sse_decode_String(deserializer);
+    var var_typeName = sse_decode_String(deserializer);
+    var var_namedType = sse_decode_String(deserializer);
+    var var_args = sse_decode_list_graph_ql_arg(deserializer);
+    var var_deprecated = sse_decode_bool(deserializer);
+    return GraphQlField(
+      name: var_name,
+      description: var_description,
+      typeName: var_typeName,
+      namedType: var_namedType,
+      args: var_args,
+      deprecated: var_deprecated,
+    );
+  }
+
+  @protected
+  GraphQlQuery sse_decode_graph_ql_query(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_operations = sse_decode_list_String(deserializer);
+    var var_problem = sse_decode_String(deserializer);
+    return GraphQlQuery(operations: var_operations, problem: var_problem);
+  }
+
+  @protected
+  GraphQlSchema sse_decode_graph_ql_schema(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_queryType = sse_decode_String(deserializer);
+    var var_mutationType = sse_decode_String(deserializer);
+    var var_subscriptionType = sse_decode_String(deserializer);
+    var var_types = sse_decode_list_graph_ql_type(deserializer);
+    return GraphQlSchema(
+      queryType: var_queryType,
+      mutationType: var_mutationType,
+      subscriptionType: var_subscriptionType,
+      types: var_types,
+    );
+  }
+
+  @protected
+  GraphQlType sse_decode_graph_ql_type(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_name = sse_decode_String(deserializer);
+    var var_kind = sse_decode_String(deserializer);
+    var var_description = sse_decode_String(deserializer);
+    var var_fields = sse_decode_list_graph_ql_field(deserializer);
+    var var_members = sse_decode_list_String(deserializer);
+    return GraphQlType(
+      name: var_name,
+      kind: var_kind,
+      description: var_description,
+      fields: var_fields,
+      members: var_members,
+    );
+  }
+
+  @protected
   GrpcCall sse_decode_grpc_call(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_url = sse_decode_String(deserializer);
@@ -2182,6 +2541,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_requestHeaders = sse_decode_list_header(deserializer);
     var var_responseHeaders = sse_decode_list_header(deserializer);
     var var_requestBody = sse_decode_opt_String(deserializer);
+    var var_operation = sse_decode_opt_String(deserializer);
     var var_responseBody = sse_decode_opt_String(deserializer);
     var var_bodyNote = sse_decode_opt_String(deserializer);
     var var_phases = sse_decode_list_har_phase(deserializer);
@@ -2199,6 +2559,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       requestHeaders: var_requestHeaders,
       responseHeaders: var_responseHeaders,
       requestBody: var_requestBody,
+      operation: var_operation,
       responseBody: var_responseBody,
       bodyNote: var_bodyNote,
       phases: var_phases,
@@ -2436,6 +2797,46 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<GraphQlArg> sse_decode_list_graph_ql_arg(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <GraphQlArg>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_graph_ql_arg(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<GraphQlField> sse_decode_list_graph_ql_field(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <GraphQlField>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_graph_ql_field(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<GraphQlType> sse_decode_list_graph_ql_type(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <GraphQlType>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_graph_ql_type(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<GrpcMethod> sse_decode_list_grpc_method(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -2620,6 +3021,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  GraphQlDraft? sse_decode_opt_box_autoadd_graph_ql_draft(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_graph_ql_draft(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   HttpMode? sse_decode_opt_box_autoadd_http_mode(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -2688,6 +3102,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_form = sse_decode_list_form_field(deserializer);
     var var_grpcMethod = sse_decode_opt_String(deserializer);
     var var_protoPath = sse_decode_opt_String(deserializer);
+    var var_graphqlVariables = sse_decode_opt_String(deserializer);
+    var var_graphqlOperation = sse_decode_opt_String(deserializer);
     var var_tests = sse_decode_list_String(deserializer);
     var var_captures = sse_decode_list_String(deserializer);
     return Request(
@@ -2702,6 +3118,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       form: var_form,
       grpcMethod: var_grpcMethod,
       protoPath: var_protoPath,
+      graphqlVariables: var_graphqlVariables,
+      graphqlOperation: var_graphqlOperation,
       tests: var_tests,
       captures: var_captures,
     );
@@ -2767,6 +3185,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_tests = sse_decode_list_test_result(deserializer);
     var var_captured = sse_decode_list_variable(deserializer);
     var var_captureProblems = sse_decode_list_String(deserializer);
+    var var_graphqlErrors = sse_decode_list_String(deserializer);
     return Sent(
       response: var_response,
       unresolved: var_unresolved,
@@ -2775,6 +3194,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       tests: var_tests,
       captured: var_captured,
       captureProblems: var_captureProblems,
+      graphqlErrors: var_graphqlErrors,
     );
   }
 
@@ -3044,6 +3464,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_graph_ql_draft(
+    GraphQlDraft self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_graph_ql_draft(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_graph_ql_schema(
+    GraphQlSchema self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_graph_ql_schema(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_grpc_call(
     GrpcCall self,
     SseSerializer serializer,
@@ -3159,6 +3597,63 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_graph_ql_arg(GraphQlArg self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.name, serializer);
+    sse_encode_String(self.description, serializer);
+    sse_encode_String(self.typeName, serializer);
+    sse_encode_String(self.defaultValue, serializer);
+  }
+
+  @protected
+  void sse_encode_graph_ql_draft(GraphQlDraft self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.query, serializer);
+    sse_encode_String(self.variables, serializer);
+    sse_encode_String(self.operation, serializer);
+  }
+
+  @protected
+  void sse_encode_graph_ql_field(GraphQlField self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.name, serializer);
+    sse_encode_String(self.description, serializer);
+    sse_encode_String(self.typeName, serializer);
+    sse_encode_String(self.namedType, serializer);
+    sse_encode_list_graph_ql_arg(self.args, serializer);
+    sse_encode_bool(self.deprecated, serializer);
+  }
+
+  @protected
+  void sse_encode_graph_ql_query(GraphQlQuery self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_String(self.operations, serializer);
+    sse_encode_String(self.problem, serializer);
+  }
+
+  @protected
+  void sse_encode_graph_ql_schema(
+    GraphQlSchema self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.queryType, serializer);
+    sse_encode_String(self.mutationType, serializer);
+    sse_encode_String(self.subscriptionType, serializer);
+    sse_encode_list_graph_ql_type(self.types, serializer);
+  }
+
+  @protected
+  void sse_encode_graph_ql_type(GraphQlType self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.name, serializer);
+    sse_encode_String(self.kind, serializer);
+    sse_encode_String(self.description, serializer);
+    sse_encode_list_graph_ql_field(self.fields, serializer);
+    sse_encode_list_String(self.members, serializer);
+  }
+
+  @protected
   void sse_encode_grpc_call(GrpcCall self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.url, serializer);
@@ -3223,6 +3718,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_header(self.requestHeaders, serializer);
     sse_encode_list_header(self.responseHeaders, serializer);
     sse_encode_opt_String(self.requestBody, serializer);
+    sse_encode_opt_String(self.operation, serializer);
     sse_encode_opt_String(self.responseBody, serializer);
     sse_encode_opt_String(self.bodyNote, serializer);
     sse_encode_list_har_phase(self.phases, serializer);
@@ -3419,6 +3915,42 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_graph_ql_arg(
+    List<GraphQlArg> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_graph_ql_arg(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_graph_ql_field(
+    List<GraphQlField> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_graph_ql_field(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_graph_ql_type(
+    List<GraphQlType> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_graph_ql_type(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_grpc_method(
     List<GrpcMethod> self,
     SseSerializer serializer,
@@ -3609,6 +4141,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_box_autoadd_graph_ql_draft(
+    GraphQlDraft? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_graph_ql_draft(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_box_autoadd_http_mode(
     HttpMode? self,
     SseSerializer serializer,
@@ -3680,6 +4225,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_form_field(self.form, serializer);
     sse_encode_opt_String(self.grpcMethod, serializer);
     sse_encode_opt_String(self.protoPath, serializer);
+    sse_encode_opt_String(self.graphqlVariables, serializer);
+    sse_encode_opt_String(self.graphqlOperation, serializer);
     sse_encode_list_String(self.tests, serializer);
     sse_encode_list_String(self.captures, serializer);
   }
@@ -3725,6 +4272,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_test_result(self.tests, serializer);
     sse_encode_list_variable(self.captured, serializer);
     sse_encode_list_String(self.captureProblems, serializer);
+    sse_encode_list_String(self.graphqlErrors, serializer);
   }
 
   @protected

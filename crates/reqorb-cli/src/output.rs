@@ -95,6 +95,9 @@ pub(crate) fn report_tests(sent: &reqorb_core::Sent, indent: &str) -> usize {
             eprintln!("{indent}✗ {}  ({})", result.test, result.detail);
         }
     }
+    for error in &sent.graphql_errors {
+        eprintln!("{indent}graphql error: {error}");
+    }
     for problem in &sent.capture_problems {
         eprintln!("{indent}warning: nothing captured for {problem}");
     }
@@ -102,10 +105,10 @@ pub(crate) fn report_tests(sent: &reqorb_core::Sent, indent: &str) -> usize {
 }
 
 /// Whether a send counts as a success: its tests decide when it has any,
-/// otherwise the status does.
+/// otherwise the status does, along with the errors of a GraphQL response.
 pub(crate) fn succeeded(sent: &reqorb_core::Sent) -> bool {
     if sent.tests.is_empty() {
-        sent.response.status < 400
+        sent.response.status < 400 && sent.graphql_errors.is_empty()
     } else {
         sent.tests.iter().all(|t| t.passed)
     }

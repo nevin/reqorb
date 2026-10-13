@@ -21,6 +21,7 @@ const _modeLabels = {
   BodyMode.urlEncoded: 'x-www-form-urlencoded',
   BodyMode.raw: 'raw',
   BodyMode.binary: 'binary',
+  BodyMode.graphQl: 'GraphQL',
 };
 
 /// Asks for a file, starting in the working directory, and returns its
@@ -50,6 +51,7 @@ class BodyEditor extends StatelessWidget {
     required this.onUrlEncodedBulkChanged,
     required this.formData,
     required this.binary,
+    required this.graphql,
   });
 
   final BodyMode mode;
@@ -71,6 +73,9 @@ class BodyEditor extends StatelessWidget {
 
   /// Path of the file to send as the body.
   final TextEditingController binary;
+
+  /// The GraphQL editor, which the page builds from the request's query.
+  final Widget graphql;
 
   @override
   Widget build(BuildContext context) {
@@ -159,6 +164,7 @@ class BodyEditor extends StatelessWidget {
               bulkHint: 'username: alice\ngrant_type: password',
             ),
             BodyMode.formData => formData,
+            BodyMode.graphQl => graphql,
             // Scrollable, so a short pane cannot clip the explanation.
             BodyMode.binary => SingleChildScrollView(
               padding: const EdgeInsets.all(12),

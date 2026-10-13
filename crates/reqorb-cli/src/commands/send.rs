@@ -33,6 +33,11 @@ pub(crate) async fn send(args: SendArgs) -> Result<ExitCode> {
         }
     } else if let Some(data) = &args.data {
         request.body = Some(read_body(data)?);
+    } else if let Some(query) = &args.graphql {
+        request.body_mode = Some(BodyMode::GraphQl);
+        request.body = Some(read_body(query)?);
+        request.graphql_variables = args.variables.as_deref().map(read_body).transpose()?;
+        request.graphql_operation = args.operation.clone();
     } else if let Some(path) = &args.binary {
         request.body_mode = Some(BodyMode::Binary);
         request.body = Some(path.clone());
@@ -54,6 +59,12 @@ pub(crate) async fn send(args: SendArgs) -> Result<ExitCode> {
     let request = args.http.apply(&request);
 
     let variables = load_variables(&args.vars).await?;
+    if args.schema {
+        let schema =
+            reqorb_core::graphql_schema(&request, &variables, &args.http.options()?, &[]).await?;
+        print!("{}", schema.to_sdl());
+        return Ok(ExitCode::SUCCESS);
+    }
     let sent = reqorb_core::send_with(&request, &variables, &args.http.options()?, &[]).await?;
     warn_unresolved(&sent.unresolved);
     print_response(&sent.response, &args.output)?;

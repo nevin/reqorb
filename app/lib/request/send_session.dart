@@ -3,6 +3,27 @@ import 'package:reqorb/bridge/engine.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 import 'package:reqorb/workspace/workspace_store.dart';
 
+/// [url] with `http://` in front when it names no scheme. A leading
+/// variable is left alone, as it usually holds the scheme already.
+String withScheme(String url) =>
+    url.contains('://') || url.startsWith('{{') ? url : 'http://$url';
+
+/// [request] addressed to [url], and otherwise the same.
+Request readdressed(Request request, String url) => Request(
+  method: request.method,
+  url: url,
+  headers: request.headers,
+  body: request.body,
+  bodyMode: request.bodyMode,
+  form: request.form,
+  graphqlVariables: request.graphqlVariables,
+  graphqlOperation: request.graphqlOperation,
+  auth: request.auth,
+  settings: request.settings,
+  tests: request.tests,
+  captures: request.captures,
+);
+
 /// Sending the open HTTP request and holding what came back.
 class SendSession extends ChangeNotifier {
   SendSession(this._engine, this._store);
@@ -26,28 +47,14 @@ class SendSession extends ChangeNotifier {
   /// captured variables are kept even if the result is no longer wanted.
   Future<void> send(Request request, List<Variable> variables) async {
     if (sending) return;
-    // A leading variable usually holds the scheme already.
-    final url = request.url.contains('://') || request.url.startsWith('{{')
-        ? request.url
-        : 'http://${request.url}';
+    final url = withScheme(request.url);
     final id = ++_current;
     sending = true;
     error = null;
     _notify();
     try {
       final result = await _engine.sendRequest(
-        request: Request(
-          method: request.method,
-          url: url,
-          headers: request.headers,
-          body: request.body,
-          bodyMode: request.bodyMode,
-          form: request.form,
-          auth: request.auth,
-          settings: request.settings,
-          tests: request.tests,
-          captures: request.captures,
-        ),
+        request: readdressed(request, url),
         variables: variables,
         settings: _store.settings,
         cookies: _store.cookies,

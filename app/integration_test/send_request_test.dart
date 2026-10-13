@@ -85,6 +85,60 @@ final _swagger = jsonEncode({
   },
 });
 
+/// What a GraphQL server answers when asked to describe itself.
+final _graphqlSchema = jsonEncode({
+  'data': {
+    '__schema': {
+      'queryType': {'name': 'Query'},
+      'mutationType': null,
+      'subscriptionType': null,
+      'types': [
+        {
+          'kind': 'OBJECT',
+          'name': 'Query',
+          'description': '',
+          'fields': [
+            {
+              'name': 'user',
+              'description': 'One user.',
+              'isDeprecated': false,
+              'args': [
+                {
+                  'name': 'id',
+                  'description': '',
+                  'defaultValue': null,
+                  'type': {
+                    'kind': 'NON_NULL',
+                    'name': null,
+                    'ofType': {'kind': 'SCALAR', 'name': 'ID'},
+                  },
+                },
+              ],
+              'type': {'kind': 'OBJECT', 'name': 'User'},
+            },
+          ],
+        },
+        {
+          'kind': 'OBJECT',
+          'name': 'User',
+          'description': '',
+          'fields': [
+            {
+              'name': 'name',
+              'description': '',
+              'isDeprecated': false,
+              'args': [],
+              'type': {'kind': 'SCALAR', 'name': 'String'},
+            },
+          ],
+        },
+        {'kind': 'SCALAR', 'name': 'ID', 'description': ''},
+        {'kind': 'SCALAR', 'name': 'String', 'description': ''},
+      ],
+    },
+  },
+});
+
 /// A one-pixel PNG, which is not valid text.
 final _png = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
@@ -135,6 +189,22 @@ void main() {
           request.response
             ..headers.contentType = ContentType('image', 'png')
             ..add(_png);
+          await request.response.close();
+          return;
+        }
+        // A GraphQL endpoint: it describes itself when asked, fails any
+        // query that says `fail`, and otherwise finds a user.
+        if (request.uri.path == '/graphql') {
+          final query = '${(jsonDecode(seen.body!) as Map)['query']}';
+          request.response
+            ..headers.contentType = ContentType.json
+            ..write(
+              query.contains('__schema')
+                  ? _graphqlSchema
+                  : query.contains('fail')
+                  ? '{"data":null,"errors":[{"message":"It failed","path":["fail"]}]}'
+                  : '{"data":{"user":{"name":"Ann"}}}',
+            );
           await request.response.close();
           return;
         }
@@ -1555,6 +1625,78 @@ void main() {
     expect(find.byKey(const Key('test-results-tab')), findsNothing);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('writes a GraphQL query from the schema and sends it', (
+    tester,
+  ) async {
+    await start(tester);
+    await launch(tester);
+    final base = 'http://127.0.0.1:${server.port}';
+    await type(tester, find.byKey(const Key('url')), '$base/graphql');
+    await tester.tap(find.byKey(const Key('body-tab')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('body-mode-GraphQL')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('body-mode-GraphQL')));
+    await tester.pumpAndSettle();
+
+    // The server describes itself, and a query is written from that.
+    await tester.tap(find.byKey(const Key('graphql-schema')));
+    await waitFor(tester, find.byKey(const Key('schema-use-user')));
+    await tester.pumpAndSettle();
+    expect(find.text('One user.'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('schema-use-user')));
+    await tester.pumpAndSettle();
+    String text(String key) =>
+        tester.widget<TextField>(find.byKey(Key(key))).controller!.text;
+    expect(
+      text('graphql-query'),
+      'query User(\$id: ID!) {\n  user(id: \$id) {\n    name\n  }\n}',
+    );
+    expect(text('graphql-variables'), '{\n  "id": ""\n}');
+    expect(find.byKey(const Key('graphql-problem')), findsNothing);
+
+    await type(
+      tester,
+      find.byKey(const Key('graphql-variables')),
+      '{"id": {{userId}}}',
+    );
+    store.capture(const [Variable(key: 'userId', value: '7', enabled: true)]);
+    await tester.tap(find.byKey(const Key('send')));
+    await waitFor(tester, find.byKey(const Key('status')));
+    await tester.pumpAndSettle();
+    // Choosing GraphQL made it a POST, and it went out as the JSON a
+    // GraphQL server expects, with the variable filled in.
+    expect(seen.method, 'POST');
+    expect(seen.headers!.contentType!.mimeType, 'application/json');
+    expect(jsonDecode(seen.body!), {
+      'query': 'query User(\$id: ID!) {\n  user(id: \$id) {\n    name\n  }\n}',
+      'variables': {'id': 7},
+    });
+    expect(find.textContaining('"Ann"'), findsOneWidget);
+    expect(find.byKey(const Key('graphql-errors')), findsNothing);
+
+    // A query that fails still gets a 200; the errors are pointed out.
+    await type(tester, find.byKey(const Key('graphql-query')), '{ fail }');
+    await type(tester, find.byKey(const Key('graphql-variables')), '');
+    await tester.tap(find.byKey(const Key('send')));
+    await waitFor(tester, find.byKey(const Key('graphql-errors')));
+    await tester.pumpAndSettle();
+    expect(find.text('200 OK'), findsOneWidget);
+    expect(find.text('It failed (at fail)'), findsOneWidget);
+
+    // Saved, it is still a GraphQL request.
+    await tester.tap(find.byKey(const Key('save')));
+    await tester.pumpAndSettle();
+    await type(tester, find.byKey(const Key('save-name')), 'Fail');
+    await tester.tap(find.byKey(const Key('save-confirm')));
+    await tester.pumpAndSettle();
+    final saved = store.requests.single.request!;
+    expect(saved.bodyMode, BodyMode.graphQl);
+    expect(saved.body, '{ fail }');
+    expect(saved.graphqlVariables, isNull);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('shows a binary response and records what was sent', (
     tester,
   ) async {

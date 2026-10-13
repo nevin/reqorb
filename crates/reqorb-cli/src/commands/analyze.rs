@@ -55,8 +55,14 @@ pub(crate) fn analyze(args: AnalyzeArgs) -> Result<ExitCode> {
     if args.top > 0 && !slowest.is_empty() {
         println!("\nSlowest");
         for entry in slowest.iter().take(args.top) {
+            // Calls to a GraphQL server share an address; the operation
+            // is what tells them apart.
+            let operation = match &entry.operation {
+                Some(operation) => format!("  ({operation})"),
+                None => String::new(),
+            };
             println!(
-                "  {:>9}  {:>10}  {:>3}  {} {}",
+                "  {:>9}  {:>10}  {:>3}  {} {}{operation}",
                 human_ms(entry.time_ms),
                 human_bytes(entry.size_bytes),
                 entry.status,

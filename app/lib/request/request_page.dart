@@ -5,6 +5,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart' hide FormField;
 import 'package:flutter/services.dart';
+import 'package:reqorb/graphql/graphql_editor.dart';
+import 'package:reqorb/graphql/graphql_session.dart';
+import 'package:reqorb/graphql/schema_browser.dart';
 import 'package:reqorb/protocols/grpc_session.dart';
 import 'package:reqorb/protocols/ws_session.dart';
 import 'package:reqorb/request/environment_picker.dart';
@@ -103,6 +106,7 @@ class _RequestPageState extends State<RequestPage> {
   late final _http = SendSession(_store.engine, _store);
   late final _ws = WsSession(_store.engine);
   late final _grpc = GrpcSession(_store.engine);
+  late final _graphql = GraphqlSession(_store.engine, _store);
 
   bool get _sending => _http.sending;
   Sent? get _sent => _http.sent;
@@ -122,7 +126,7 @@ class _RequestPageState extends State<RequestPage> {
   @override
   void initState() {
     super.initState();
-    for (final session in [_http, _ws, _grpc]) {
+    for (final session in [_http, _ws, _grpc, _graphql]) {
       session.addListener(_sessionChanged);
     }
   }
@@ -133,6 +137,7 @@ class _RequestPageState extends State<RequestPage> {
     _http.dispose();
     _ws.dispose();
     _grpc.dispose();
+    _graphql.dispose();
     _urlFocus.dispose();
     super.dispose();
   }
@@ -230,6 +235,52 @@ class _RequestPageState extends State<RequestPage> {
       messages: grpcMessages(_body.text),
       variables: _variables,
     );
+  }
+
+  // -------------------------------------------------------------- graphql
+
+  /// Shows the body type chosen. GraphQL is sent with POST unless the
+  /// method says otherwise, so a request still on GET is moved to it.
+  void _setBodyMode(BodyMode mode) => setState(() {
+    if (mode == BodyMode.graphQl &&
+        _method == 'GET' &&
+        _draft.graphqlQuery.text.isEmpty) {
+      _method = 'POST';
+    }
+    _bodyMode = mode;
+    _touch();
+  });
+
+  /// Asks the server for its schema. Returns it, or null if it would not
+  /// say; the editor then shows why.
+  Future<GraphQlSchema?> _graphqlFetch() async {
+    final request = _request();
+    if (request.url.isEmpty) {
+      _urlFocus.requestFocus();
+      showMessage(context, 'Enter the server address first');
+      return null;
+    }
+    return _graphql.fetch(request, _variables);
+  }
+
+  /// Shows the server's schema, fetching it the first time, and writes a
+  /// query for the field picked from it.
+  Future<void> _graphqlBrowse() async {
+    final schema = _graphql.schemaFor(_url.text) ?? await _graphqlFetch();
+    if (schema == null || !mounted) return;
+    final picked = await showSchemaBrowser(context, schema);
+    if (picked == null || !mounted) return;
+    final draft = _store.engine.graphqlDraft(
+      schema: schema,
+      kind: picked.kind,
+      field: picked.field,
+    );
+    if (draft == null) return;
+    final had = _draft.graphqlQuery.text.trim().isNotEmpty;
+    final undo = _draft.useGraphqlDraft(draft);
+    setState(() {});
+    // Only a query that was written is worth offering back.
+    if (had) showUndo(context, 'Query replaced', () => setState(undo));
   }
 
   /// What the main button and its shortcut do for the kind of request open.
@@ -338,6 +389,7 @@ class _RequestPageState extends State<RequestPage> {
       _draft.load(request);
       _origin = ref;
       _http.reset();
+      _graphql.reset();
       _draftName = null;
     });
     if (_scaffold.currentState?.isDrawerOpen ?? false) {
@@ -353,6 +405,7 @@ class _RequestPageState extends State<RequestPage> {
       _origin = null;
       _draft.clear();
       _http.reset();
+      _graphql.reset();
       _draftName = null;
     });
     _urlFocus.requestFocus();
@@ -571,7 +624,7 @@ class _RequestPageState extends State<RequestPage> {
           : WsComposer(controller: _body, connected: _wsOpen, onSend: _wsSend),
       body: BodyEditor(
         mode: _bodyMode,
-        onModeChanged: (mode) => setState(() => _bodyMode = mode),
+        onModeChanged: _setBodyMode,
         raw: _body,
         rawLanguage: _rawLanguage(),
         onRawLanguageChanged: _setRawLanguage,
@@ -589,6 +642,20 @@ class _RequestPageState extends State<RequestPage> {
           },
         ),
         binary: _binary,
+        graphql: GraphqlEditor(
+          query: _draft.graphqlQuery,
+          variables: _draft.graphqlVariables,
+          operation: _draft.graphqlOperation,
+          onOperationChanged: (name) => setState(() {
+            _draft.graphqlOperation = name;
+            _touch();
+          }),
+          hasSchema: _graphql.schemaFor(_url.text) != null,
+          loadingSchema: _graphql.loading != null,
+          schemaError: _graphql.error,
+          onSchema: _graphqlBrowse,
+          onRefreshSchema: _graphqlFetch,
+        ),
       ),
       cookies: CookiesTab(store: _store, currentUrl: () => _url.text),
       settings: RequestSettingsEditor(

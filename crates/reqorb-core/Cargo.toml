@@ -8,6 +8,7 @@ license.workspace = true
 base64 = "0.23.1"
 cookie = "0.18.2"
 futures-util = "0.3.34"
+graphql-parser = "0.4.1"
 hex = "0.4.3"
 hmac = "0.13.0"
 jsonwebtoken = { version = "11.1.0", features = ["aws_lc_rs"] }

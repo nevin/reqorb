@@ -18,6 +18,7 @@ Sent sentWith(
   Response response, {
   List<TestResult> tests = const [],
   List<Variable> captured = const [],
+  List<String> graphqlErrors = const [],
 }) => Sent(
   response: response,
   unresolved: const [],
@@ -26,6 +27,7 @@ Sent sentWith(
   tests: tests,
   captured: captured,
   captureProblems: const [],
+  graphqlErrors: graphqlErrors,
 );
 
 WsEvent wsEvent(WsEventKind kind, [String text = '']) => WsEvent(
@@ -104,6 +106,69 @@ class FakeEngine extends Engine {
       ..close();
     return true;
   }
+
+  // --------------------------------------------------------------- graphql
+
+  /// The schema a server hands over, or null for one that refuses.
+  GraphQlSchema? graphqlServerSchema;
+
+  /// The requests whose schema was asked for.
+  final schemaRequests = <Request>[];
+
+  @override
+  Future<GraphQlSchema> graphqlSchema({
+    required Request request,
+    required List<Variable> variables,
+    required Settings settings,
+    required List<Cookie> cookies,
+  }) async {
+    schemaRequests.add(request);
+    return graphqlServerSchema ??
+        (throw 'the server would not describe its schema: Introspection is disabled');
+  }
+
+  /// Reads `query Name` and `mutation Name` off the start of lines, and
+  /// calls a query with unbalanced braces broken.
+  @override
+  GraphQlQuery graphqlInspect({required String query}) {
+    final open = '{'.allMatches(query).length;
+    final close = '}'.allMatches(query).length;
+    if (open != close) {
+      return const GraphQlQuery(
+        operations: [],
+        problem: 'Parse error at 1:1: Unexpected end of input',
+      );
+    }
+    return GraphQlQuery(
+      operations: [
+        for (final match in RegExp(
+          r'^\s*(?:query|mutation|subscription)\s+(\w+)',
+          multiLine: true,
+        ).allMatches(query))
+          match.group(1)!,
+      ],
+      problem: '',
+    );
+  }
+
+  @override
+  String graphqlFormat({required String query}) {
+    if (graphqlInspect(query: query).problem.isNotEmpty) {
+      throw 'cannot format the query: Parse error at 1:1';
+    }
+    return query.trim().replaceAll(RegExp(r'[ \t]+'), ' ');
+  }
+
+  @override
+  GraphQlDraft? graphqlDraft({
+    required GraphQlSchema schema,
+    required String kind,
+    required String field,
+  }) => GraphQlDraft(
+    query: '$kind Draft {\n  $field\n}',
+    variables: field == 'user' ? '{\n  "id": ""\n}' : '',
+    operation: 'Draft',
+  );
 
   // ------------------------------------------------------------------ grpc
 

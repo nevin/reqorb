@@ -25,6 +25,8 @@ pub fn resolve(request: &Request, variables: &[Variable]) -> Resolved {
         h.value = sub(&h.value);
     }
     out.body = request.body.as_deref().map(&mut sub);
+    out.graphql_variables = request.graphql_variables.as_deref().map(&mut sub);
+    out.graphql_operation = request.graphql_operation.as_deref().map(&mut sub);
     for field in &mut out.form {
         field.key = sub(&field.key);
         field.value = sub(&field.value);

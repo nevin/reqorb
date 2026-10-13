@@ -68,9 +68,10 @@ fn bruno_items(items: &[Item]) -> Vec<Value> {
                     "items": bruno_items(&item.items),
                 });
             };
+            let graphql = request.effective_body_mode() == BodyMode::GraphQl;
             let mut out = json!({
                 "uid": bruno_uid(),
-                "type": "http-request",
+                "type": if graphql { "graphql-request" } else { "http-request" },
                 "name": item.name,
                 "seq": index + 1,
                 "request": bruno_request(request),
@@ -84,8 +85,22 @@ fn bruno_items(items: &[Item]) -> Vec<Value> {
 }
 
 fn bruno_request(request: &Request) -> Value {
+    // Bruno keeps a GraphQL query and its variables apart, as reqorb does.
+    let graphql = (request.effective_body_mode() == BodyMode::GraphQl).then(|| {
+        json!({
+            "mode": "graphql",
+            "graphql": {
+                "query": request.body.as_deref().unwrap_or(""),
+                "variables": request.graphql_variables.as_deref().unwrap_or(""),
+            },
+        })
+    });
     // Url-encoded fields become body text first, so one code path handles them.
     let mut request = request.clone();
+    if graphql.is_some() {
+        request.body_mode = Some(BodyMode::None);
+        request.body = None;
+    }
     request.materialize();
     let request = &request;
     // Bruno lists query parameters alongside the URL that contains them.
@@ -116,6 +131,7 @@ fn bruno_request(request: &Request) -> Value {
         _ => None,
     };
     let body = match text {
+        _ if graphql.is_some() => graphql.expect("checked"),
         _ if request.effective_body_mode() == BodyMode::FormData => json!({
             "mode": "multipartForm",
             "multipartForm": request.form.iter().map(|f| {

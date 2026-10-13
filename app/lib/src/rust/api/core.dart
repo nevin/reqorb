@@ -41,6 +41,41 @@ Future<Sent> sendRequest({
   cookies: cookies,
 );
 
+/// Fetches the GraphQL schema of the server the request points at, using
+/// the request's own headers and authorization.
+Future<GraphQlSchema> graphqlSchema({
+  required Request request,
+  required List<Variable> variables,
+  required Settings settings,
+  required List<Cookie> cookies,
+}) => RustLib.instance.api.crateApiCoreGraphqlSchema(
+  request: request,
+  variables: variables,
+  settings: settings,
+  cookies: cookies,
+);
+
+/// The operations a GraphQL query names and what is wrong with it, if
+/// anything.
+GraphQlQuery graphqlInspect({required String query}) =>
+    RustLib.instance.api.crateApiCoreGraphqlInspect(query: query);
+
+/// A GraphQL query rewritten with consistent indentation.
+String graphqlFormat({required String query}) =>
+    RustLib.instance.api.crateApiCoreGraphqlFormat(query: query);
+
+/// A query for one field of the schema's `query`, `mutation` or
+/// `subscription` type, or `None` when the schema has no such field.
+GraphQlDraft? graphqlDraft({
+  required GraphQlSchema schema,
+  required String kind,
+  required String field,
+}) => RustLib.instance.api.crateApiCoreGraphqlDraft(
+  schema: schema,
+  kind: kind,
+  field: field,
+);
+
 /// The exchanges of a session as an HTTP Archive (HAR 1.2) document.
 String exportHar({required List<Exchange> exchanges}) =>
     RustLib.instance.api.crateApiCoreExportHar(exchanges: exchanges);
@@ -280,7 +315,7 @@ class AuthParam {
           value == other.value;
 }
 
-enum BodyMode { none, formData, urlEncoded, raw, binary }
+enum BodyMode { none, formData, urlEncoded, raw, binary, graphQl }
 
 class Collection {
   final String name;
@@ -441,6 +476,184 @@ class FormField {
           key == other.key &&
           value == other.value &&
           file == other.file;
+}
+
+class GraphQlArg {
+  final String name;
+  final String description;
+  final String typeName;
+  final String defaultValue;
+
+  const GraphQlArg({
+    required this.name,
+    required this.description,
+    required this.typeName,
+    required this.defaultValue,
+  });
+
+  @override
+  int get hashCode =>
+      name.hashCode ^
+      description.hashCode ^
+      typeName.hashCode ^
+      defaultValue.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GraphQlArg &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          description == other.description &&
+          typeName == other.typeName &&
+          defaultValue == other.defaultValue;
+}
+
+class GraphQlDraft {
+  final String query;
+  final String variables;
+  final String operation;
+
+  const GraphQlDraft({
+    required this.query,
+    required this.variables,
+    required this.operation,
+  });
+
+  @override
+  int get hashCode => query.hashCode ^ variables.hashCode ^ operation.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GraphQlDraft &&
+          runtimeType == other.runtimeType &&
+          query == other.query &&
+          variables == other.variables &&
+          operation == other.operation;
+}
+
+class GraphQlField {
+  final String name;
+  final String description;
+  final String typeName;
+  final String namedType;
+  final List<GraphQlArg> args;
+  final bool deprecated;
+
+  const GraphQlField({
+    required this.name,
+    required this.description,
+    required this.typeName,
+    required this.namedType,
+    required this.args,
+    required this.deprecated,
+  });
+
+  @override
+  int get hashCode =>
+      name.hashCode ^
+      description.hashCode ^
+      typeName.hashCode ^
+      namedType.hashCode ^
+      args.hashCode ^
+      deprecated.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GraphQlField &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          description == other.description &&
+          typeName == other.typeName &&
+          namedType == other.namedType &&
+          args == other.args &&
+          deprecated == other.deprecated;
+}
+
+class GraphQlQuery {
+  final List<String> operations;
+  final String problem;
+
+  const GraphQlQuery({required this.operations, required this.problem});
+
+  @override
+  int get hashCode => operations.hashCode ^ problem.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GraphQlQuery &&
+          runtimeType == other.runtimeType &&
+          operations == other.operations &&
+          problem == other.problem;
+}
+
+class GraphQlSchema {
+  final String queryType;
+  final String mutationType;
+  final String subscriptionType;
+  final List<GraphQlType> types;
+
+  const GraphQlSchema({
+    required this.queryType,
+    required this.mutationType,
+    required this.subscriptionType,
+    required this.types,
+  });
+
+  @override
+  int get hashCode =>
+      queryType.hashCode ^
+      mutationType.hashCode ^
+      subscriptionType.hashCode ^
+      types.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GraphQlSchema &&
+          runtimeType == other.runtimeType &&
+          queryType == other.queryType &&
+          mutationType == other.mutationType &&
+          subscriptionType == other.subscriptionType &&
+          types == other.types;
+}
+
+class GraphQlType {
+  final String name;
+  final String kind;
+  final String description;
+  final List<GraphQlField> fields;
+  final List<String> members;
+
+  const GraphQlType({
+    required this.name,
+    required this.kind,
+    required this.description,
+    required this.fields,
+    required this.members,
+  });
+
+  @override
+  int get hashCode =>
+      name.hashCode ^
+      kind.hashCode ^
+      description.hashCode ^
+      fields.hashCode ^
+      members.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GraphQlType &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          kind == other.kind &&
+          description == other.description &&
+          fields == other.fields &&
+          members == other.members;
 }
 
 class GrpcCall {
@@ -620,6 +833,7 @@ class HarEntry {
   final List<Header> requestHeaders;
   final List<Header> responseHeaders;
   final String? requestBody;
+  final String? operation;
   final String? responseBody;
   final String? bodyNote;
   final List<HarPhase> phases;
@@ -638,6 +852,7 @@ class HarEntry {
     required this.requestHeaders,
     required this.responseHeaders,
     this.requestBody,
+    this.operation,
     this.responseBody,
     this.bodyNote,
     required this.phases,
@@ -658,6 +873,7 @@ class HarEntry {
       requestHeaders.hashCode ^
       responseHeaders.hashCode ^
       requestBody.hashCode ^
+      operation.hashCode ^
       responseBody.hashCode ^
       bodyNote.hashCode ^
       phases.hashCode;
@@ -680,6 +896,7 @@ class HarEntry {
           requestHeaders == other.requestHeaders &&
           responseHeaders == other.responseHeaders &&
           requestBody == other.requestBody &&
+          operation == other.operation &&
           responseBody == other.responseBody &&
           bodyNote == other.bodyNote &&
           phases == other.phases;
@@ -877,6 +1094,8 @@ class Request {
   final List<FormField> form;
   final String? grpcMethod;
   final String? protoPath;
+  final String? graphqlVariables;
+  final String? graphqlOperation;
   final List<String> tests;
   final List<String> captures;
 
@@ -892,6 +1111,8 @@ class Request {
     required this.form,
     this.grpcMethod,
     this.protoPath,
+    this.graphqlVariables,
+    this.graphqlOperation,
     required this.tests,
     required this.captures,
   });
@@ -909,6 +1130,8 @@ class Request {
       form.hashCode ^
       grpcMethod.hashCode ^
       protoPath.hashCode ^
+      graphqlVariables.hashCode ^
+      graphqlOperation.hashCode ^
       tests.hashCode ^
       captures.hashCode;
 
@@ -928,6 +1151,8 @@ class Request {
           form == other.form &&
           grpcMethod == other.grpcMethod &&
           protoPath == other.protoPath &&
+          graphqlVariables == other.graphqlVariables &&
+          graphqlOperation == other.graphqlOperation &&
           tests == other.tests &&
           captures == other.captures;
 }
@@ -1042,6 +1267,7 @@ class Sent {
   final List<TestResult> tests;
   final List<Variable> captured;
   final List<String> captureProblems;
+  final List<String> graphqlErrors;
 
   const Sent({
     required this.response,
@@ -1051,6 +1277,7 @@ class Sent {
     required this.tests,
     required this.captured,
     required this.captureProblems,
+    required this.graphqlErrors,
   });
 
   @override
@@ -1061,7 +1288,8 @@ class Sent {
       exchanges.hashCode ^
       tests.hashCode ^
       captured.hashCode ^
-      captureProblems.hashCode;
+      captureProblems.hashCode ^
+      graphqlErrors.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1074,7 +1302,8 @@ class Sent {
           exchanges == other.exchanges &&
           tests == other.tests &&
           captured == other.captured &&
-          captureProblems == other.captureProblems;
+          captureProblems == other.captureProblems &&
+          graphqlErrors == other.graphqlErrors;
 }
 
 class Settings {

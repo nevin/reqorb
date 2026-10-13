@@ -1,6 +1,6 @@
 # reqorb
 
-A fast, native API client for HTTP, WebSocket and gRPC: a desktop app, an iPad app and a
+A fast, native API client for HTTP, GraphQL, WebSocket and gRPC: a desktop app, an iPad app and a
 command-line tool on a shared Rust core.
 
 reqorb is an API client in the spirit of Postman, built as a native app rather than a web
@@ -8,8 +8,10 @@ view. One Rust core does the networking and powers all three front ends.
 
 ## Features
 
-- **HTTP:** five body types (form-data, url-encoded, raw, binary, none), 12 authorization
-  types, cookies, redirects and per-request settings.
+- **HTTP:** six body types (form-data, url-encoded, raw, binary, GraphQL, none), 12
+  authorization types, cookies, redirects and per-request settings.
+- **GraphQL:** a query and variables editor, the server's schema to browse and write
+  queries from, and the errors a `200` response hides.
 - **WebSocket:** connect, send messages and watch a timestamped log.
 - **gRPC:** load methods by server reflection or from a `.proto` file and call them with
   JSON messages, including streaming methods.
@@ -72,6 +74,10 @@ reqorb POST https://httpbin.org/post --json '{"n": 1}'
 reqorb GET httpbin.org/get --test 'status == 200' --test 'body.url exists'
 reqorb GET httpbin.org/get --har session.har             # save the exchanges as HAR
 reqorb GET httpbin.org/get --har session.har --redact    # the same, without credentials
+
+reqorb POST https://countries.trevorblades.com/graphql \
+  --graphql 'query ($code: ID!) { country(code: $code) { name } }' --variables '{"code": "IN"}'
+reqorb POST https://countries.trevorblades.com/graphql --schema   # the server's schema
 
 reqorb import shop.postman_collection.json -o shop.reqorb.json
 reqorb import https://petstore.swagger.io/v2/swagger.json -o petstore.reqorb.json
@@ -195,12 +201,46 @@ reqorb GET https://api.example.com --auth awsv4 \
 ## Request bodies
 
 A request body is one of: none, form-data (multipart, with text or file fields),
-x-www-form-urlencoded, raw text, or binary (a file's bytes).
+x-www-form-urlencoded, raw text, binary (a file's bytes), or GraphQL (see below).
 
 ```bash
 reqorb POST https://httpbin.org/post -F title=Hi -F doc=@notes.txt
 reqorb POST https://httpbin.org/post --binary photo.png
 ```
+
+## GraphQL
+
+Choose **GraphQL** on the Body tab. The query and its variables are written separately
+and sent as the JSON a GraphQL server expects, with `Content-Type: application/json`.
+A new request moves to `POST`; set the method to `GET` to send the query in the URL.
+
+- **Variables** are a JSON object. `{{variables}}` work in both the query and the
+  variables, and are filled in before the JSON is checked, so `{"id": {{userId}}}` is
+  fine. Variables that are not valid JSON once filled stop the send with the reason.
+- **Schema:** **Fetch schema** asks the server to describe itself, using the request's
+  own headers and authorization. Browse or search its types and fields, and press
+  **Use** on a query or mutation to have it written out: required arguments become
+  variables and the plain fields of the result are selected. The schema is kept per
+  address for the session; the button beside it fetches it again.
+- **Checks as you type:** a syntax error is shown under the query with its line and
+  column. When a query holds several operations, a picker chooses the one to run.
+  The format button re-indents the query.
+- **Errors:** GraphQL servers answer `200` even when a query fails. reqorb lists the
+  response's `errors` above the body, and the CLI prints them and exits with 1 unless
+  the request has tests of its own to decide. Test them like any other field:
+  `body.errors missing`, `body.data.user.id == 7`.
+- **Formats:** Postman GraphQL bodies import and export as GraphQL, and Bruno export
+  writes a GraphQL request. curl and HAR have no notion of GraphQL, so they carry the
+  JSON; importing either turns a body that is a GraphQL request back into one, and
+  names requests from a HAR file by their operation. The HAR analyser shows each
+  call's operation and flags responses that report errors behind a successful status.
+
+```bash
+reqorb POST api.example.com/graphql --graphql @query.graphql --variables @vars.json --operation Users
+```
+
+Not supported yet: subscriptions, persisted queries, file uploads, and completion
+while typing.
 
 ## HAR, WebSocket and gRPC
 
@@ -265,6 +305,7 @@ crates/reqorb-core/src/     the request engine, used by everything else
   model.rs  error.rs        the data types and the error type
   http/                     sending: client cache, one exchange, cookie jar
   ws.rs  grpc.rs            the other two protocols
+  graphql.rs                GraphQL over HTTP: the request, its errors, the schema
   auth/                     auth types, signing a request, negotiating with a server
   formats/                  one module per format, each with its import and export
   vars.rs  checks.rs        variable substitution; tests and captures
@@ -277,6 +318,7 @@ app/lib/                    the Flutter UI, one folder per feature
   bridge/                   Engine: the one interface to the Rust library
   request/                  the main page, the request model, the send session and the editors
   response/  protocols/     the response pane; WebSocket and gRPC sessions and views
+  graphql/                  the GraphQL editor, schema browser and schema session
   sidebar/  environments/  settings/  har/
   transfer/                 import and export actions
   workspace/                the saved workspace and collection actions
@@ -286,7 +328,7 @@ app/rust/                   the bridge crate exposing the core to Dart
 
 In the app, widgets show state and hand actions on; the state lives in models that
 notify when they change (`RequestDraft`, `SendSession`, `WsSession`, `GrpcSession`,
-`WorkspaceStore`), and everything that reaches the Rust library goes through `Engine`.
+`GraphqlSession`, `WorkspaceStore`), and everything that reaches the Rust library goes through `Engine`.
 Tests put a stand-in engine in its place, so the whole app runs headlessly.
 
 Dependencies point one way: the CLI and the bridge depend on the core, never the

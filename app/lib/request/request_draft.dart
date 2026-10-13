@@ -37,6 +37,13 @@ class RequestDraft extends ChangeNotifier {
   /// Url-encoded fields as `key: value` lines.
   final urlEncoded = TextEditingController();
 
+  /// A GraphQL query and its variables, the latter as JSON.
+  final graphqlQuery = TextEditingController();
+  final graphqlVariables = TextEditingController();
+
+  /// Which of the query's operations to run; empty when it has only one.
+  String graphqlOperation = '';
+
   /// Path of the file sent as a binary body.
   final binary = TextEditingController();
 
@@ -83,6 +90,8 @@ class RequestDraft extends ChangeNotifier {
     body,
     urlEncoded,
     binary,
+    graphqlQuery,
+    graphqlVariables,
     tests,
     captures,
   ];
@@ -153,8 +162,11 @@ class RequestDraft extends ChangeNotifier {
     final text = switch (bodyMode) {
       BodyMode.raw => body.text,
       BodyMode.binary => binary.text.trim(),
+      BodyMode.graphQl =>
+        graphqlQuery.text.trim().isEmpty ? '' : graphqlQuery.text,
       _ => '',
     };
+    final graphql = bodyMode == BodyMode.graphQl && text.isNotEmpty;
     final form = switch (bodyMode) {
       BodyMode.formData => formData,
       BodyMode.urlEncoded => [
@@ -173,12 +185,25 @@ class RequestDraft extends ChangeNotifier {
       body: text.isEmpty ? null : text,
       bodyMode: empty ? null : bodyMode,
       form: form,
+      graphqlVariables: graphql && graphqlVariables.text.trim().isNotEmpty
+          ? graphqlVariables.text
+          : null,
+      graphqlOperation: graphql && _namesOperation(graphqlOperation)
+          ? graphqlOperation
+          : null,
       auth: auth,
       settings: settings,
       tests: linesOf(tests.text),
       captures: linesOf(captures.text),
     );
   }
+
+  /// Whether the GraphQL query still holds an operation called [name]; one
+  /// that was renamed or removed cannot be asked for.
+  bool _namesOperation(String name) =>
+      name.isNotEmpty &&
+      RegExp('\\b(?:query|mutation|subscription)\\s+${RegExp.escape(name)}\\b')
+          .hasMatch(graphqlQuery.text);
 
   /// Shows [request] in the editor, as a saved request with no edits yet.
   void load(Request request) {
@@ -206,6 +231,7 @@ class RequestDraft extends ChangeNotifier {
     }
     bodyMode = BodyMode.none;
     formData = const [];
+    graphqlOperation = '';
     auth = null;
     settings = null;
     grpcMethod = null;
@@ -231,6 +257,8 @@ class RequestDraft extends ChangeNotifier {
         now.url != was.url ||
         now.body != was.body ||
         now.bodyMode != was.bodyMode ||
+        now.graphqlVariables != was.graphqlVariables ||
+        now.graphqlOperation != was.graphqlOperation ||
         now.grpcMethod != was.grpcMethod ||
         now.protoPath != was.protoPath ||
         now.settings != was.settings ||
@@ -283,10 +311,36 @@ class RequestDraft extends ChangeNotifier {
     bodyMode = mode;
     body.text = mode == BodyMode.raw ? text : '';
     binary.text = mode == BodyMode.binary ? text : '';
+    final graphql = mode == BodyMode.graphQl;
+    graphqlQuery.text = graphql ? text : '';
+    graphqlVariables.text = graphql ? request.graphqlVariables ?? '' : '';
+    graphqlOperation = graphql ? request.graphqlOperation ?? '' : '';
     formData = mode == BodyMode.formData ? fields : const [];
     urlEncoded.text = mode == BodyMode.urlEncoded
         ? [for (final f in fields) '${f.key}: ${f.value}'].join('\n')
         : '';
+  }
+
+  /// Replaces the GraphQL query with one written from the schema, and
+  /// returns a function that puts back what was there.
+  VoidCallback useGraphqlDraft(GraphQlDraft draft) {
+    final was = (
+      graphqlQuery.text,
+      graphqlVariables.text,
+      graphqlOperation,
+      bodyMode,
+    );
+    void set(String query, String variables, String operation, BodyMode mode) {
+      bodyMode = mode;
+      graphqlOperation = operation;
+      graphqlVariables.text = variables;
+      graphqlQuery.text = query;
+      notifyListeners();
+    }
+
+    // One operation needs no name to pick it out.
+    set(draft.query, draft.variables, '', BodyMode.graphQl);
+    return () => set(was.$1, was.$2, was.$3, was.$4);
   }
 
   /// The raw-body type whose Content-Type the headers currently carry.

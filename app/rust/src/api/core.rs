@@ -10,7 +10,8 @@ use flutter_rust_bridge::frb;
 use crate::frb_generated::StreamSink;
 pub use reqorb_core::{
     AppTheme, Auth, AuthField, AuthKind, AuthParam, BodyMode, Collection, Cookie, DirAccess,
-    DisabledTls, Environment, Exchange, ExportFormat, FormField, GrpcCall, GrpcMethod, GrpcReply,
+    DisabledTls, Environment, Exchange, ExportFormat, FormField, GraphQlArg, GraphQlDraft,
+    GraphQlField, GraphQlQuery, GraphQlSchema, GraphQlType, GrpcCall, GrpcMethod, GrpcReply,
     GrpcSchema, HarCount, HarEntry, HarFinding, HarPhase, HarReport, HarSeverity, Header, HttpMode,
     ImportResult, Indent, Item, Layout, ProxyMode, Request, RequestSettings, Response, Sent,
     Settings, TestResult, Variable, Workspace, WsEvent, WsEventKind,
@@ -37,6 +38,7 @@ pub enum _BodyMode {
     UrlEncoded,
     Raw,
     Binary,
+    GraphQl,
 }
 
 #[frb(mirror(FormField))]
@@ -228,6 +230,8 @@ pub struct _Request {
     pub form: Vec<FormField>,
     pub grpc_method: Option<String>,
     pub proto_path: Option<String>,
+    pub graphql_variables: Option<String>,
+    pub graphql_operation: Option<String>,
     pub tests: Vec<String>,
     pub captures: Vec<String>,
 }
@@ -253,6 +257,7 @@ pub struct _Sent {
     pub tests: Vec<TestResult>,
     pub captured: Vec<Variable>,
     pub capture_problems: Vec<String>,
+    pub graphql_errors: Vec<String>,
 }
 
 #[frb(mirror(TestResult))]
@@ -335,6 +340,87 @@ pub async fn send_request(
     reqorb_core::send_with(&request, &variables, &settings.send_options(), &cookies)
         .await
         .map_err(|e| e.to_string())
+}
+
+#[frb(mirror(GraphQlQuery))]
+pub struct _GraphQlQuery {
+    pub operations: Vec<String>,
+    pub problem: String,
+}
+
+#[frb(mirror(GraphQlSchema))]
+pub struct _GraphQlSchema {
+    pub query_type: String,
+    pub mutation_type: String,
+    pub subscription_type: String,
+    pub types: Vec<GraphQlType>,
+}
+
+#[frb(mirror(GraphQlType))]
+pub struct _GraphQlType {
+    pub name: String,
+    pub kind: String,
+    pub description: String,
+    pub fields: Vec<GraphQlField>,
+    pub members: Vec<String>,
+}
+
+#[frb(mirror(GraphQlField))]
+pub struct _GraphQlField {
+    pub name: String,
+    pub description: String,
+    pub type_name: String,
+    pub named_type: String,
+    pub args: Vec<GraphQlArg>,
+    pub deprecated: bool,
+}
+
+#[frb(mirror(GraphQlArg))]
+pub struct _GraphQlArg {
+    pub name: String,
+    pub description: String,
+    pub type_name: String,
+    pub default_value: String,
+}
+
+#[frb(mirror(GraphQlDraft))]
+pub struct _GraphQlDraft {
+    pub query: String,
+    pub variables: String,
+    pub operation: String,
+}
+
+/// Fetches the GraphQL schema of the server the request points at, using
+/// the request's own headers and authorization.
+pub async fn graphql_schema(
+    request: Request,
+    variables: Vec<Variable>,
+    settings: Settings,
+    cookies: Vec<Cookie>,
+) -> Result<GraphQlSchema, String> {
+    reqorb_core::graphql_schema(&request, &variables, &settings.send_options(), &cookies)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// The operations a GraphQL query names and what is wrong with it, if
+/// anything.
+#[frb(sync)]
+pub fn graphql_inspect(query: String) -> GraphQlQuery {
+    reqorb_core::graphql_inspect(&query)
+}
+
+/// A GraphQL query rewritten with consistent indentation.
+#[frb(sync)]
+pub fn graphql_format(query: String) -> Result<String, String> {
+    reqorb_core::graphql_format(&query).map_err(|e| e.to_string())
+}
+
+/// A query for one field of the schema's `query`, `mutation` or
+/// `subscription` type, or `None` when the schema has no such field.
+#[frb(sync)]
+pub fn graphql_draft(schema: GraphQlSchema, kind: String, field: String) -> Option<GraphQlDraft> {
+    reqorb_core::graphql_draft(&schema, &kind, &field)
 }
 
 /// The exchanges of a session as an HTTP Archive (HAR 1.2) document.
@@ -534,6 +620,7 @@ pub struct _HarEntry {
     pub request_headers: Vec<Header>,
     pub response_headers: Vec<Header>,
     pub request_body: Option<String>,
+    pub operation: Option<String>,
     pub response_body: Option<String>,
     pub body_note: Option<String>,
     pub phases: Vec<HarPhase>,

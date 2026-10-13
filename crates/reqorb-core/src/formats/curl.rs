@@ -165,6 +165,7 @@ pub(super) fn curl(text: &str, name_hint: &str) -> Result<ImportResult, Error> {
         .unwrap_or_default();
     let item_name = format!("{} {}", request.method, path).trim().to_string();
     request.url = url;
+    crate::graphql::detect(&mut request);
 
     Ok(ImportResult {
         source: "curl".into(),

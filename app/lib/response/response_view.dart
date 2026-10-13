@@ -120,6 +120,7 @@ class ResponseView extends StatelessWidget {
             tests: sent?.tests ?? const [],
             captured: sent?.captured ?? const [],
             captureProblems: sent?.captureProblems ?? const [],
+            graphqlErrors: sent?.graphqlErrors ?? const [],
             current: !sending,
             sessionSize: sessionSize,
             onExportSession: onExportSession,
@@ -147,12 +148,16 @@ class _Loaded extends StatelessWidget {
     required this.tests,
     required this.captured,
     required this.captureProblems,
+    required this.graphqlErrors,
   });
 
   /// How the request's tests came out, and what it captured.
   final List<TestResult> tests;
   final List<Variable> captured;
   final List<String> captureProblems;
+
+  /// What a GraphQL response says went wrong, whatever its status.
+  final List<String> graphqlErrors;
 
   final int sessionSize;
   final VoidCallback onExportSession;
@@ -233,6 +238,51 @@ class _Loaded extends StatelessWidget {
               ],
             ),
           ),
+          if (graphqlErrors.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: scheme.errorContainer.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  child: Column(
+                    key: const Key('graphql-errors'),
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        graphqlErrors.length == 1
+                            ? 'The query failed, though the status says '
+                                  '${response.status}'
+                            : '${graphqlErrors.length} errors, though the '
+                                  'status says ${response.status}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: scheme.onErrorContainer,
+                        ),
+                      ),
+                      // The first few say enough; the body has them all.
+                      for (final error in graphqlErrors.take(3))
+                        Text(
+                          error,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: scheme.onErrorContainer,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           // One rule under the tabs and the copy button alike.
           DecoratedBox(
             decoration: BoxDecoration(

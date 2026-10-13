@@ -142,15 +142,18 @@ impl Postman {
             }
             Some("graphql") => {
                 let gql = &body["graphql"];
-                let variables = str_field(gql, "variables")
-                    .and_then(|v| serde_json::from_str::<Value>(v).ok())
-                    .unwrap_or_else(|| serde_json::json!({}));
-                let payload = serde_json::json!({
-                    "query": str_field(gql, "query").unwrap_or(""),
-                    "variables": variables,
-                });
-                request.body = Some(serde_json::to_string_pretty(&payload).expect("valid JSON"));
-                Some("application/json")
+                request.body_mode = Some(BodyMode::GraphQl);
+                request.body = Some(str_field(gql, "query").unwrap_or("").to_string());
+                // Postman keeps the variables as JSON text; an empty
+                // object says no more than nothing at all.
+                request.graphql_variables = str_field(gql, "variables")
+                    .map(str::trim)
+                    .filter(|v| !v.is_empty() && v.replace(char::is_whitespace, "") != "{}")
+                    .map(str::to_string);
+                request.graphql_operation = str_field(gql, "operationName")
+                    .filter(|name| !name.is_empty())
+                    .map(str::to_string);
+                None
             }
             _ => None,
         };
@@ -405,6 +408,16 @@ fn postman_item(item: &Item) -> Value {
         }
         (BodyMode::Binary, Some(path)) => {
             out["body"] = json!({"mode": "file", "file": {"src": path}});
+        }
+        (BodyMode::GraphQl, query) => {
+            let mut graphql = json!({
+                "query": query.as_deref().unwrap_or(""),
+                "variables": request.graphql_variables.as_deref().unwrap_or(""),
+            });
+            if let Some(operation) = &request.graphql_operation {
+                graphql["operationName"] = json!(operation);
+            }
+            out["body"] = json!({"mode": "graphql", "graphql": graphql});
         }
         (BodyMode::Raw | BodyMode::UrlEncoded, Some(body)) => {
             let language = request

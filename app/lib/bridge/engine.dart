@@ -57,6 +57,30 @@ abstract class Engine {
     required List<Variable> variables,
   });
 
+  // ---------------------------------------------------------------- graphql
+
+  /// Fetches the schema of the GraphQL server [request] points at.
+  Future<GraphQlSchema> graphqlSchema({
+    required Request request,
+    required List<Variable> variables,
+    required Settings settings,
+    required List<Cookie> cookies,
+  });
+
+  /// The operations a query names, and what is wrong with it, if anything.
+  GraphQlQuery graphqlInspect({required String query});
+
+  /// The query with consistent indentation; throws when it cannot be read.
+  String graphqlFormat({required String query});
+
+  /// A query for one field of the schema's `query`, `mutation` or
+  /// `subscription` type.
+  GraphQlDraft? graphqlDraft({
+    required GraphQlSchema schema,
+    required String kind,
+    required String field,
+  });
+
   // ------------------------------------------------------------ description
 
   List<AuthChoice> authChoices();
@@ -167,6 +191,34 @@ class RustEngine extends Engine {
   @override
   Future<GrpcSchema> grpcLoadProto({required String path}) =>
       rust.grpcLoadProto(path: path);
+
+  @override
+  Future<GraphQlSchema> graphqlSchema({
+    required Request request,
+    required List<Variable> variables,
+    required Settings settings,
+    required List<Cookie> cookies,
+  }) => rust.graphqlSchema(
+    request: request,
+    variables: variables,
+    settings: settings,
+    cookies: cookies,
+  );
+
+  @override
+  GraphQlQuery graphqlInspect({required String query}) =>
+      rust.graphqlInspect(query: query);
+
+  @override
+  String graphqlFormat({required String query}) =>
+      rust.graphqlFormat(query: query);
+
+  @override
+  GraphQlDraft? graphqlDraft({
+    required GraphQlSchema schema,
+    required String kind,
+    required String field,
+  }) => rust.graphqlDraft(schema: schema, kind: kind, field: field);
 
   @override
   Future<GrpcReply> grpcCall({

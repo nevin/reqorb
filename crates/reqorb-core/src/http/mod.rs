@@ -17,9 +17,11 @@ pub(crate) use exchange::{Transport, execute};
 
 use crate::auth::{self, AuthKind};
 use crate::checks::{TestResult, capture, run_tests};
+use crate::graphql::{self, graphql_errors};
 use crate::vars::resolve;
 use crate::{
-    Cookie, Error, Exchange, HttpMode, Request, RequestSettings, Response, SendOptions, Variable,
+    BodyMode, Cookie, Error, Exchange, HttpMode, Request, RequestSettings, Response, SendOptions,
+    Variable,
 };
 
 /// A response plus the variables that were referenced but not defined.
@@ -38,6 +40,9 @@ pub struct Sent {
     pub captured: Vec<Variable>,
     /// Captures that found nothing, and why.
     pub capture_problems: Vec<String>,
+    /// For a GraphQL request, the errors the response reports. A GraphQL
+    /// server answers 200 even when the query failed.
+    pub graphql_errors: Vec<String>,
 }
 
 /// Substitutes `variables` into the request and sends it. Undefined
@@ -63,6 +68,11 @@ pub async fn send_with(
     let (response, exchanges) = send_logged(resolved.request, options, &mut jar).await?;
     let tests = run_tests(&request.tests, &response, variables);
     let (captured, capture_problems) = capture(&request.captures, &response);
+    let graphql_errors = if request.effective_body_mode() == BodyMode::GraphQl {
+        graphql_errors(&response.body)
+    } else {
+        Vec::new()
+    };
     Ok(Sent {
         response,
         unresolved: resolved.unresolved,
@@ -71,6 +81,7 @@ pub async fn send_with(
         tests,
         captured,
         capture_problems,
+        graphql_errors,
     })
 }
 
@@ -110,6 +121,7 @@ pub(super) async fn send_logged(
     if options.no_cache && !request.has_header("cache-control") {
         request.add_header("Cache-Control", "no-cache");
     }
+    graphql::check(&request)?;
     request.materialize();
     let http_mode = settings.http_mode.unwrap_or(options.http_mode);
     let use_jar = !settings.disable_cookie_jar;

@@ -5,6 +5,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::formats::util::str_field;
+use crate::graphql::{self, graphql_errors};
 use crate::redact::is_sensitive;
 use crate::{Error, Header, REDACTED};
 
@@ -63,6 +64,9 @@ pub struct HarEntry {
     pub response_headers: Vec<Header>,
     /// What was sent, as text; form fields are written one per line.
     pub request_body: Option<String>,
+    /// For a GraphQL request, what it runs, such as `query Users`; every
+    /// call to a GraphQL server shares one address.
+    pub operation: Option<String>,
     /// What came back, when it is text. Long bodies are cut short and
     /// binary ones left out, as `body_note` then says.
     pub response_body: Option<String>,
@@ -274,6 +278,7 @@ fn summarize(entry: &Value, offset_ms: u64) -> HarEntry {
         request_headers: headers(request),
         response_headers: headers(response),
         request_body: request_body(&request["postData"]),
+        operation: str_field(&request["postData"], "text").and_then(graphql::operation_of),
         response_body,
         body_note,
         // Phases the archive marks as not applicable (-1) or instant are
@@ -353,7 +358,10 @@ fn label(entry: &HarEntry) -> String {
         .map_or(entry.url.as_str(), |(_, r)| r);
     let path = rest.find('/').map_or("/", |at| &rest[at..]);
     let path = path.split(['?', '#']).next().unwrap_or(path);
-    format!("{} {path}", entry.method)
+    match &entry.operation {
+        Some(operation) => format!("{} {path} ({operation})", entry.method),
+        None => format!("{} {path}", entry.method),
+    }
 }
 
 fn plural(n: usize, one: &str, many: &str) -> String {
@@ -573,6 +581,25 @@ fn findings(entries: &[HarEntry], recorded: &[Value], own: bool) -> Vec<HarFindi
         "Each redirect is an extra round trip. Calling the final address \
          directly saves it.",
         |e| format!("{} {}", e.status, label(e)),
+    );
+
+    // A GraphQL server answers 200 whether or not the query worked.
+    let errors = |i: usize| {
+        let content = &recorded[i]["response"]["content"];
+        graphql_errors(str_field(content, "text").unwrap_or(""))
+    };
+    out.add(
+        Warning,
+        pick(&|i, e| e.operation.is_some() && e.status < 400 && !errors(i).is_empty()),
+        |n| {
+            format!(
+                "{} errors despite a successful status",
+                plural(n, "GraphQL response reports", "GraphQL responses report")
+            )
+        },
+        "GraphQL servers answer 200 even when a query fails, so the status \
+         alone does not show these. The response's `errors` say what went wrong.",
+        label,
     );
 
     // The same call made again, counting every copy after the first.

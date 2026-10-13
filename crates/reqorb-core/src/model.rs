@@ -40,6 +40,13 @@ pub struct Request {
     /// asks the server through reflection.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proto_path: Option<String>,
+    /// For a GraphQL request, its variables as a JSON object.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graphql_variables: Option<String>,
+    /// For a GraphQL request, which of the query's operations to run;
+    /// needed only when it holds several.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graphql_operation: Option<String>,
     /// Checks the response must pass, one per line, such as `status == 200`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tests: Vec<String>,
@@ -61,6 +68,10 @@ pub enum BodyMode {
     Raw,
     /// The contents of the file whose path is in `body`.
     Binary,
+    /// A GraphQL query in `body`, sent as JSON along with the request's
+    /// `graphql_variables`; in the URL instead when the method is GET.
+    #[serde(rename = "graphql")]
+    GraphQl,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -165,10 +176,14 @@ impl Request {
         }
     }
 
-    /// Turns url-encoded form fields into body text and a Content-Type
-    /// header, leaving `{{variables}}` readable. Everything that signs,
-    /// sends or exports a request can then treat it as plain text.
+    /// Turns url-encoded form fields and GraphQL queries into body text and
+    /// a Content-Type header, leaving `{{variables}}` readable. Everything
+    /// that signs, sends or exports a request can then treat it as plain
+    /// text.
     pub fn materialize(&mut self) {
+        if self.effective_body_mode() == BodyMode::GraphQl {
+            return crate::graphql::materialize(self);
+        }
         if self.effective_body_mode() != BodyMode::UrlEncoded || self.form.is_empty() {
             return;
         }

@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -315522784;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1686240465;
 
 // Section: executor
 
@@ -354,6 +354,145 @@ fn wire__crate__api__core__export_har_impl(
                 let output_ok = Ok::<_, ()>(crate::api::core::export_har(api_exchanges))?;
                 std::result::Result::Ok(output_ok)
             })())
+        },
+    )
+}
+fn wire__crate__api__core__graphql_draft_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "graphql_draft",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_schema = <crate::api::core::GraphQlSchema>::sse_decode(&mut deserializer);
+            let api_kind = <String>::sse_decode(&mut deserializer);
+            let api_field = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Ok::<_, ()>(crate::api::core::graphql_draft(
+                    api_schema, api_kind, api_field,
+                ))?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__core__graphql_format_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "graphql_format",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_query = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, String>((move || {
+                let output_ok = crate::api::core::graphql_format(api_query)?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__core__graphql_inspect_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "graphql_inspect",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_query = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Ok::<_, ()>(crate::api::core::graphql_inspect(api_query))?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__core__graphql_schema_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "graphql_schema",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_request = <crate::api::core::Request>::sse_decode(&mut deserializer);
+            let api_variables = <Vec<crate::api::core::Variable>>::sse_decode(&mut deserializer);
+            let api_settings = <crate::api::core::Settings>::sse_decode(&mut deserializer);
+            let api_cookies = <Vec<crate::api::core::Cookie>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok = crate::api::core::graphql_schema(
+                            api_request,
+                            api_variables,
+                            api_settings,
+                            api_cookies,
+                        )
+                        .await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
         },
     )
 }
@@ -1019,6 +1158,48 @@ const _: fn() = || {
         let _: bool = FormField.file;
     }
     {
+        let GraphQlArg = None::<crate::api::core::GraphQlArg>.unwrap();
+        let _: String = GraphQlArg.name;
+        let _: String = GraphQlArg.description;
+        let _: String = GraphQlArg.type_name;
+        let _: String = GraphQlArg.default_value;
+    }
+    {
+        let GraphQlDraft = None::<crate::api::core::GraphQlDraft>.unwrap();
+        let _: String = GraphQlDraft.query;
+        let _: String = GraphQlDraft.variables;
+        let _: String = GraphQlDraft.operation;
+    }
+    {
+        let GraphQlField = None::<crate::api::core::GraphQlField>.unwrap();
+        let _: String = GraphQlField.name;
+        let _: String = GraphQlField.description;
+        let _: String = GraphQlField.type_name;
+        let _: String = GraphQlField.named_type;
+        let _: Vec<crate::api::core::GraphQlArg> = GraphQlField.args;
+        let _: bool = GraphQlField.deprecated;
+    }
+    {
+        let GraphQlQuery = None::<crate::api::core::GraphQlQuery>.unwrap();
+        let _: Vec<String> = GraphQlQuery.operations;
+        let _: String = GraphQlQuery.problem;
+    }
+    {
+        let GraphQlSchema = None::<crate::api::core::GraphQlSchema>.unwrap();
+        let _: String = GraphQlSchema.query_type;
+        let _: String = GraphQlSchema.mutation_type;
+        let _: String = GraphQlSchema.subscription_type;
+        let _: Vec<crate::api::core::GraphQlType> = GraphQlSchema.types;
+    }
+    {
+        let GraphQlType = None::<crate::api::core::GraphQlType>.unwrap();
+        let _: String = GraphQlType.name;
+        let _: String = GraphQlType.kind;
+        let _: String = GraphQlType.description;
+        let _: Vec<crate::api::core::GraphQlField> = GraphQlType.fields;
+        let _: Vec<String> = GraphQlType.members;
+    }
+    {
         let GrpcCall = None::<crate::api::core::GrpcCall>.unwrap();
         let _: String = GrpcCall.url;
         let _: String = GrpcCall.method;
@@ -1072,6 +1253,7 @@ const _: fn() = || {
         let _: Vec<crate::api::core::Header> = HarEntry.request_headers;
         let _: Vec<crate::api::core::Header> = HarEntry.response_headers;
         let _: Option<String> = HarEntry.request_body;
+        let _: Option<String> = HarEntry.operation;
         let _: Option<String> = HarEntry.response_body;
         let _: Option<String> = HarEntry.body_note;
         let _: Vec<crate::api::core::HarPhase> = HarEntry.phases;
@@ -1132,6 +1314,8 @@ const _: fn() = || {
         let _: Vec<crate::api::core::FormField> = Request.form;
         let _: Option<String> = Request.grpc_method;
         let _: Option<String> = Request.proto_path;
+        let _: Option<String> = Request.graphql_variables;
+        let _: Option<String> = Request.graphql_operation;
         let _: Vec<String> = Request.tests;
         let _: Vec<String> = Request.captures;
     }
@@ -1168,6 +1352,7 @@ const _: fn() = || {
         let _: Vec<crate::api::core::TestResult> = Sent.tests;
         let _: Vec<crate::api::core::Variable> = Sent.captured;
         let _: Vec<String> = Sent.capture_problems;
+        let _: Vec<String> = Sent.graphql_errors;
     }
     {
         let Settings = None::<crate::api::core::Settings>.unwrap();
@@ -1351,6 +1536,7 @@ impl SseDecode for crate::api::core::BodyMode {
             2 => crate::api::core::BodyMode::UrlEncoded,
             3 => crate::api::core::BodyMode::Raw,
             4 => crate::api::core::BodyMode::Binary,
+            5 => crate::api::core::BodyMode::GraphQl,
             _ => unreachable!("Invalid variant for BodyMode: {}", inner),
         };
     }
@@ -1483,6 +1669,102 @@ impl SseDecode for crate::api::core::FormField {
     }
 }
 
+impl SseDecode for crate::api::core::GraphQlArg {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_name = <String>::sse_decode(deserializer);
+        let mut var_description = <String>::sse_decode(deserializer);
+        let mut var_typeName = <String>::sse_decode(deserializer);
+        let mut var_defaultValue = <String>::sse_decode(deserializer);
+        return crate::api::core::GraphQlArg {
+            name: var_name,
+            description: var_description,
+            type_name: var_typeName,
+            default_value: var_defaultValue,
+        };
+    }
+}
+
+impl SseDecode for crate::api::core::GraphQlDraft {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_query = <String>::sse_decode(deserializer);
+        let mut var_variables = <String>::sse_decode(deserializer);
+        let mut var_operation = <String>::sse_decode(deserializer);
+        return crate::api::core::GraphQlDraft {
+            query: var_query,
+            variables: var_variables,
+            operation: var_operation,
+        };
+    }
+}
+
+impl SseDecode for crate::api::core::GraphQlField {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_name = <String>::sse_decode(deserializer);
+        let mut var_description = <String>::sse_decode(deserializer);
+        let mut var_typeName = <String>::sse_decode(deserializer);
+        let mut var_namedType = <String>::sse_decode(deserializer);
+        let mut var_args = <Vec<crate::api::core::GraphQlArg>>::sse_decode(deserializer);
+        let mut var_deprecated = <bool>::sse_decode(deserializer);
+        return crate::api::core::GraphQlField {
+            name: var_name,
+            description: var_description,
+            type_name: var_typeName,
+            named_type: var_namedType,
+            args: var_args,
+            deprecated: var_deprecated,
+        };
+    }
+}
+
+impl SseDecode for crate::api::core::GraphQlQuery {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_operations = <Vec<String>>::sse_decode(deserializer);
+        let mut var_problem = <String>::sse_decode(deserializer);
+        return crate::api::core::GraphQlQuery {
+            operations: var_operations,
+            problem: var_problem,
+        };
+    }
+}
+
+impl SseDecode for crate::api::core::GraphQlSchema {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_queryType = <String>::sse_decode(deserializer);
+        let mut var_mutationType = <String>::sse_decode(deserializer);
+        let mut var_subscriptionType = <String>::sse_decode(deserializer);
+        let mut var_types = <Vec<crate::api::core::GraphQlType>>::sse_decode(deserializer);
+        return crate::api::core::GraphQlSchema {
+            query_type: var_queryType,
+            mutation_type: var_mutationType,
+            subscription_type: var_subscriptionType,
+            types: var_types,
+        };
+    }
+}
+
+impl SseDecode for crate::api::core::GraphQlType {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_name = <String>::sse_decode(deserializer);
+        let mut var_kind = <String>::sse_decode(deserializer);
+        let mut var_description = <String>::sse_decode(deserializer);
+        let mut var_fields = <Vec<crate::api::core::GraphQlField>>::sse_decode(deserializer);
+        let mut var_members = <Vec<String>>::sse_decode(deserializer);
+        return crate::api::core::GraphQlType {
+            name: var_name,
+            kind: var_kind,
+            description: var_description,
+            fields: var_fields,
+            members: var_members,
+        };
+    }
+}
+
 impl SseDecode for crate::api::core::GrpcCall {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1587,6 +1869,7 @@ impl SseDecode for crate::api::core::HarEntry {
         let mut var_requestHeaders = <Vec<crate::api::core::Header>>::sse_decode(deserializer);
         let mut var_responseHeaders = <Vec<crate::api::core::Header>>::sse_decode(deserializer);
         let mut var_requestBody = <Option<String>>::sse_decode(deserializer);
+        let mut var_operation = <Option<String>>::sse_decode(deserializer);
         let mut var_responseBody = <Option<String>>::sse_decode(deserializer);
         let mut var_bodyNote = <Option<String>>::sse_decode(deserializer);
         let mut var_phases = <Vec<crate::api::core::HarPhase>>::sse_decode(deserializer);
@@ -1604,6 +1887,7 @@ impl SseDecode for crate::api::core::HarEntry {
             request_headers: var_requestHeaders,
             response_headers: var_responseHeaders,
             request_body: var_requestBody,
+            operation: var_operation,
             response_body: var_responseBody,
             body_note: var_bodyNote,
             phases: var_phases,
@@ -1883,6 +2167,42 @@ impl SseDecode for Vec<crate::api::core::FormField> {
     }
 }
 
+impl SseDecode for Vec<crate::api::core::GraphQlArg> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::core::GraphQlArg>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::core::GraphQlField> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::core::GraphQlField>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::core::GraphQlType> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::core::GraphQlType>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<crate::api::core::GrpcMethod> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2070,6 +2390,17 @@ impl SseDecode for Option<crate::api::core::BodyMode> {
     }
 }
 
+impl SseDecode for Option<crate::api::core::GraphQlDraft> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::core::GraphQlDraft>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<crate::api::core::HttpMode> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2144,6 +2475,8 @@ impl SseDecode for crate::api::core::Request {
         let mut var_form = <Vec<crate::api::core::FormField>>::sse_decode(deserializer);
         let mut var_grpcMethod = <Option<String>>::sse_decode(deserializer);
         let mut var_protoPath = <Option<String>>::sse_decode(deserializer);
+        let mut var_graphqlVariables = <Option<String>>::sse_decode(deserializer);
+        let mut var_graphqlOperation = <Option<String>>::sse_decode(deserializer);
         let mut var_tests = <Vec<String>>::sse_decode(deserializer);
         let mut var_captures = <Vec<String>>::sse_decode(deserializer);
         return crate::api::core::Request {
@@ -2158,6 +2491,8 @@ impl SseDecode for crate::api::core::Request {
             form: var_form,
             grpc_method: var_grpcMethod,
             proto_path: var_protoPath,
+            graphql_variables: var_graphqlVariables,
+            graphql_operation: var_graphqlOperation,
             tests: var_tests,
             captures: var_captures,
         };
@@ -2226,6 +2561,7 @@ impl SseDecode for crate::api::core::Sent {
         let mut var_tests = <Vec<crate::api::core::TestResult>>::sse_decode(deserializer);
         let mut var_captured = <Vec<crate::api::core::Variable>>::sse_decode(deserializer);
         let mut var_captureProblems = <Vec<String>>::sse_decode(deserializer);
+        let mut var_graphqlErrors = <Vec<String>>::sse_decode(deserializer);
         return crate::api::core::Sent {
             response: var_response,
             unresolved: var_unresolved,
@@ -2234,6 +2570,7 @@ impl SseDecode for crate::api::core::Sent {
             tests: var_tests,
             captured: var_captured,
             capture_problems: var_captureProblems,
+            graphql_errors: var_graphqlErrors,
         };
     }
 }
@@ -2408,17 +2745,18 @@ fn pde_ffi_dispatcher_primary_impl(
         1 => wire__crate__api__core__analyze_har_impl(port, ptr, rust_vec_len, data_len),
         7 => wire__crate__api__core__export_collection_impl(port, ptr, rust_vec_len, data_len),
         8 => wire__crate__api__core__export_environment_impl(port, ptr, rust_vec_len, data_len),
-        11 => wire__crate__api__core__grpc_call_impl(port, ptr, rust_vec_len, data_len),
-        12 => wire__crate__api__core__grpc_load_proto_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__core__grpc_reflect_impl(port, ptr, rust_vec_len, data_len),
-        14 => wire__crate__api__core__import_har_impl(port, ptr, rust_vec_len, data_len),
-        15 => wire__crate__api__core__import_text_impl(port, ptr, rust_vec_len, data_len),
-        16 => wire__crate__api__core__import_url_impl(port, ptr, rust_vec_len, data_len),
-        17 => wire__crate__api__core__init_app_impl(port, ptr, rust_vec_len, data_len),
-        18 => wire__crate__api__core__load_workspace_impl(port, ptr, rust_vec_len, data_len),
-        23 => wire__crate__api__core__save_workspace_impl(port, ptr, rust_vec_len, data_len),
-        24 => wire__crate__api__core__send_request_impl(port, ptr, rust_vec_len, data_len),
-        26 => wire__crate__api__core__ws_open_impl(port, ptr, rust_vec_len, data_len),
+        14 => wire__crate__api__core__graphql_schema_impl(port, ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__core__grpc_call_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__core__grpc_load_proto_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__api__core__grpc_reflect_impl(port, ptr, rust_vec_len, data_len),
+        18 => wire__crate__api__core__import_har_impl(port, ptr, rust_vec_len, data_len),
+        19 => wire__crate__api__core__import_text_impl(port, ptr, rust_vec_len, data_len),
+        20 => wire__crate__api__core__import_url_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__core__init_app_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__core__load_workspace_impl(port, ptr, rust_vec_len, data_len),
+        27 => wire__crate__api__core__save_workspace_impl(port, ptr, rust_vec_len, data_len),
+        28 => wire__crate__api__core__send_request_impl(port, ptr, rust_vec_len, data_len),
+        30 => wire__crate__api__core__ws_open_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -2438,12 +2776,15 @@ fn pde_ffi_dispatcher_sync_impl(
         6 => wire__crate__api__core__default_settings_impl(ptr, rust_vec_len, data_len),
         9 => wire__crate__api__core__export_extension_impl(ptr, rust_vec_len, data_len),
         10 => wire__crate__api__core__export_har_impl(ptr, rust_vec_len, data_len),
-        19 => wire__crate__api__core__redact_collection_impl(ptr, rust_vec_len, data_len),
-        20 => wire__crate__api__core__redact_environment_impl(ptr, rust_vec_len, data_len),
-        21 => wire__crate__api__core__redact_exchanges_impl(ptr, rust_vec_len, data_len),
-        22 => wire__crate__api__core__redact_text_impl(ptr, rust_vec_len, data_len),
-        25 => wire__crate__api__core__ws_close_impl(ptr, rust_vec_len, data_len),
-        27 => wire__crate__api__core__ws_send_impl(ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__core__graphql_draft_impl(ptr, rust_vec_len, data_len),
+        12 => wire__crate__api__core__graphql_format_impl(ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__core__graphql_inspect_impl(ptr, rust_vec_len, data_len),
+        23 => wire__crate__api__core__redact_collection_impl(ptr, rust_vec_len, data_len),
+        24 => wire__crate__api__core__redact_environment_impl(ptr, rust_vec_len, data_len),
+        25 => wire__crate__api__core__redact_exchanges_impl(ptr, rust_vec_len, data_len),
+        26 => wire__crate__api__core__redact_text_impl(ptr, rust_vec_len, data_len),
+        29 => wire__crate__api__core__ws_close_impl(ptr, rust_vec_len, data_len),
+        31 => wire__crate__api__core__ws_send_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -2598,6 +2939,7 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::BodyMode> {
             crate::api::core::BodyMode::UrlEncoded => 2.into_dart(),
             crate::api::core::BodyMode::Raw => 3.into_dart(),
             crate::api::core::BodyMode::Binary => 4.into_dart(),
+            crate::api::core::BodyMode::GraphQl => 5.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -2796,6 +3138,144 @@ impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::core::FormField>>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::GraphQlArg> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.0.name.into_into_dart().into_dart(),
+            self.0.description.into_into_dart().into_dart(),
+            self.0.type_name.into_into_dart().into_dart(),
+            self.0.default_value.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for FrbWrapper<crate::api::core::GraphQlArg>
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::core::GraphQlArg>>
+    for crate::api::core::GraphQlArg
+{
+    fn into_into_dart(self) -> FrbWrapper<crate::api::core::GraphQlArg> {
+        self.into()
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::GraphQlDraft> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.0.query.into_into_dart().into_dart(),
+            self.0.variables.into_into_dart().into_dart(),
+            self.0.operation.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for FrbWrapper<crate::api::core::GraphQlDraft>
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::core::GraphQlDraft>>
+    for crate::api::core::GraphQlDraft
+{
+    fn into_into_dart(self) -> FrbWrapper<crate::api::core::GraphQlDraft> {
+        self.into()
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::GraphQlField> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.0.name.into_into_dart().into_dart(),
+            self.0.description.into_into_dart().into_dart(),
+            self.0.type_name.into_into_dart().into_dart(),
+            self.0.named_type.into_into_dart().into_dart(),
+            self.0.args.into_into_dart().into_dart(),
+            self.0.deprecated.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for FrbWrapper<crate::api::core::GraphQlField>
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::core::GraphQlField>>
+    for crate::api::core::GraphQlField
+{
+    fn into_into_dart(self) -> FrbWrapper<crate::api::core::GraphQlField> {
+        self.into()
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::GraphQlQuery> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.0.operations.into_into_dart().into_dart(),
+            self.0.problem.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for FrbWrapper<crate::api::core::GraphQlQuery>
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::core::GraphQlQuery>>
+    for crate::api::core::GraphQlQuery
+{
+    fn into_into_dart(self) -> FrbWrapper<crate::api::core::GraphQlQuery> {
+        self.into()
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::GraphQlSchema> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.0.query_type.into_into_dart().into_dart(),
+            self.0.mutation_type.into_into_dart().into_dart(),
+            self.0.subscription_type.into_into_dart().into_dart(),
+            self.0.types.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for FrbWrapper<crate::api::core::GraphQlSchema>
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::core::GraphQlSchema>>
+    for crate::api::core::GraphQlSchema
+{
+    fn into_into_dart(self) -> FrbWrapper<crate::api::core::GraphQlSchema> {
+        self.into()
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::GraphQlType> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.0.name.into_into_dart().into_dart(),
+            self.0.kind.into_into_dart().into_dart(),
+            self.0.description.into_into_dart().into_dart(),
+            self.0.fields.into_into_dart().into_dart(),
+            self.0.members.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for FrbWrapper<crate::api::core::GraphQlType>
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::core::GraphQlType>>
+    for crate::api::core::GraphQlType
+{
+    fn into_into_dart(self) -> FrbWrapper<crate::api::core::GraphQlType> {
+        self.into()
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::GrpcCall> {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -2931,6 +3411,7 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::HarEntry> {
             self.0.request_headers.into_into_dart().into_dart(),
             self.0.response_headers.into_into_dart().into_dart(),
             self.0.request_body.into_into_dart().into_dart(),
+            self.0.operation.into_into_dart().into_dart(),
             self.0.response_body.into_into_dart().into_dart(),
             self.0.body_note.into_into_dart().into_dart(),
             self.0.phases.into_into_dart().into_dart(),
@@ -3213,6 +3694,8 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::Request> {
             self.0.form.into_into_dart().into_dart(),
             self.0.grpc_method.into_into_dart().into_dart(),
             self.0.proto_path.into_into_dart().into_dart(),
+            self.0.graphql_variables.into_into_dart().into_dart(),
+            self.0.graphql_operation.into_into_dart().into_dart(),
             self.0.tests.into_into_dart().into_dart(),
             self.0.captures.into_into_dart().into_dart(),
         ]
@@ -3297,6 +3780,7 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::Sent> {
             self.0.tests.into_into_dart().into_dart(),
             self.0.captured.into_into_dart().into_dart(),
             self.0.capture_problems.into_into_dart().into_dart(),
+            self.0.graphql_errors.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -3584,6 +4068,7 @@ impl SseEncode for crate::api::core::BodyMode {
                 crate::api::core::BodyMode::UrlEncoded => 2,
                 crate::api::core::BodyMode::Raw => 3,
                 crate::api::core::BodyMode::Binary => 4,
+                crate::api::core::BodyMode::GraphQl => 5,
                 _ => {
                     unimplemented!("");
                 }
@@ -3694,6 +4179,66 @@ impl SseEncode for crate::api::core::FormField {
     }
 }
 
+impl SseEncode for crate::api::core::GraphQlArg {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.name, serializer);
+        <String>::sse_encode(self.description, serializer);
+        <String>::sse_encode(self.type_name, serializer);
+        <String>::sse_encode(self.default_value, serializer);
+    }
+}
+
+impl SseEncode for crate::api::core::GraphQlDraft {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.query, serializer);
+        <String>::sse_encode(self.variables, serializer);
+        <String>::sse_encode(self.operation, serializer);
+    }
+}
+
+impl SseEncode for crate::api::core::GraphQlField {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.name, serializer);
+        <String>::sse_encode(self.description, serializer);
+        <String>::sse_encode(self.type_name, serializer);
+        <String>::sse_encode(self.named_type, serializer);
+        <Vec<crate::api::core::GraphQlArg>>::sse_encode(self.args, serializer);
+        <bool>::sse_encode(self.deprecated, serializer);
+    }
+}
+
+impl SseEncode for crate::api::core::GraphQlQuery {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Vec<String>>::sse_encode(self.operations, serializer);
+        <String>::sse_encode(self.problem, serializer);
+    }
+}
+
+impl SseEncode for crate::api::core::GraphQlSchema {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.query_type, serializer);
+        <String>::sse_encode(self.mutation_type, serializer);
+        <String>::sse_encode(self.subscription_type, serializer);
+        <Vec<crate::api::core::GraphQlType>>::sse_encode(self.types, serializer);
+    }
+}
+
+impl SseEncode for crate::api::core::GraphQlType {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.name, serializer);
+        <String>::sse_encode(self.kind, serializer);
+        <String>::sse_encode(self.description, serializer);
+        <Vec<crate::api::core::GraphQlField>>::sse_encode(self.fields, serializer);
+        <Vec<String>>::sse_encode(self.members, serializer);
+    }
+}
+
 impl SseEncode for crate::api::core::GrpcCall {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3764,6 +4309,7 @@ impl SseEncode for crate::api::core::HarEntry {
         <Vec<crate::api::core::Header>>::sse_encode(self.request_headers, serializer);
         <Vec<crate::api::core::Header>>::sse_encode(self.response_headers, serializer);
         <Option<String>>::sse_encode(self.request_body, serializer);
+        <Option<String>>::sse_encode(self.operation, serializer);
         <Option<String>>::sse_encode(self.response_body, serializer);
         <Option<String>>::sse_encode(self.body_note, serializer);
         <Vec<crate::api::core::HarPhase>>::sse_encode(self.phases, serializer);
@@ -4003,6 +4549,36 @@ impl SseEncode for Vec<crate::api::core::FormField> {
     }
 }
 
+impl SseEncode for Vec<crate::api::core::GraphQlArg> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::core::GraphQlArg>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::core::GraphQlField> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::core::GraphQlField>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::core::GraphQlType> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::core::GraphQlType>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<crate::api::core::GrpcMethod> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -4163,6 +4739,16 @@ impl SseEncode for Option<crate::api::core::BodyMode> {
     }
 }
 
+impl SseEncode for Option<crate::api::core::GraphQlDraft> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::core::GraphQlDraft>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<crate::api::core::HttpMode> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -4234,6 +4820,8 @@ impl SseEncode for crate::api::core::Request {
         <Vec<crate::api::core::FormField>>::sse_encode(self.form, serializer);
         <Option<String>>::sse_encode(self.grpc_method, serializer);
         <Option<String>>::sse_encode(self.proto_path, serializer);
+        <Option<String>>::sse_encode(self.graphql_variables, serializer);
+        <Option<String>>::sse_encode(self.graphql_operation, serializer);
         <Vec<String>>::sse_encode(self.tests, serializer);
         <Vec<String>>::sse_encode(self.captures, serializer);
     }
@@ -4279,6 +4867,7 @@ impl SseEncode for crate::api::core::Sent {
         <Vec<crate::api::core::TestResult>>::sse_encode(self.tests, serializer);
         <Vec<crate::api::core::Variable>>::sse_encode(self.captured, serializer);
         <Vec<String>>::sse_encode(self.capture_problems, serializer);
+        <Vec<String>>::sse_encode(self.graphql_errors, serializer);
     }
 }
 

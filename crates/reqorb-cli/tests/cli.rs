@@ -9,6 +9,8 @@ use std::process::{Command, Output};
 ///
 /// - `POST /login` answers `{"token":"t-1","id":7}`
 /// - `GET /me` answers with the `X-Token` header and the query it was sent
+/// - `POST /graphql` answers a GraphQL request: its schema when asked, an
+///   error for a query naming `fail`, otherwise what it was sent
 /// - `GET /logo.png` answers with bytes that are not text
 /// - anything else is a 404
 fn serve() -> String {
@@ -67,6 +69,7 @@ fn answer(stream: TcpStream) {
                 "application/json",
                 format!(r#"{{"token":"{token}","query":"{query}"}}"#).into_bytes(),
             ),
+            ("POST", "/graphql") => ("200 OK", "application/json", graphql(&body)),
             ("GET", "/logo.png") => ("200 OK", "image/png", vec![0x89, b'P', b'N', b'G', 0xff]),
             _ => ("404 Not Found", "text/plain", b"nothing here".to_vec()),
         };
@@ -78,6 +81,38 @@ fn answer(stream: TcpStream) {
         .unwrap();
         stream.write_all(&body).unwrap();
     }
+}
+
+fn graphql(body: &[u8]) -> Vec<u8> {
+    let sent: serde_json::Value = serde_json::from_slice(body).unwrap_or_default();
+    let query = sent["query"].as_str().unwrap_or("");
+    let answer = if query.contains("__schema") {
+        serde_json::json!({"data": {"__schema": {
+            "queryType": {"name": "Query"}, "mutationType": null, "subscriptionType": null,
+            "types": [
+                {"kind": "OBJECT", "name": "Query", "description": "", "fields": [{
+                    "name": "user", "description": "", "isDeprecated": false,
+                    "args": [{"name": "id", "description": "", "defaultValue": null,
+                        "type": {"kind": "NON_NULL", "name": null,
+                            "ofType": {"kind": "SCALAR", "name": "ID"}}}],
+                    "type": {"kind": "OBJECT", "name": "User"},
+                }]},
+                {"kind": "OBJECT", "name": "User", "description": "", "fields": [{
+                    "name": "name", "description": "", "isDeprecated": false, "args": [],
+                    "type": {"kind": "SCALAR", "name": "String"},
+                }]},
+                {"kind": "SCALAR", "name": "ID", "description": ""},
+                {"kind": "SCALAR", "name": "String", "description": ""},
+            ],
+        }}})
+    } else if query.contains("fail") {
+        serde_json::json!({"data": null, "errors": [{"message": "It failed", "path": ["fail"]}]})
+    } else {
+        serde_json::json!({"data": {
+            "variables": sent["variables"], "operation": sent["operationName"],
+        }})
+    };
+    answer.to_string().into_bytes()
 }
 
 fn reqorb(args: &[&str]) -> Output {
@@ -255,4 +290,57 @@ fn keeps_file_bodies_inside_the_working_directory() {
         "--allow-outside",
     ]);
     assert!(allowed.status.success(), "{}", stderr(&allowed));
+}
+
+#[test]
+fn sends_graphql_and_prints_a_schema() {
+    let base = serve();
+    let url = format!("{base}/graphql");
+
+    let sent = reqorb(&[
+        "POST",
+        &url,
+        "--graphql",
+        "query User($id: ID!) { user(id: $id) { name } }",
+        "--variables",
+        r#"{"id": {{id}}}"#,
+        "--operation",
+        "User",
+        "--var",
+        "id=7",
+    ]);
+    assert!(sent.status.success(), "{}", stderr(&sent));
+    assert_eq!(
+        stdout(&sent),
+        r#"{"data":{"variables":{"id":7},"operation":"User"}}"#
+    );
+
+    // The server says 200; the errors in the answer make it a failure,
+    // unless the request's own tests say what to expect.
+    let failed = reqorb(&["POST", &url, "--graphql", "{ fail }"]);
+    assert_eq!(failed.status.code(), Some(1));
+    assert!(stderr(&failed).contains("graphql error: It failed (at fail)"));
+    let expected = reqorb(&[
+        "POST",
+        &url,
+        "--graphql",
+        "{ fail }",
+        "--test",
+        "body.errors[0].message == It failed",
+    ]);
+    assert!(expected.status.success());
+
+    let broken = reqorb(&["POST", &url, "--graphql", "{ a }", "--variables", "[1]"]);
+    assert_eq!(broken.status.code(), Some(2));
+    assert!(stderr(&broken).contains("GraphQL variables must be a JSON object"));
+
+    let schema = reqorb(&["POST", &url, "--schema"]);
+    assert!(schema.status.success(), "{}", stderr(&schema));
+    assert_eq!(
+        stdout(&schema),
+        "type Query {\n  user(id: ID!): User\n}\n\ntype User {\n  name: String\n}\n"
+    );
+    let none = reqorb(&["POST", &format!("{base}/login"), "--schema"]);
+    assert_eq!(none.status.code(), Some(2));
+    assert!(stderr(&none).contains("the answer holds no schema"));
 }

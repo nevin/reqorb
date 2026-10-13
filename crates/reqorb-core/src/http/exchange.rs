@@ -187,7 +187,10 @@ async fn execute_once(
         builder = builder.header("Cookie", cookies);
     }
     match (mode, &request.body) {
-        (BodyMode::Raw | BodyMode::UrlEncoded, Some(body)) => builder = builder.body(body.clone()),
+        // A GraphQL request is turned into a raw one before it gets here.
+        (BodyMode::Raw | BodyMode::UrlEncoded | BodyMode::GraphQl, Some(body)) => {
+            builder = builder.body(body.clone())
+        }
         (BodyMode::Binary, Some(path)) if !path.trim().is_empty() => {
             let path = path.trim();
             let bytes = transport.files.read(path)?;

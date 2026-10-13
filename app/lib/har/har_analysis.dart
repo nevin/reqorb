@@ -91,7 +91,10 @@ class _HarAnalysisPageState extends State<HarAnalysisPage> {
       ..removeWhere((w) => w.isEmpty);
     bool matches(int i) {
       final e = entries[i];
-      final text = '${e.method} ${e.url} ${e.status} ${e.kind}'.toLowerCase();
+      final text =
+          '${e.method} ${e.url} ${e.status} ${e.kind} '
+                  '${e.operation ?? ''}'
+              .toLowerCase();
       return words.every(text.contains);
     }
 
@@ -593,6 +596,12 @@ class _EntryRow extends StatelessWidget {
                 TextSpan(
                   children: [
                     TextSpan(text: _path, style: small),
+                    // Calls to a GraphQL server differ only in this.
+                    if (entry.operation case final operation?)
+                      TextSpan(
+                        text: '  $operation',
+                        style: small.copyWith(fontWeight: FontWeight.w600),
+                      ),
                     TextSpan(text: '  ${entry.host}', style: muted),
                   ],
                 ),

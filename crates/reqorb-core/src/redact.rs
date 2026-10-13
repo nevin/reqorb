@@ -223,6 +223,53 @@ fn redact_body(body: &str, headers: &[Header]) -> String {
     }
 }
 
+/// Masks the text given to a sensitive argument written into a GraphQL
+/// query, as in `login(password: "hunter2")`.
+fn redact_query(query: &str) -> String {
+    let mut out = String::with_capacity(query.len());
+    let mut rest = query;
+    while let Some(colon) = rest.find(':') {
+        let (before, after) = rest.split_at(colon);
+        let name_at = before
+            .trim_end()
+            .rfind(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+            .map_or(0, |at| at + 1);
+        let name = before[name_at..].trim_end();
+        let value = after[1..].trim_start();
+        let text = value
+            .strip_prefix('"')
+            .filter(|_| !value.starts_with("\"\"\""))
+            .and_then(|text| {
+                // The closing quote is the first one not escaped.
+                let mut escaped = false;
+                text.find(|c| {
+                    let closes = c == '"' && !escaped;
+                    escaped = c == '\\' && !escaped;
+                    closes
+                })
+                .map(|end| &text[..end])
+            });
+        match text {
+            Some(text) if is_sensitive(name) => {
+                let skipped = after.len() - value.len();
+                out.push_str(before);
+                out.push_str(&after[..skipped]);
+                out.push('"');
+                out.push_str(&mask(text));
+                out.push('"');
+                rest = &value[text.len() + 2..];
+            }
+            _ => {
+                out.push_str(before);
+                out.push(':');
+                rest = &after[1..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
 fn redact_request(request: &mut Request) {
     request.url = redact_url(&request.url);
     redact_headers(&mut request.headers);
@@ -235,6 +282,10 @@ fn redact_request(request: &mut Request) {
                 .body
                 .as_deref()
                 .map(|b| redact_body(b, &request.headers));
+        }
+        BodyMode::GraphQl => {
+            request.body = request.body.as_deref().map(redact_query);
+            request.graphql_variables = request.graphql_variables.as_deref().map(redact_text);
         }
         // A binary body is a file path; form-data is in `form`.
         BodyMode::None | BodyMode::FormData | BodyMode::Binary => {}
