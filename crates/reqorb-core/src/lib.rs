@@ -2,6 +2,7 @@
 
 mod analyze;
 mod auth;
+mod checks;
 mod cookies;
 mod export;
 mod grpc;
@@ -17,6 +18,7 @@ use std::time::{Duration, Instant};
 
 pub use analyze::{HarCount, HarEntry, HarFinding, HarPhase, HarReport, HarSeverity, analyze_har};
 pub use auth::{Auth, AuthField, AuthKind, AuthParam, auth_fields};
+pub use checks::{TestResult, capture, run_tests};
 pub use cookies::{Cookie, cookie_header, store_set_cookie};
 pub use export::{ExportFormat, export_collection, export_environment, export_native, to_curl};
 pub use grpc::{
@@ -83,6 +85,12 @@ pub struct Sent {
     /// Every HTTP exchange the send made, oldest first: redirects and
     /// authorization round trips as well as the final one.
     pub exchanges: Vec<Exchange>,
+    /// How each of the request's tests came out.
+    pub tests: Vec<TestResult>,
+    /// Variables the request captured from the response, for later requests.
+    pub captured: Vec<Variable>,
+    /// Captures that found nothing, and why.
+    pub capture_problems: Vec<String>,
 }
 
 /// Substitutes `variables` into the request and sends it. Undefined
@@ -106,11 +114,16 @@ pub async fn send_with(
     }
     let mut jar = cookies.to_vec();
     let (response, exchanges) = send_logged(resolved.request, options, &mut jar).await?;
+    let tests = run_tests(&request.tests, &response, variables);
+    let (captured, capture_problems) = capture(&request.captures, &response);
     Ok(Sent {
         response,
         unresolved: resolved.unresolved,
         cookies: jar,
         exchanges,
+        tests,
+        captured,
+        capture_problems,
     })
 }
 

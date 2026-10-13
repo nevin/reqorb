@@ -219,6 +219,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
+  List<TestResult> dco_decode_list_test_result(dynamic raw);
+
+  @protected
   List<Variable> dco_decode_list_variable(dynamic raw);
 
   @protected
@@ -259,6 +262,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   Settings dco_decode_settings(dynamic raw);
+
+  @protected
+  TestResult dco_decode_test_result(dynamic raw);
 
   @protected
   int dco_decode_u_16(dynamic raw);
@@ -487,6 +493,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
+  List<TestResult> sse_decode_list_test_result(SseDeserializer deserializer);
+
+  @protected
   List<Variable> sse_decode_list_variable(SseDeserializer deserializer);
 
   @protected
@@ -529,6 +538,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   Settings sse_decode_settings(SseDeserializer deserializer);
+
+  @protected
+  TestResult sse_decode_test_result(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_16(SseDeserializer deserializer);
@@ -813,6 +825,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_test_result(
+    List<TestResult> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_variable(List<Variable> self, SseSerializer serializer);
 
   @protected
@@ -868,6 +886,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_settings(Settings self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_test_result(TestResult self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_16(int self, SseSerializer serializer);

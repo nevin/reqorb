@@ -40,6 +40,13 @@ pub struct Request {
     /// asks the server through reflection.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proto_path: Option<String>,
+    /// Checks the response must pass, one per line, such as `status == 200`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tests: Vec<String>,
+    /// Values to keep from the response for later requests, one per line,
+    /// such as `token = body.access_token`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub captures: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

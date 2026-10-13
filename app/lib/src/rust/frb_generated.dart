@@ -1480,6 +1480,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<TestResult> dco_decode_list_test_result(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_test_result).toList();
+  }
+
+  @protected
   List<Variable> dco_decode_list_variable(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_variable).toList();
@@ -1537,8 +1543,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Request dco_decode_request(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 11)
-      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
+    if (arr.length != 13)
+      throw Exception('unexpected arr length: expect 13 but see ${arr.length}');
     return Request(
       method: dco_decode_String(arr[0]),
       url: dco_decode_String(arr[1]),
@@ -1551,6 +1557,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       form: dco_decode_list_form_field(arr[8]),
       grpcMethod: dco_decode_opt_String(arr[9]),
       protoPath: dco_decode_opt_String(arr[10]),
+      tests: dco_decode_list_String(arr[11]),
+      captures: dco_decode_list_String(arr[12]),
     );
   }
 
@@ -1595,13 +1603,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Sent dco_decode_sent(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
     return Sent(
       response: dco_decode_response(arr[0]),
       unresolved: dco_decode_list_String(arr[1]),
       cookies: dco_decode_list_cookie(arr[2]),
       exchanges: dco_decode_list_exchange(arr[3]),
+      tests: dco_decode_list_test_result(arr[4]),
+      captured: dco_decode_list_variable(arr[5]),
+      captureProblems: dco_decode_list_String(arr[6]),
     );
   }
 
@@ -1615,6 +1626,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       theme: dco_decode_app_theme(arr[0]),
       httpMode: dco_decode_http_mode(arr[1]),
       timeoutSecs: dco_decode_u_32(arr[2]),
+    );
+  }
+
+  @protected
+  TestResult dco_decode_test_result(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return TestResult(
+      test: dco_decode_String(arr[0]),
+      passed: dco_decode_bool(arr[1]),
+      detail: dco_decode_String(arr[2]),
     );
   }
 
@@ -2390,6 +2414,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<TestResult> sse_decode_list_test_result(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <TestResult>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_test_result(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<Variable> sse_decode_list_variable(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -2507,6 +2543,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_form = sse_decode_list_form_field(deserializer);
     var var_grpcMethod = sse_decode_opt_String(deserializer);
     var var_protoPath = sse_decode_opt_String(deserializer);
+    var var_tests = sse_decode_list_String(deserializer);
+    var var_captures = sse_decode_list_String(deserializer);
     return Request(
       method: var_method,
       url: var_url,
@@ -2519,6 +2557,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       form: var_form,
       grpcMethod: var_grpcMethod,
       protoPath: var_protoPath,
+      tests: var_tests,
+      captures: var_captures,
     );
   }
 
@@ -2577,11 +2617,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_unresolved = sse_decode_list_String(deserializer);
     var var_cookies = sse_decode_list_cookie(deserializer);
     var var_exchanges = sse_decode_list_exchange(deserializer);
+    var var_tests = sse_decode_list_test_result(deserializer);
+    var var_captured = sse_decode_list_variable(deserializer);
+    var var_captureProblems = sse_decode_list_String(deserializer);
     return Sent(
       response: var_response,
       unresolved: var_unresolved,
       cookies: var_cookies,
       exchanges: var_exchanges,
+      tests: var_tests,
+      captured: var_captured,
+      captureProblems: var_captureProblems,
     );
   }
 
@@ -2596,6 +2642,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       httpMode: var_httpMode,
       timeoutSecs: var_timeoutSecs,
     );
+  }
+
+  @protected
+  TestResult sse_decode_test_result(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_test = sse_decode_String(deserializer);
+    var var_passed = sse_decode_bool(deserializer);
+    var var_detail = sse_decode_String(deserializer);
+    return TestResult(test: var_test, passed: var_passed, detail: var_detail);
   }
 
   @protected
@@ -3281,6 +3336,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_test_result(
+    List<TestResult> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_test_result(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_variable(List<Variable> self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
@@ -3401,6 +3468,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_form_field(self.form, serializer);
     sse_encode_opt_String(self.grpcMethod, serializer);
     sse_encode_opt_String(self.protoPath, serializer);
+    sse_encode_list_String(self.tests, serializer);
+    sse_encode_list_String(self.captures, serializer);
   }
 
   @protected
@@ -3440,6 +3509,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_String(self.unresolved, serializer);
     sse_encode_list_cookie(self.cookies, serializer);
     sse_encode_list_exchange(self.exchanges, serializer);
+    sse_encode_list_test_result(self.tests, serializer);
+    sse_encode_list_variable(self.captured, serializer);
+    sse_encode_list_String(self.captureProblems, serializer);
   }
 
   @protected
@@ -3448,6 +3520,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_app_theme(self.theme, serializer);
     sse_encode_http_mode(self.httpMode, serializer);
     sse_encode_u_32(self.timeoutSecs, serializer);
+  }
+
+  @protected
+  void sse_encode_test_result(TestResult self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.test, serializer);
+    sse_encode_bool(self.passed, serializer);
+    sse_encode_String(self.detail, serializer);
   }
 
   @protected

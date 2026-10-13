@@ -1067,6 +1067,8 @@ const _: fn() = || {
         let _: Vec<crate::api::core::FormField> = Request.form;
         let _: Option<String> = Request.grpc_method;
         let _: Option<String> = Request.proto_path;
+        let _: Vec<String> = Request.tests;
+        let _: Vec<String> = Request.captures;
     }
     {
         let RequestSettings = None::<crate::api::core::RequestSettings>.unwrap();
@@ -1097,12 +1099,21 @@ const _: fn() = || {
         let _: Vec<String> = Sent.unresolved;
         let _: Vec<crate::api::core::Cookie> = Sent.cookies;
         let _: Vec<crate::api::core::Exchange> = Sent.exchanges;
+        let _: Vec<crate::api::core::TestResult> = Sent.tests;
+        let _: Vec<crate::api::core::Variable> = Sent.captured;
+        let _: Vec<String> = Sent.capture_problems;
     }
     {
         let Settings = None::<crate::api::core::Settings>.unwrap();
         let _: crate::api::core::AppTheme = Settings.theme;
         let _: crate::api::core::HttpMode = Settings.http_mode;
         let _: u32 = Settings.timeout_secs;
+    }
+    {
+        let TestResult = None::<crate::api::core::TestResult>.unwrap();
+        let _: String = TestResult.test;
+        let _: bool = TestResult.passed;
+        let _: String = TestResult.detail;
     }
     {
         let Variable = None::<crate::api::core::Variable>.unwrap();
@@ -1861,6 +1872,18 @@ impl SseDecode for Vec<u8> {
     }
 }
 
+impl SseDecode for Vec<crate::api::core::TestResult> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::core::TestResult>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<crate::api::core::Variable> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1978,6 +2001,8 @@ impl SseDecode for crate::api::core::Request {
         let mut var_form = <Vec<crate::api::core::FormField>>::sse_decode(deserializer);
         let mut var_grpcMethod = <Option<String>>::sse_decode(deserializer);
         let mut var_protoPath = <Option<String>>::sse_decode(deserializer);
+        let mut var_tests = <Vec<String>>::sse_decode(deserializer);
+        let mut var_captures = <Vec<String>>::sse_decode(deserializer);
         return crate::api::core::Request {
             method: var_method,
             url: var_url,
@@ -1990,6 +2015,8 @@ impl SseDecode for crate::api::core::Request {
             form: var_form,
             grpc_method: var_grpcMethod,
             proto_path: var_protoPath,
+            tests: var_tests,
+            captures: var_captures,
         };
     }
 }
@@ -2051,11 +2078,17 @@ impl SseDecode for crate::api::core::Sent {
         let mut var_unresolved = <Vec<String>>::sse_decode(deserializer);
         let mut var_cookies = <Vec<crate::api::core::Cookie>>::sse_decode(deserializer);
         let mut var_exchanges = <Vec<crate::api::core::Exchange>>::sse_decode(deserializer);
+        let mut var_tests = <Vec<crate::api::core::TestResult>>::sse_decode(deserializer);
+        let mut var_captured = <Vec<crate::api::core::Variable>>::sse_decode(deserializer);
+        let mut var_captureProblems = <Vec<String>>::sse_decode(deserializer);
         return crate::api::core::Sent {
             response: var_response,
             unresolved: var_unresolved,
             cookies: var_cookies,
             exchanges: var_exchanges,
+            tests: var_tests,
+            captured: var_captured,
+            capture_problems: var_captureProblems,
         };
     }
 }
@@ -2070,6 +2103,20 @@ impl SseDecode for crate::api::core::Settings {
             theme: var_theme,
             http_mode: var_httpMode,
             timeout_secs: var_timeoutSecs,
+        };
+    }
+}
+
+impl SseDecode for crate::api::core::TestResult {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_test = <String>::sse_decode(deserializer);
+        let mut var_passed = <bool>::sse_decode(deserializer);
+        let mut var_detail = <String>::sse_decode(deserializer);
+        return crate::api::core::TestResult {
+            test: var_test,
+            passed: var_passed,
+            detail: var_detail,
         };
     }
 }
@@ -2905,6 +2952,8 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::Request> {
             self.0.form.into_into_dart().into_dart(),
             self.0.grpc_method.into_into_dart().into_dart(),
             self.0.proto_path.into_into_dart().into_dart(),
+            self.0.tests.into_into_dart().into_dart(),
+            self.0.captures.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -2983,6 +3032,9 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::Sent> {
             self.0.unresolved.into_into_dart().into_dart(),
             self.0.cookies.into_into_dart().into_dart(),
             self.0.exchanges.into_into_dart().into_dart(),
+            self.0.tests.into_into_dart().into_dart(),
+            self.0.captured.into_into_dart().into_dart(),
+            self.0.capture_problems.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -3017,6 +3069,28 @@ impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::core::Settings>>
     for crate::api::core::Settings
 {
     fn into_into_dart(self) -> FrbWrapper<crate::api::core::Settings> {
+        self.into()
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::TestResult> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.0.test.into_into_dart().into_dart(),
+            self.0.passed.into_into_dart().into_dart(),
+            self.0.detail.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for FrbWrapper<crate::api::core::TestResult>
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::core::TestResult>>
+    for crate::api::core::TestResult
+{
+    fn into_into_dart(self) -> FrbWrapper<crate::api::core::TestResult> {
         self.into()
     }
 }
@@ -3698,6 +3772,16 @@ impl SseEncode for Vec<u8> {
     }
 }
 
+impl SseEncode for Vec<crate::api::core::TestResult> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::core::TestResult>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<crate::api::core::Variable> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3802,6 +3886,8 @@ impl SseEncode for crate::api::core::Request {
         <Vec<crate::api::core::FormField>>::sse_encode(self.form, serializer);
         <Option<String>>::sse_encode(self.grpc_method, serializer);
         <Option<String>>::sse_encode(self.proto_path, serializer);
+        <Vec<String>>::sse_encode(self.tests, serializer);
+        <Vec<String>>::sse_encode(self.captures, serializer);
     }
 }
 
@@ -3841,6 +3927,9 @@ impl SseEncode for crate::api::core::Sent {
         <Vec<String>>::sse_encode(self.unresolved, serializer);
         <Vec<crate::api::core::Cookie>>::sse_encode(self.cookies, serializer);
         <Vec<crate::api::core::Exchange>>::sse_encode(self.exchanges, serializer);
+        <Vec<crate::api::core::TestResult>>::sse_encode(self.tests, serializer);
+        <Vec<crate::api::core::Variable>>::sse_encode(self.captured, serializer);
+        <Vec<String>>::sse_encode(self.capture_problems, serializer);
     }
 }
 
@@ -3850,6 +3939,15 @@ impl SseEncode for crate::api::core::Settings {
         <crate::api::core::AppTheme>::sse_encode(self.theme, serializer);
         <crate::api::core::HttpMode>::sse_encode(self.http_mode, serializer);
         <u32>::sse_encode(self.timeout_secs, serializer);
+    }
+}
+
+impl SseEncode for crate::api::core::TestResult {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.test, serializer);
+        <bool>::sse_encode(self.passed, serializer);
+        <String>::sse_encode(self.detail, serializer);
     }
 }
 

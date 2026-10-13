@@ -838,6 +838,8 @@ class Request {
   final List<FormField> form;
   final String? grpcMethod;
   final String? protoPath;
+  final List<String> tests;
+  final List<String> captures;
 
   const Request({
     required this.method,
@@ -851,6 +853,8 @@ class Request {
     required this.form,
     this.grpcMethod,
     this.protoPath,
+    required this.tests,
+    required this.captures,
   });
 
   @override
@@ -865,7 +869,9 @@ class Request {
       bodyMode.hashCode ^
       form.hashCode ^
       grpcMethod.hashCode ^
-      protoPath.hashCode;
+      protoPath.hashCode ^
+      tests.hashCode ^
+      captures.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -882,7 +888,9 @@ class Request {
           bodyMode == other.bodyMode &&
           form == other.form &&
           grpcMethod == other.grpcMethod &&
-          protoPath == other.protoPath;
+          protoPath == other.protoPath &&
+          tests == other.tests &&
+          captures == other.captures;
 }
 
 class RequestSettings {
@@ -988,12 +996,18 @@ class Sent {
   final List<String> unresolved;
   final List<Cookie> cookies;
   final List<Exchange> exchanges;
+  final List<TestResult> tests;
+  final List<Variable> captured;
+  final List<String> captureProblems;
 
   const Sent({
     required this.response,
     required this.unresolved,
     required this.cookies,
     required this.exchanges,
+    required this.tests,
+    required this.captured,
+    required this.captureProblems,
   });
 
   @override
@@ -1001,7 +1015,10 @@ class Sent {
       response.hashCode ^
       unresolved.hashCode ^
       cookies.hashCode ^
-      exchanges.hashCode;
+      exchanges.hashCode ^
+      tests.hashCode ^
+      captured.hashCode ^
+      captureProblems.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1011,7 +1028,10 @@ class Sent {
           response == other.response &&
           unresolved == other.unresolved &&
           cookies == other.cookies &&
-          exchanges == other.exchanges;
+          exchanges == other.exchanges &&
+          tests == other.tests &&
+          captured == other.captured &&
+          captureProblems == other.captureProblems;
 }
 
 class Settings {
@@ -1036,6 +1056,30 @@ class Settings {
           theme == other.theme &&
           httpMode == other.httpMode &&
           timeoutSecs == other.timeoutSecs;
+}
+
+class TestResult {
+  final String test;
+  final bool passed;
+  final String detail;
+
+  const TestResult({
+    required this.test,
+    required this.passed,
+    required this.detail,
+  });
+
+  @override
+  int get hashCode => test.hashCode ^ passed.hashCode ^ detail.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TestResult &&
+          runtimeType == other.runtimeType &&
+          test == other.test &&
+          passed == other.passed &&
+          detail == other.detail;
 }
 
 class Variable {

@@ -126,6 +126,10 @@ struct SendArgs {
     #[arg(short = 'H', long = "header", value_name = "HEADER")]
     headers: Vec<String>,
 
+    /// Check the response, e.g. `status == 200` or `body.id exists` (repeatable)
+    #[arg(long = "test", value_name = "TEST")]
+    tests: Vec<String>,
+
     /// Request body; `@file` reads a file, `@-` reads stdin
     #[arg(short, long, value_name = "DATA")]
     data: Option<String>,
@@ -507,6 +511,31 @@ fn warn_unresolved(unresolved: &[String]) {
     }
 }
 
+/// Prints how each test came out and returns how many failed.
+fn report_tests(sent: &reqorb_core::Sent, indent: &str) -> usize {
+    for result in &sent.tests {
+        if result.passed {
+            eprintln!("{indent}✓ {}", result.test);
+        } else {
+            eprintln!("{indent}✗ {}  ({})", result.test, result.detail);
+        }
+    }
+    for problem in &sent.capture_problems {
+        eprintln!("{indent}warning: nothing captured for {problem}");
+    }
+    sent.tests.iter().filter(|t| !t.passed).count()
+}
+
+/// Whether a send counts as a success: its tests decide when it has any,
+/// otherwise the status does.
+fn succeeded(sent: &reqorb_core::Sent) -> bool {
+    if sent.tests.is_empty() {
+        sent.response.status < 400
+    } else {
+        sent.tests.iter().all(|t| t.passed)
+    }
+}
+
 async fn send(args: SendArgs) -> Result<ExitCode> {
     let auth = parse_auth(&args)?;
     let (Some(method), Some(url)) = (args.method, args.url) else {
@@ -547,6 +576,7 @@ async fn send(args: SendArgs) -> Result<ExitCode> {
     }
     request.timeout_ms = args.timeout.map(|s| (s * 1000.0) as u64);
     request.auth = auth;
+    request.tests = args.tests.clone();
     let request = args.http.apply(&request);
 
     let variables = load_variables(&args.vars).await?;
@@ -554,11 +584,12 @@ async fn send(args: SendArgs) -> Result<ExitCode> {
     warn_unresolved(&sent.unresolved);
     print_response(&sent.response, &args.output)?;
     write_har(&args.output, &sent.exchanges)?;
+    report_tests(&sent, "");
 
-    Ok(if sent.response.status >= 400 {
-        ExitCode::from(1)
-    } else {
+    Ok(if succeeded(&sent) {
         ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
     })
 }
 
@@ -599,10 +630,11 @@ async fn run(args: RunArgs) -> Result<ExitCode> {
         warn_unresolved(&sent.unresolved);
         print_response(&sent.response, &args.output)?;
         write_har(&args.output, &sent.exchanges)?;
-        return Ok(if sent.response.status >= 400 {
-            ExitCode::from(1)
-        } else {
+        report_tests(&sent, "");
+        return Ok(if succeeded(&sent) {
             ExitCode::SUCCESS
+        } else {
+            ExitCode::from(1)
         });
     }
 
@@ -610,13 +642,16 @@ async fn run(args: RunArgs) -> Result<ExitCode> {
     let mut cookies = Vec::new();
     let mut exchanges = Vec::new();
     let mut failed = 0;
+    let (mut tests, mut tests_failed) = (0, 0);
+    // What earlier requests captured, newest first so it wins over the
+    // collection's and the environment's variables.
+    let mut captured: Vec<Variable> = Vec::new();
     for (path, request, variables) in &selected {
         let request = &args.http.apply(request);
-        match reqorb_core::send_with(request, variables, &options, &cookies).await {
+        let variables: Vec<Variable> = captured.iter().chain(variables).cloned().collect();
+        match reqorb_core::send_with(request, &variables, &options, &cookies).await {
             Ok(sent) => {
-                cookies = sent.cookies;
-                exchanges.extend(sent.exchanges);
-                let ok = sent.response.status < 400;
+                let ok = succeeded(&sent);
                 failed += usize::from(!ok);
                 println!(
                     "{} {} {:<22} {:>6} ms  {} {path}",
@@ -627,6 +662,14 @@ async fn run(args: RunArgs) -> Result<ExitCode> {
                     request.method,
                 );
                 warn_unresolved(&sent.unresolved);
+                tests += sent.tests.len();
+                tests_failed += report_tests(&sent, "    ");
+                for variable in sent.captured.iter().rev() {
+                    captured.retain(|v| v.key != variable.key);
+                    captured.insert(0, variable.clone());
+                }
+                cookies = sent.cookies;
+                exchanges.extend(sent.exchanges);
             }
             Err(e) => {
                 failed += 1;
@@ -636,6 +679,9 @@ async fn run(args: RunArgs) -> Result<ExitCode> {
     }
     write_har(&args.output, &exchanges)?;
     eprintln!("\n{} run, {failed} failed", selected.len());
+    if tests > 0 {
+        eprintln!("{tests} test(s), {tests_failed} failed");
+    }
     Ok(if failed > 0 {
         ExitCode::from(1)
     } else {

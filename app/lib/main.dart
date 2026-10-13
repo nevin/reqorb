@@ -17,6 +17,7 @@ import 'package:reqorb/response_view.dart';
 import 'package:reqorb/sidebar.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 import 'package:reqorb/src/rust/frb_generated.dart';
+import 'package:reqorb/tests_editor.dart';
 import 'package:reqorb/theme.dart';
 import 'package:reqorb/workspace_store.dart';
 import 'package:reqorb/ws_view.dart';
@@ -79,6 +80,10 @@ class _RequestPageState extends State<RequestPage> {
   final _scaffold = GlobalKey<ScaffoldState>();
   final _url = TextEditingController(text: 'https://httpbin.org/get');
   final _headers = TextEditingController();
+
+  /// The request's tests and captures, one per line.
+  final _tests = TextEditingController();
+  final _captures = TextEditingController();
   final _body = TextEditingController();
 
   /// Which kind of body the request has; [_body] holds the raw text.
@@ -148,6 +153,8 @@ class _RequestPageState extends State<RequestPage> {
   late final _edits = Listenable.merge([
     _url,
     _headers,
+    _tests,
+    _captures,
     _body,
     _urlEncoded,
     _binary,
@@ -174,6 +181,8 @@ class _RequestPageState extends State<RequestPage> {
   void dispose() {
     _url.dispose();
     _headers.dispose();
+    _tests.dispose();
+    _captures.dispose();
     _body.dispose();
     _urlEncoded.dispose();
     _binary.dispose();
@@ -267,6 +276,8 @@ class _RequestPageState extends State<RequestPage> {
             form: const [],
             auth: request.auth,
             settings: request.settings,
+            tests: const [],
+            captures: const [],
           ),
           variables: _store.variablesFor(_origin?.collection),
         ).listen(
@@ -488,6 +499,8 @@ class _RequestPageState extends State<RequestPage> {
         settings: _settings,
         grpcMethod: _isGrpc ? _grpcMethod : null,
         protoPath: _isGrpc ? _protoPath : null,
+        tests: const [],
+        captures: const [],
       );
     }
     final body = switch (_bodyMode) {
@@ -515,6 +528,8 @@ class _RequestPageState extends State<RequestPage> {
       form: form,
       auth: _auth,
       settings: _settings,
+      tests: linesOf(_tests.text),
+      captures: linesOf(_captures.text),
     );
   }
 
@@ -687,6 +702,8 @@ class _RequestPageState extends State<RequestPage> {
       _url.text = request.url;
       _headers.text = [for (final h in request.headers) '${h.name}: ${h.value}']
           .join('\n');
+      _tests.text = request.tests.join('\n');
+      _captures.text = request.captures.join('\n');
       _loadBody(request);
       _auth = request.auth;
       _settings = request.settings;
@@ -711,6 +728,8 @@ class _RequestPageState extends State<RequestPage> {
       _method = 'GET';
       _url.clear();
       _headers.clear();
+      _tests.clear();
+      _captures.clear();
       _body.clear();
       _bodyMode = BodyMode.none;
       _urlEncoded.clear();
@@ -761,6 +780,8 @@ class _RequestPageState extends State<RequestPage> {
           form: request.form,
           auth: request.auth,
           settings: request.settings,
+          tests: request.tests,
+          captures: request.captures,
         ),
         variables: _store.variablesFor(_origin?.collection),
         settings: _store.settings,
@@ -771,6 +792,7 @@ class _RequestPageState extends State<RequestPage> {
       // Keep whatever the server set, even if this page has gone away.
       _store.setCookies(sent.cookies);
       _store.addExchanges(sent.exchanges);
+      _store.capture(sent.captured);
       if (!mounted) return;
       setState(() => _sent = sent);
     } catch (e) {
@@ -956,6 +978,7 @@ class _RequestPageState extends State<RequestPage> {
     auth: _auth != null,
     cookies: _store.cookies.length,
     settings: _settings != null,
+    tests: linesOf(_tests.text).length + linesOf(_captures.text).length,
   );
 
   /// Where the open request is saved and whether it has unsaved edits.
@@ -1209,6 +1232,7 @@ class _RequestPageState extends State<RequestPage> {
     final request = _RequestEditor(
       params: _params,
       headers: _headers,
+      tests: TestsEditor(tests: _tests, captures: _captures),
       edits: _edits,
       badges: _badges,
       message: _isGrpc
@@ -1611,12 +1635,14 @@ typedef _Badges = ({
   bool auth,
   int cookies,
   bool settings,
+  int tests,
 });
 
 class _RequestEditor extends StatelessWidget {
   const _RequestEditor({
     required this.params,
     required this.headers,
+    required this.tests,
     required this.body,
     required this.auth,
     required this.cookies,
@@ -1634,6 +1660,7 @@ class _RequestEditor extends StatelessWidget {
   final Widget auth;
   final Widget cookies;
   final Widget settings;
+  final Widget tests;
 
   /// Names of the key-value tabs currently shown as text.
   final Set<String> bulk;
@@ -1658,7 +1685,7 @@ class _RequestEditor extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 6,
+      length: 7,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1704,6 +1731,11 @@ class _RequestEditor extends StatelessWidget {
                     height: 40,
                     child: _TabLabel('Settings', set: has.settings),
                   ),
+                  Tab(
+                    key: const Key('tests-tab'),
+                    height: 40,
+                    child: _TabLabel('Tests', count: has.tests),
+                  ),
                 ],
               );
             },
@@ -1730,6 +1762,7 @@ class _RequestEditor extends StatelessWidget {
                 _form(auth),
                 cookies,
                 _form(settings),
+                _form(tests),
               ],
             ),
           ),

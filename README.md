@@ -13,6 +13,8 @@ view. One Rust core does the networking and powers all three front ends.
 - **WebSocket:** connect, send messages and watch a timestamped log.
 - **gRPC:** load methods by server reflection or from a `.proto` file and call them with
   JSON messages, including streaming methods.
+- **Tests and chaining:** check each response with one-line tests, and capture values
+  from it to use in later requests.
 - **Collections and environments:** `{{variables}}`, folders and standalone requests.
 - **Import:** Postman, OpenAPI / Swagger (file or URL), HAR, curl and `.env`.
 - **Export:** Postman, Bruno, curl, `.env`, and the session as a HAR file.
@@ -67,6 +69,7 @@ cargo install --path crates/reqorb-cli
 reqorb GET httpbin.org/get -i
 reqorb GET '{{base}}/get' -e dev.env --var base=https://httpbin.org
 reqorb POST https://httpbin.org/post --json '{"n": 1}'
+reqorb GET httpbin.org/get --test 'status == 200' --test 'body.url exists'
 reqorb GET httpbin.org/get --har session.har             # save the exchanges as HAR
 reqorb GET httpbin.org/get --har session.har --redact    # the same, without credentials
 
@@ -99,6 +102,39 @@ environment, then the collection's own variables.
 | HAR 1.2 | collection, one request per entry | the session's exchanges |
 | curl | one command | one command per request |
 | `.env` | environment | environment |
+
+## Tests and chaining
+
+A request can carry tests and captures, written one per line in the **Tests** tab or
+in the request's `tests` and `captures` lists in a reqorb file.
+
+```text
+status == 200
+time < 500
+header content-type contains json
+body.items[0].name == Widget
+body.user.email exists
+```
+
+A test reads `status`, `time` (ms), `size` (bytes), `header NAME`, `body`, or a field
+of a JSON body such as `body.user.id` or `body.items[0]`, and compares it with `==`,
+`!=`, `<`, `<=`, `>`, `>=`, `contains`, `exists` or `missing`. Values compare as numbers
+when both sides are numbers, and may use `{{variables}}`.
+
+```text
+token = body.access_token
+requestId = header x-request-id
+```
+
+A capture keeps a value from the response as a variable. Captured variables take
+priority over the environment and the collection: in the app they last until the
+session is cleared or the app quits, and in `reqorb run` they pass from each request
+to the ones after it, which is how a login request hands its token on.
+
+`reqorb run` prints each test under its request and exits with 1 if any failed. A
+request with tests passes or fails by them alone, so `status == 404` can be a pass.
+Tests and captures are kept in reqorb's own format; Postman, Bruno and curl exports
+leave them out.
 
 ## Authorization
 

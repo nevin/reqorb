@@ -116,6 +116,9 @@ class ResponseView extends StatelessWidget {
           child: _Loaded(
             response: response,
             unresolved: sent?.unresolved ?? const [],
+            tests: sent?.tests ?? const [],
+            captured: sent?.captured ?? const [],
+            captureProblems: sent?.captureProblems ?? const [],
             current: !sending,
             sessionSize: sessionSize,
             onExportSession: onExportSession,
@@ -140,7 +143,15 @@ class _Loaded extends StatelessWidget {
     required this.current,
     required this.sessionSize,
     required this.onExportSession,
+    required this.tests,
+    required this.captured,
+    required this.captureProblems,
   });
+
+  /// How the request's tests came out, and what it captured.
+  final List<TestResult> tests;
+  final List<Variable> captured;
+  final List<String> captureProblems;
 
   final int sessionSize;
   final VoidCallback onExportSession;
@@ -164,8 +175,15 @@ class _Loaded extends StatelessWidget {
       color: scheme.onSurfaceVariant,
     );
 
+    final passed = tests.where((t) => t.passed).length;
+    final hasTests =
+        tests.isNotEmpty || captured.isNotEmpty || captureProblems.isNotEmpty;
+    final testsFailed = passed < tests.length || captureProblems.isNotEmpty;
+
     return DefaultTabController(
-      length: 2,
+      // Keyed, so the tabs are rebuilt when the Tests tab comes or goes.
+      key: ValueKey(hasTests),
+      length: hasTests ? 3 : 2,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -232,6 +250,19 @@ class _Loaded extends StatelessWidget {
                         height: 38,
                         text: 'Headers (${response.headers.length})',
                       ),
+                      if (hasTests)
+                        Tab(
+                          key: const Key('test-results-tab'),
+                          height: 38,
+                          child: Text(
+                            tests.isEmpty
+                                ? 'Tests'
+                                : 'Tests ($passed/${tests.length})',
+                            style: testsFailed
+                                ? TextStyle(color: scheme.error)
+                                : null,
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -242,16 +273,27 @@ class _Loaded extends StatelessWidget {
                     iconSize: 18,
                     icon: const Icon(Icons.copy_outlined),
                     onPressed: () async {
-                      final onBody =
-                          DefaultTabController.of(context).index == 0;
-                      await Clipboard.setData(
-                        ClipboardData(text: onBody ? body : headers),
-                      );
-                      if (!context.mounted) return;
-                      showMessage(
+                      // Whichever tab is showing is what gets copied.
+                      final (text, what) = switch (DefaultTabController.of(
                         context,
-                        onBody ? 'Body copied' : 'Headers copied',
-                      );
+                      ).index) {
+                        0 => (body, 'Body'),
+                        1 => (headers, 'Headers'),
+                        _ => (
+                          [
+                            for (final t in tests)
+                              t.passed
+                                  ? 'pass  ${t.test}'
+                                  : 'FAIL  ${t.test}  (${t.detail})',
+                            for (final v in captured) '${v.key} = ${v.value}',
+                            ...captureProblems,
+                          ].join('\n'),
+                          'Test results',
+                        ),
+                      };
+                      await Clipboard.setData(ClipboardData(text: text));
+                      if (!context.mounted) return;
+                      showMessage(context, '$what copied');
                     },
                   ),
                 ),
@@ -303,11 +345,91 @@ class _Loaded extends StatelessWidget {
                       )
                     : _Body(text: body, json: _isJson(response)),
                 _Headers(headers: response.headers),
+                if (hasTests)
+                  _Tests(
+                    tests: tests,
+                    captured: captured,
+                    problems: captureProblems,
+                  ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// How each test came out, and the variables the response supplied.
+class _Tests extends StatelessWidget {
+  const _Tests({
+    required this.tests,
+    required this.captured,
+    required this.problems,
+  });
+
+  final List<TestResult> tests;
+  final List<Variable> captured;
+  final List<String> problems;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final pass = statusColor(200, scheme);
+    final small = mono.copyWith(fontSize: 12.5);
+    Widget line(IconData icon, Color color, String text, [String? note]) =>
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SelectableText.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(text: text, style: small),
+                      if (note != null && note.isNotEmpty)
+                        TextSpan(
+                          text: '   $note',
+                          style: small.copyWith(color: color),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+    return ListView(
+      key: const Key('test-results'),
+      padding: const EdgeInsets.all(12),
+      children: [
+        for (final test in tests)
+          test.passed
+              ? line(Icons.check_circle_outline, pass, test.test)
+              : line(
+                  Icons.cancel_outlined,
+                  scheme.error,
+                  test.test,
+                  test.detail,
+                ),
+        if (captured.isNotEmpty || problems.isNotEmpty) ...[
+          if (tests.isNotEmpty) const SizedBox(height: 8),
+          Text('Captured', style: theme.textTheme.labelLarge),
+          const SizedBox(height: 6),
+          for (final variable in captured)
+            line(
+              Icons.bookmark_added_outlined,
+              scheme.primary,
+              '${variable.key} = ${variable.value}',
+            ),
+          for (final problem in problems)
+            line(Icons.warning_amber_outlined, scheme.error, problem),
+        ],
+      ],
     );
   }
 }

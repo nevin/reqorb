@@ -103,6 +103,23 @@ class WorkspaceStore extends ChangeNotifier {
 
   void clearSession() {
     _session = const [];
+    _captured = const [];
+    notifyListeners();
+  }
+
+  /// Variables captured from responses this session, newest first. They take
+  /// priority over the environment's and the collection's.
+  List<Variable> get captured => _captured;
+  List<Variable> _captured = const [];
+
+  void capture(List<Variable> variables) {
+    if (variables.isEmpty) return;
+    final names = {for (final v in variables) v.key};
+    _captured = [
+      ...variables.reversed,
+      for (final v in _captured)
+        if (!names.contains(v.key)) v,
+    ];
     notifyListeners();
   }
 
@@ -158,11 +175,12 @@ class WorkspaceStore extends ChangeNotifier {
 
   // ------------------------------------------------------------ variables
 
-  /// Variables for a request, highest priority first: the active
-  /// environment, then the request's own collection.
+  /// Variables for a request, highest priority first: what this session
+  /// captured, the active environment, then the request's own collection.
   List<Variable> variablesFor(int? collection) {
     final name = activeEnvironment;
     return [
+      ..._captured,
       for (final e in environments)
         if (e.name == name) ...e.variables,
       if (collection != null &&

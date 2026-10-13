@@ -12,8 +12,8 @@ pub use reqorb_core::{
     AppTheme, Auth, AuthField, AuthKind, AuthParam, BodyMode, Collection, Cookie, DisabledTls,
     Environment, Exchange, ExportFormat, FormField, GrpcCall, GrpcMethod, GrpcReply, GrpcSchema,
     HarCount, HarEntry, HarFinding, HarPhase, HarReport, HarSeverity, Header, HttpMode,
-    ImportResult, Item, Request, RequestSettings, Response, Sent, Settings, Variable, Workspace,
-    WsEvent, WsEventKind,
+    ImportResult, Item, Request, RequestSettings, Response, Sent, Settings, TestResult, Variable,
+    Workspace, WsEvent, WsEventKind,
 };
 
 #[frb(mirror(AppTheme))]
@@ -174,6 +174,8 @@ pub struct _Request {
     pub form: Vec<FormField>,
     pub grpc_method: Option<String>,
     pub proto_path: Option<String>,
+    pub tests: Vec<String>,
+    pub captures: Vec<String>,
 }
 
 #[frb(mirror(Response))]
@@ -193,6 +195,16 @@ pub struct _Sent {
     pub unresolved: Vec<String>,
     pub cookies: Vec<Cookie>,
     pub exchanges: Vec<Exchange>,
+    pub tests: Vec<TestResult>,
+    pub captured: Vec<Variable>,
+    pub capture_problems: Vec<String>,
+}
+
+#[frb(mirror(TestResult))]
+pub struct _TestResult {
+    pub test: String,
+    pub passed: bool,
+    pub detail: String,
 }
 
 #[frb(mirror(Exchange))]

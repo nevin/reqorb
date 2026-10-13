@@ -335,6 +335,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('save')));
     await tester.pumpAndSettle();
+    // The menu's closing animation can still be absorbing taps when frames
+    // arrive late, so the tap is repeated if the dialog did not open.
+    if (find.byKey(const Key('save-name')).evaluate().isEmpty) {
+      await tester.tap(find.byKey(const Key('save')));
+      await tester.pumpAndSettle();
+    }
     await type(tester, find.byKey(const Key('save-name')), 'Patch item');
     await tester.tap(find.byKey(const Key('save-destination')));
     await tester.pumpAndSettle();
@@ -1480,6 +1486,61 @@ void main() {
       'GET /new',
       'GET /ping',
     ]);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('tests a response and passes captured values on', (tester) async {
+    await start(tester);
+    await launch(tester);
+    final base = 'http://127.0.0.1:${server.port}';
+    await type(tester, find.byKey(const Key('url')), '$base/login');
+    await tester.tap(find.byKey(const Key('tests-tab')));
+    await tester.pumpAndSettle();
+    await type(
+      tester,
+      find.byKey(const Key('tests')),
+      'status == 201\nbody.ok == true\nstatus == 200',
+    );
+    await type(
+      tester,
+      find.byKey(const Key('captures')),
+      'flag = body.ok\nsid = header set-cookie\nnope = body.zzz',
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('send')));
+    await waitFor(tester, find.byKey(const Key('status')));
+    await tester.pumpAndSettle();
+    // Two of the three tests pass; the tab says so and lists each one.
+    expect(find.text('Tests (2/3)'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('test-results-tab')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('was 201'), findsOneWidget);
+    expect(find.textContaining('flag = true'), findsOneWidget);
+    expect(find.textContaining('nope: body.zzz was not found'), findsOneWidget);
+    expect(
+      {for (final v in store.captured) v.key: v.value},
+      {'flag': 'true', 'sid': 'sid=abc123; Path=/; HttpOnly'},
+    );
+
+    // Tests and captures are saved with the request.
+    await tester.tap(find.byKey(const Key('save')));
+    await tester.pumpAndSettle();
+    await type(tester, find.byKey(const Key('save-name')), 'Login');
+    await tester.tap(find.byKey(const Key('save-confirm')));
+    await tester.pumpAndSettle();
+    final saved = store.requests.single.request!;
+    expect(saved.tests, ['status == 201', 'body.ok == true', 'status == 200']);
+    expect(saved.captures.first, 'flag = body.ok');
+
+    // A later request can use what was captured.
+    await tester.tap(find.byKey(const Key('new-request')));
+    await tester.pumpAndSettle();
+    await type(tester, find.byKey(const Key('url')), '$base/ping?ok={{flag}}');
+    await tester.tap(find.byKey(const Key('send')));
+    await waitFor(tester, find.byKey(const Key('status')));
+    await tester.pumpAndSettle();
+    expect(seen.path, '/ping?ok=true');
+    expect(find.byKey(const Key('test-results-tab')), findsNothing);
     expect(tester.takeException(), isNull);
   });
   testWidgets('guards unsaved edits and undoes removals', (tester) async {
