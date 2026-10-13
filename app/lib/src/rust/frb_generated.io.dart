@@ -124,6 +124,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   GrpcSchema dco_decode_grpc_schema(dynamic raw);
 
   @protected
+  HarCount dco_decode_har_count(dynamic raw);
+
+  @protected
+  HarEntry dco_decode_har_entry(dynamic raw);
+
+  @protected
+  HarFinding dco_decode_har_finding(dynamic raw);
+
+  @protected
+  HarReport dco_decode_har_report(dynamic raw);
+
+  @protected
+  HarSeverity dco_decode_har_severity(dynamic raw);
+
+  @protected
   Header dco_decode_header(dynamic raw);
 
   @protected
@@ -172,10 +187,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<GrpcMethod> dco_decode_list_grpc_method(dynamic raw);
 
   @protected
+  List<HarCount> dco_decode_list_har_count(dynamic raw);
+
+  @protected
+  List<HarEntry> dco_decode_list_har_entry(dynamic raw);
+
+  @protected
+  List<HarFinding> dco_decode_list_har_finding(dynamic raw);
+
+  @protected
   List<Header> dco_decode_list_header(dynamic raw);
 
   @protected
   List<Item> dco_decode_list_item(dynamic raw);
+
+  @protected
+  Uint32List dco_decode_list_prim_u_32_strict(dynamic raw);
 
   @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
@@ -356,6 +383,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   GrpcSchema sse_decode_grpc_schema(SseDeserializer deserializer);
 
   @protected
+  HarCount sse_decode_har_count(SseDeserializer deserializer);
+
+  @protected
+  HarEntry sse_decode_har_entry(SseDeserializer deserializer);
+
+  @protected
+  HarFinding sse_decode_har_finding(SseDeserializer deserializer);
+
+  @protected
+  HarReport sse_decode_har_report(SseDeserializer deserializer);
+
+  @protected
+  HarSeverity sse_decode_har_severity(SseDeserializer deserializer);
+
+  @protected
   Header sse_decode_header(SseDeserializer deserializer);
 
   @protected
@@ -404,10 +446,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<GrpcMethod> sse_decode_list_grpc_method(SseDeserializer deserializer);
 
   @protected
+  List<HarCount> sse_decode_list_har_count(SseDeserializer deserializer);
+
+  @protected
+  List<HarEntry> sse_decode_list_har_entry(SseDeserializer deserializer);
+
+  @protected
+  List<HarFinding> sse_decode_list_har_finding(SseDeserializer deserializer);
+
+  @protected
   List<Header> sse_decode_list_header(SseDeserializer deserializer);
 
   @protected
   List<Item> sse_decode_list_item(SseDeserializer deserializer);
+
+  @protected
+  Uint32List sse_decode_list_prim_u_32_strict(SseDeserializer deserializer);
 
   @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
@@ -613,6 +667,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_grpc_schema(GrpcSchema self, SseSerializer serializer);
 
   @protected
+  void sse_encode_har_count(HarCount self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_har_entry(HarEntry self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_har_finding(HarFinding self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_har_report(HarReport self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_har_severity(HarSeverity self, SseSerializer serializer);
+
+  @protected
   void sse_encode_header(Header self, SseSerializer serializer);
 
   @protected
@@ -682,10 +751,28 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_har_count(List<HarCount> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_har_entry(List<HarEntry> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_har_finding(
+    List<HarFinding> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_header(List<Header> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_item(List<Item> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_prim_u_32_strict(
+    Uint32List self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_prim_u_8_strict(

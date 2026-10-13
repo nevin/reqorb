@@ -1,8 +1,10 @@
-//! HTTP Archive (HAR 1.2) export of the exchanges a session made.
+//! HTTP Archive (HAR 1.2): export of the exchanges a session made, and
+//! import of the requests an archive recorded.
 
 use serde_json::{Value, json};
 
-use crate::{BodyMode, Exchange, Header};
+use crate::import::{ImportResult, str_field};
+use crate::{BodyMode, Collection, Exchange, FormField, Header, Item, REDACTED, Request};
 
 /// Renders `exchanges`, oldest first, as a HAR 1.2 document that browser
 /// developer tools and HAR viewers can open.
@@ -16,6 +18,131 @@ pub fn to_har(exchanges: &[Exchange]) -> String {
         }
     });
     serde_json::to_string_pretty(&har).expect("HAR serialises")
+}
+
+/// Whether `value` is a HAR document.
+pub(crate) fn is_har(value: &Value) -> bool {
+    value["log"]["entries"].is_array()
+}
+
+/// Headers a recording holds that the client works out again for itself.
+const COMPUTED_HEADERS: &[&str] = &["host", "content-length", "connection", "transfer-encoding"];
+
+/// Turns the requests recorded in a HAR document into a collection named
+/// `name`, one request per entry and in the order they were made. The
+/// recorded responses are not kept.
+pub(crate) fn from_har(value: &Value, name: &str) -> ImportResult {
+    let mut warnings = Vec::new();
+    let mut items: Vec<Item> = Vec::new();
+    let mut files = 0;
+    let entries = value["log"]["entries"].as_array();
+    for entry in entries.into_iter().flatten() {
+        let recorded = &entry["request"];
+        let Some(url) = str_field(recorded, "url").filter(|u| !u.is_empty()) else {
+            continue;
+        };
+        let socket = url.starts_with("ws://") || url.starts_with("wss://");
+        let method = match str_field(recorded, "method") {
+            _ if socket => "WS".to_string(),
+            Some(method) if !method.is_empty() => method.to_uppercase(),
+            _ => "GET".to_string(),
+        };
+        let mut request = Request::new(method, url);
+        let post = &recorded["postData"];
+        let mime = str_field(post, "mimeType").unwrap_or("").to_lowercase();
+        let multipart = mime.starts_with("multipart/");
+
+        for header in recorded["headers"].as_array().into_iter().flatten() {
+            let (Some(name), Some(value)) = (str_field(header, "name"), str_field(header, "value"))
+            else {
+                continue;
+            };
+            let lower = name.to_lowercase();
+            // HTTP/2 pseudo-headers such as `:authority` repeat the URL, and
+            // a multipart boundary only fits the body it was recorded with.
+            if name.starts_with(':')
+                || COMPUTED_HEADERS.contains(&lower.as_str())
+                || (multipart && lower == "content-type")
+            {
+                continue;
+            }
+            request.add_header(name, value);
+        }
+
+        let fields: Vec<FormField> = post["params"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|param| {
+                let key = str_field(param, "name")?;
+                Some(match str_field(param, "fileName") {
+                    Some(file) => FormField::file(key, file),
+                    None => FormField::text(key, str_field(param, "value").unwrap_or("")),
+                })
+            })
+            .collect();
+        let text = str_field(post, "text").unwrap_or("");
+        // reqorb's own export notes the file a binary body was read from.
+        let file = str_field(post, "comment").and_then(|c| c.strip_prefix("file: "));
+        if multipart && !fields.is_empty() {
+            files += fields.iter().filter(|f| f.file).count();
+            request.body_mode = Some(BodyMode::FormData);
+            request.form = fields;
+        } else if !text.is_empty() {
+            request.body = Some(text.to_string());
+        } else if mime.contains("x-www-form-urlencoded") && !fields.is_empty() {
+            request.body_mode = Some(BodyMode::UrlEncoded);
+            request.form = fields;
+        } else if let Some(path) = file.filter(|p| !p.is_empty()) {
+            request.body_mode = Some(BodyMode::Binary);
+            request.body = Some(path.to_string());
+        }
+
+        // Requests are found by name, so repeats of one call are numbered.
+        let base = format!("{} {}", request.method, short_path(url));
+        let mut name = base.clone();
+        let mut n = 1;
+        while items.iter().any(|item| item.name == name) {
+            n += 1;
+            name = format!("{base} ({n})");
+        }
+        items.push(Item {
+            name,
+            request: Some(request),
+            items: Vec::new(),
+        });
+    }
+
+    if files > 0 {
+        warnings.push(format!(
+            "{files} uploaded file(s) are recorded by name only; choose the files again before sending"
+        ));
+    }
+    if value.to_string().contains(REDACTED) {
+        warnings.push(format!(
+            "this archive was redacted; fill in the values marked {REDACTED} before sending"
+        ));
+    }
+    ImportResult {
+        source: "har".into(),
+        collections: vec![Collection {
+            name: name.to_string(),
+            variables: Vec::new(),
+            items,
+        }],
+        environments: Vec::new(),
+        warnings,
+    }
+}
+
+/// The path of `url` without its host or query, to name a request by.
+fn short_path(url: &str) -> String {
+    let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
+    let rest = rest.split(['?', '#']).next().unwrap_or(rest);
+    match rest.find('/') {
+        Some(at) if rest.len() > at + 1 => rest[at..].to_string(),
+        _ => "/".to_string(),
+    }
 }
 
 fn entry(exchange: &Exchange) -> Value {
@@ -212,5 +339,158 @@ mod tests {
         assert_eq!(entry["response"]["status"], 201);
         assert_eq!(entry["response"]["cookies"][0]["value"], "abc");
         assert_eq!(entry["response"]["content"]["text"], r#"{"ok":true}"#);
+    }
+    fn imported(har: &Value) -> Vec<(String, Request)> {
+        assert!(is_har(har));
+        from_har(har, "session").collections[0]
+            .items
+            .iter()
+            .map(|item| (item.name.clone(), item.request.clone().unwrap()))
+            .collect()
+    }
+
+    #[test]
+    fn imports_recorded_requests() {
+        let har = json!({ "log": { "entries": [
+            { "request": {
+                "method": "get",
+                "url": "https://api.test/items?page=2",
+                "headers": [
+                    { "name": ":authority", "value": "api.test" },
+                    { "name": "Host", "value": "api.test" },
+                    { "name": "Accept", "value": "application/json" },
+                ],
+            } },
+            { "request": {
+                "method": "POST",
+                "url": "https://api.test/items?page=2",
+                "headers": [
+                    { "name": "Content-Type", "value": "application/json" },
+                    { "name": "Content-Length", "value": "7" },
+                ],
+                "postData": { "mimeType": "application/json", "text": "{\"n\":1}" },
+            } },
+            { "request": {
+                "method": "POST",
+                "url": "https://api.test/upload",
+                "headers": [
+                    { "name": "Content-Type", "value": "multipart/form-data; boundary=xyz" },
+                ],
+                "postData": {
+                    "mimeType": "multipart/form-data; boundary=xyz",
+                    "params": [
+                        { "name": "title", "value": "Hi" },
+                        { "name": "doc", "fileName": "a.pdf" },
+                    ],
+                    "text": "--xyz...",
+                },
+            } },
+            { "request": {
+                "method": "POST",
+                "url": "https://api.test/login",
+                "headers": [],
+                "postData": {
+                    "mimeType": "application/x-www-form-urlencoded",
+                    "params": [{ "name": "user", "value": "a b" }],
+                },
+            } },
+            { "request": { "method": "GET", "url": "https://api.test/items?page=3", "headers": [] } },
+            { "request": { "method": "GET", "url": "wss://api.test", "headers": [] } },
+        ] } });
+        let requests = imported(&har);
+        let names: Vec<&str> = requests.iter().map(|(name, _)| name.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "GET /items",
+                "POST /items",
+                "POST /upload",
+                "POST /login",
+                "GET /items (2)",
+                "WS /"
+            ]
+        );
+
+        let get = &requests[0].1;
+        assert_eq!(get.url, "https://api.test/items?page=2");
+        assert_eq!(get.headers.len(), 1);
+        assert_eq!(get.headers[0].name, "Accept");
+
+        let post = &requests[1].1;
+        assert_eq!(post.body.as_deref(), Some(r#"{"n":1}"#));
+        assert!(post.has_header("content-type") && !post.has_header("content-length"));
+
+        let upload = &requests[2].1;
+        assert_eq!(upload.body_mode, Some(BodyMode::FormData));
+        assert_eq!(
+            upload.form,
+            [
+                FormField::text("title", "Hi"),
+                FormField::file("doc", "a.pdf")
+            ]
+        );
+        assert!(upload.headers.is_empty() && upload.body.is_none());
+
+        let login = &requests[3].1;
+        assert_eq!(login.body_mode, Some(BodyMode::UrlEncoded));
+        assert_eq!(login.form, [FormField::text("user", "a b")]);
+
+        let warnings = from_har(&har, "session").warnings;
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("1 uploaded file"));
+    }
+
+    #[test]
+    fn imports_what_it_exported() {
+        let mut json = Request::new("PUT", "https://api.test/a?token=abc");
+        json.add_header("Content-Type", "application/json");
+        json.body = Some("{}".into());
+        let mut form = Request::new("POST", "https://api.test/form");
+        form.body_mode = Some(BodyMode::FormData);
+        form.form = vec![
+            FormField::text("a", "1"),
+            FormField::file("f", "/tmp/f.txt"),
+        ];
+        let mut binary = Request::new("POST", "https://api.test/bin");
+        binary.body_mode = Some(BodyMode::Binary);
+        binary.body = Some("/tmp/photo.png".into());
+        let sent = [json, form, binary];
+
+        let response = Response {
+            status: 200,
+            status_text: "OK".into(),
+            http_version: "HTTP/1.1".into(),
+            headers: Vec::new(),
+            body: String::new(),
+            size_bytes: 0,
+            elapsed_ms: 1,
+        };
+        let exchanges: Vec<Exchange> = sent
+            .iter()
+            .map(|request| Exchange {
+                started_ms: 0,
+                request: request.clone(),
+                response: response.clone(),
+            })
+            .collect();
+
+        let har: Value = serde_json::from_str(&to_har(&exchanges)).unwrap();
+        let back: Vec<Request> = imported(&har).into_iter().map(|(_, r)| r).collect();
+        assert_eq!(back[0].body, sent[0].body);
+        assert_eq!(back[0].headers, sent[0].headers);
+        assert_eq!(back[1].form, sent[1].form);
+        assert_eq!(back[2].body_mode, Some(BodyMode::Binary));
+        assert_eq!(back[2].body, sent[2].body);
+
+        // A redacted archive still imports, and says what is missing.
+        let redacted = to_har(&crate::redact_exchanges(&exchanges));
+        let result = crate::import(&redacted, "session").unwrap();
+        assert_eq!(result.source, "har");
+        assert_eq!(result.collections[0].name, "session");
+        assert_eq!(
+            result.collections[0].items[0].request.as_ref().unwrap().url,
+            "https://api.test/a?token=[REDACTED]"
+        );
+        assert!(result.warnings.iter().any(|w| w.contains("redacted")));
     }
 }

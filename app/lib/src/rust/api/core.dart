@@ -119,6 +119,28 @@ Future<String> exportEnvironment({
   format: format,
 );
 
+/// Reports on the text of a HAR archive: totals, breakdowns and findings.
+Future<HarReport> analyzeHar({required String text}) =>
+    RustLib.instance.api.crateApiCoreAnalyzeHar(text: text);
+
+/// Copies with tokens, passwords, cookies and keys replaced, for exports
+/// that are going to be shared.
+List<Exchange> redactExchanges({required List<Exchange> exchanges}) =>
+    RustLib.instance.api.crateApiCoreRedactExchanges(exchanges: exchanges);
+
+Collection redactCollection({required Collection collection}) =>
+    RustLib.instance.api.crateApiCoreRedactCollection(collection: collection);
+
+Environment redactEnvironment({required Environment environment}) => RustLib
+    .instance
+    .api
+    .crateApiCoreRedactEnvironment(environment: environment);
+
+/// Masks the values under sensitive keys of a JSON document; other text is
+/// returned unchanged.
+String redactText({required String text}) =>
+    RustLib.instance.api.crateApiCoreRedactText(text: text);
+
 String exportExtension({required ExportFormat format}) =>
     RustLib.instance.api.crateApiCoreExportExtension(format: format);
 
@@ -510,6 +532,170 @@ class GrpcSchema {
           methods == other.methods &&
           descriptors == other.descriptors;
 }
+
+class HarCount {
+  final String name;
+  final int count;
+  final int bytes;
+  final int timeMs;
+
+  const HarCount({
+    required this.name,
+    required this.count,
+    required this.bytes,
+    required this.timeMs,
+  });
+
+  @override
+  int get hashCode =>
+      name.hashCode ^ count.hashCode ^ bytes.hashCode ^ timeMs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is HarCount &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          count == other.count &&
+          bytes == other.bytes &&
+          timeMs == other.timeMs;
+}
+
+class HarEntry {
+  final int offsetMs;
+  final String method;
+  final String url;
+  final String host;
+  final int status;
+  final String kind;
+  final int sizeBytes;
+  final int timeMs;
+  final int? waitMs;
+
+  const HarEntry({
+    required this.offsetMs,
+    required this.method,
+    required this.url,
+    required this.host,
+    required this.status,
+    required this.kind,
+    required this.sizeBytes,
+    required this.timeMs,
+    this.waitMs,
+  });
+
+  @override
+  int get hashCode =>
+      offsetMs.hashCode ^
+      method.hashCode ^
+      url.hashCode ^
+      host.hashCode ^
+      status.hashCode ^
+      kind.hashCode ^
+      sizeBytes.hashCode ^
+      timeMs.hashCode ^
+      waitMs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is HarEntry &&
+          runtimeType == other.runtimeType &&
+          offsetMs == other.offsetMs &&
+          method == other.method &&
+          url == other.url &&
+          host == other.host &&
+          status == other.status &&
+          kind == other.kind &&
+          sizeBytes == other.sizeBytes &&
+          timeMs == other.timeMs &&
+          waitMs == other.waitMs;
+}
+
+class HarFinding {
+  final HarSeverity severity;
+  final String title;
+  final String detail;
+  final Uint32List entries;
+
+  const HarFinding({
+    required this.severity,
+    required this.title,
+    required this.detail,
+    required this.entries,
+  });
+
+  @override
+  int get hashCode =>
+      severity.hashCode ^ title.hashCode ^ detail.hashCode ^ entries.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is HarFinding &&
+          runtimeType == other.runtimeType &&
+          severity == other.severity &&
+          title == other.title &&
+          detail == other.detail &&
+          entries == other.entries;
+}
+
+class HarReport {
+  final String creator;
+  final List<HarEntry> entries;
+  final int failed;
+  final int totalBytes;
+  final int totalTimeMs;
+  final int spanMs;
+  final List<HarCount> hosts;
+  final List<HarCount> statuses;
+  final List<HarCount> kinds;
+  final List<HarFinding> findings;
+
+  const HarReport({
+    required this.creator,
+    required this.entries,
+    required this.failed,
+    required this.totalBytes,
+    required this.totalTimeMs,
+    required this.spanMs,
+    required this.hosts,
+    required this.statuses,
+    required this.kinds,
+    required this.findings,
+  });
+
+  @override
+  int get hashCode =>
+      creator.hashCode ^
+      entries.hashCode ^
+      failed.hashCode ^
+      totalBytes.hashCode ^
+      totalTimeMs.hashCode ^
+      spanMs.hashCode ^
+      hosts.hashCode ^
+      statuses.hashCode ^
+      kinds.hashCode ^
+      findings.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is HarReport &&
+          runtimeType == other.runtimeType &&
+          creator == other.creator &&
+          entries == other.entries &&
+          failed == other.failed &&
+          totalBytes == other.totalBytes &&
+          totalTimeMs == other.totalTimeMs &&
+          spanMs == other.spanMs &&
+          hosts == other.hosts &&
+          statuses == other.statuses &&
+          kinds == other.kinds &&
+          findings == other.findings;
+}
+
+enum HarSeverity { error, warning, info }
 
 class Header {
   final String name;

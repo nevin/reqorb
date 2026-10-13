@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'har_analysis.dart';
 import 'src/rust/api/core.dart';
 import 'theme.dart';
 import 'workspace_store.dart';
@@ -82,6 +83,58 @@ Future<void> importFromFile(BuildContext context, WorkspaceStore store) async {
   }
 }
 
+/// Lets the user pick a HAR file and opens a report on it.
+Future<void> analyzeHarFile(BuildContext context, WorkspaceStore store) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    final file = await FilePicker.pickFile();
+    if (file == null) return;
+    final text = utf8.decode(await file.readAsBytes(), allowMalformed: true);
+    if (!context.mounted) return;
+    await showHarAnalysis(context, store, name: file.name, text: text);
+  } catch (e) {
+    _notify(messenger, 'Could not read the file: $e');
+  }
+}
+
+/// Opens a report on the requests sent in this session.
+Future<void> analyzeSession(BuildContext context, WorkspaceStore store) =>
+    showHarAnalysis(
+      context,
+      store,
+      name: 'Session',
+      text: exportHar(exchanges: store.session),
+    );
+
+/// Analyses [text], a HAR archive called [name], and shows the report.
+Future<void> showHarAnalysis(
+  BuildContext context,
+  WorkspaceStore store, {
+  required String name,
+  required String text,
+}) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final HarReport report;
+  try {
+    report = await analyzeHar(text: text);
+  } catch (e) {
+    _notify(messenger, 'Could not analyse $name: $e');
+    return;
+  }
+  if (!context.mounted) return;
+  await Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      fullscreenDialog: true,
+      builder: (_) => HarAnalysisPage(
+        name: name,
+        report: report,
+        onImport: (context) =>
+            importFromText(context, store, text, nameHintFor(name)),
+      ),
+    ),
+  );
+}
+
 /// Asks for pasted text, such as a curl command, and imports it.
 Future<void> importFromPaste(BuildContext context, WorkspaceStore store) async {
   final text = await showDialog<String>(
@@ -92,7 +145,7 @@ Future<void> importFromPaste(BuildContext context, WorkspaceStore store) async {
       fieldKey: Key('paste'),
       hint:
           "curl https://api.example.com -H 'Accept: application/json'\n\n"
-          'or OpenAPI / Postman / reqorb JSON, or KEY=value lines',
+          'or OpenAPI / Postman / HAR / reqorb JSON, or KEY=value lines',
       lines: 8,
     ),
   );
@@ -262,7 +315,7 @@ Future<void> importFromUrl(BuildContext context, WorkspaceStore store) async {
       action: 'Import',
       fieldKey: Key('import-url-field'),
       hint: 'https://api.example.com/swagger.json',
-      helper: 'OpenAPI / Swagger (JSON or YAML), Postman or reqorb JSON',
+      helper: 'OpenAPI / Swagger (JSON or YAML), Postman, HAR or reqorb JSON',
       lines: 1,
     ),
   );
@@ -351,28 +404,111 @@ Future<Object?> _pickAndSave({
   required Uint8List bytes,
 }) => FilePicker.saveFile(fileName: fileName, bytes: bytes);
 
+/// Whether the last export was redacted, offered again as the default.
+bool _redact = false;
+
+/// Confirms an export of [what] and asks whether to redact it. Returns null
+/// when cancelled, otherwise whether sensitive data should be taken out.
+Future<bool?> _askExport(BuildContext context, String what, String covers) =>
+    showDialog<bool>(
+      context: context,
+      builder: (_) => _ExportDialog(what: what, covers: covers),
+    );
+
+class _ExportDialog extends StatefulWidget {
+  const _ExportDialog({required this.what, required this.covers});
+
+  final String what;
+
+  /// Where redaction looks, so the promise matches what is exported.
+  final String covers;
+
+  @override
+  State<_ExportDialog> createState() => _ExportDialogState();
+}
+
+class _ExportDialogState extends State<_ExportDialog> {
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return AlertDialog(
+      title: Text('Export ${widget.what}'),
+      contentPadding: const EdgeInsets.fromLTRB(8, 12, 8, 0),
+      content: SizedBox(
+        width: 420,
+        child: CheckboxListTile(
+          key: const Key('export-redact'),
+          value: _redact,
+          controlAffinity: ListTileControlAffinity.leading,
+          title: const Text('Redact sensitive data'),
+          subtitle: Text(
+            'Replaces tokens, passwords, cookies and keys in '
+            '${widget.covers} with [REDACTED]. Check the file before '
+            'sharing it: secrets under other names are not found.',
+            style: TextStyle(color: scheme.onSurfaceVariant),
+          ),
+          onChanged: (value) => setState(() => _redact = value ?? false),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const Key('export-confirm'),
+          autofocus: true,
+          onPressed: () => Navigator.pop(context, _redact),
+          child: const Text('Export…'),
+        ),
+      ],
+    );
+  }
+}
+
 /// Saves every exchange of the session as an HTTP Archive.
 Future<void> exportSessionHar(BuildContext context, WorkspaceStore store) =>
     _saveExport(
       context,
       'session.har',
-      () async => exportHar(exchanges: store.session),
+      what: 'session as HAR',
+      covers: 'headers, URLs and JSON or form bodies',
+      (redact) async => exportHar(
+        exchanges: redact
+            ? redactExchanges(exchanges: store.session)
+            : store.session,
+      ),
     );
 
 /// Saves [text] to a file the user chooses, suggesting [fileName].
 Future<void> saveTextFile(BuildContext context, String fileName, String text) =>
-    _saveExport(context, fileName, () async => text);
+    _saveExport(
+      context,
+      fileName,
+      what: 'response body',
+      covers: 'a JSON body',
+      (redact) async => redact ? redactText(text: text) : text,
+    );
 
 Future<void> _saveExport(
   BuildContext context,
   String fileName,
-  Future<String> Function() render,
-) async {
+  Future<String> Function(bool redact) render, {
+  required String what,
+  required String covers,
+}) async {
   final messenger = ScaffoldMessenger.of(context);
+  final redact = await _askExport(context, what, covers);
+  if (redact == null) return;
   try {
-    final text = await render();
+    final text = await render(redact);
     final saved = await fileSaver(fileName: fileName, bytes: utf8.encode(text));
-    if (saved != null) _notify(messenger, 'Exported $fileName');
+    if (saved != null) {
+      _notify(
+        messenger,
+        redact ? 'Exported $fileName, redacted' : 'Exported $fileName',
+      );
+    }
   } catch (e) {
     _notify(messenger, 'Export failed: $e');
   }
@@ -392,7 +528,14 @@ Future<void> exportCollectionFile(
   return _saveExport(
     context,
     '${_fileSafe(collection.name)}$suffix.$extension',
-    () => exportCollection(collection: collection, format: format),
+    what: 'collection',
+    covers: 'headers, URLs, authorization, bodies and variables',
+    (redact) => exportCollection(
+      collection: redact
+          ? redactCollection(collection: collection)
+          : collection,
+      format: format,
+    ),
   );
 }
 
@@ -406,6 +549,13 @@ Future<void> exportEnvironmentFile(
   return _saveExport(
     context,
     '${_fileSafe(environment.name)}$suffix.$extension',
-    () => exportEnvironment(environment: environment, format: format),
+    what: 'environment',
+    covers: 'variables',
+    (redact) => exportEnvironment(
+      environment: redact
+          ? redactEnvironment(environment: environment)
+          : environment,
+      format: format,
+    ),
   );
 }

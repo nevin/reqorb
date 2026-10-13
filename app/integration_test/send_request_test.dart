@@ -1322,6 +1322,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(Key('export-$kind')));
       await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('export-confirm')));
+      await tester.pumpAndSettle();
     }
     expect(files, {
       'response.json': '{\n  "ok": true\n}',
@@ -1337,6 +1339,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('export-har')));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('export-confirm')));
+    await tester.pumpAndSettle();
     final har = jsonDecode(files['session.har']!) as Map<String, dynamic>;
     final entries = har['log']['entries'] as List;
     expect(har['log']['version'], '1.2');
@@ -1344,6 +1348,112 @@ void main() {
     expect(entries.first['request']['url'], url);
     expect(entries.first['response']['status'], 201);
     expect(entries.first['response']['content']['text'], '{"ok":true}');
+
+    // Ticking the box in the export dialog takes credentials out of the file,
+    // and the choice is remembered for the next export.
+    await type(tester, find.byKey(const Key('url')), '$url?api_key=abc123');
+    await tester.tap(find.byKey(const Key('send')));
+    await waitFor(tester, find.text('Session · 3 requests'));
+    await tester.pumpAndSettle();
+    Future<void> exportHarFile({required bool tick}) async {
+      // The message from the previous export would cover the menu.
+      tester
+          .state<ScaffoldMessengerState>(find.byType(ScaffoldMessenger))
+          .clearSnackBars();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('export-response')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('export-har')));
+      await tester.pumpAndSettle();
+      if (tick) {
+        await tester.tap(find.byKey(const Key('export-redact')));
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.byKey(const Key('export-confirm')));
+      await tester.pumpAndSettle();
+    }
+
+    await exportHarFile(tick: false);
+    expect(files['session.har'], contains('abc123'));
+    await exportHarFile(tick: true);
+    expect(files['session.har'], isNot(contains('abc123')));
+    expect(files['session.har'], contains('api_key=[REDACTED]'));
+    expect(find.text('Exported session.har, redacted'), findsOneWidget);
+    files.remove('session.har');
+    await exportHarFile(tick: false);
+    expect(files['session.har'], isNot(contains('abc123')));
+    // Back off, so later exports in this run start from the default.
+    await exportHarFile(tick: true);
+    expect(files['session.har'], contains('abc123'));
+
+    // The archive imports back as a collection, one request per exchange.
+    await tester.tap(find.byKey(const Key('import-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('import-paste')));
+    await tester.pumpAndSettle();
+    await type(tester, find.byKey(const Key('paste')), files['session.har']!);
+    await tester.tap(find.byKey(const Key('dialog-confirm')));
+    await waitFor(tester, find.byKey(const Key('collection-name')));
+    await tester.pumpAndSettle();
+    await type(tester, find.byKey(const Key('collection-name')), 'Replay');
+    await tester.tap(find.byKey(const Key('dialog-confirm')));
+    await tester.pumpAndSettle();
+    final replay = store.collections.single;
+    expect(replay.name, 'Replay');
+    expect(replay.items.map((i) => i.name), [
+      'GET /ping',
+      'GET /ping (2)',
+      'GET /ping (3)',
+    ]);
+    expect(replay.items.last.request!.url, '$url?api_key=abc123');
+    expect(find.text('GET /ping (3)'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('analyses the session and imports it from the report', (
+    tester,
+  ) async {
+    await start(tester);
+    await launch(tester);
+    final base = 'http://127.0.0.1:${server.port}';
+    for (final path in const ['/old', '/ping?api_key=abc123']) {
+      await type(tester, find.byKey(const Key('url')), '$base$path');
+      await tester.tap(find.byKey(const Key('send')));
+      await waitFor(tester, find.byKey(const Key('status')));
+      await tester.pumpAndSettle();
+    }
+    // The redirect and where it led are separate exchanges.
+    await waitFor(tester, find.text('Session · 3 requests'));
+
+    await tester.tap(find.byKey(const Key('session')));
+    await waitFor(tester, find.byKey(const Key('har-summary')));
+    await tester.pumpAndSettle();
+    expect(find.text('HAR analysis · Session'), findsOneWidget);
+    expect(find.text('1 request has a credential in the URL'), findsOneWidget);
+    expect(find.text('1 redirect'), findsOneWidget);
+
+    // A finding narrows the table to the requests it is about.
+    await tester.tap(find.text('1 request has a credential in the URL'));
+    await tester.pumpAndSettle();
+    const narrowed = '1 of 3 · 1 request has a credential in the URL';
+    expect(find.text(narrowed), findsOneWidget);
+    // The table has scrolled into view with only that request in it.
+    expect(find.byKey(const Key('har-entry-2')), findsOneWidget);
+    expect(find.byKey(const Key('har-entry-0')), findsNothing);
+    expect(find.byKey(const Key('har-entry-1')), findsNothing);
+    await tester.tap(find.byTooltip('Show all requests'));
+    await tester.pumpAndSettle();
+    expect(find.text(narrowed), findsNothing);
+    expect(find.byKey(const Key('har-entry-0')), findsOneWidget);
+
+    // The requests can be kept as a collection straight from the report.
+    await tester.tap(find.byKey(const Key('har-import')));
+    await waitFor(tester, find.byKey(const Key('collection-name')));
+    await tester.pumpAndSettle();
+    await type(tester, find.byKey(const Key('collection-name')), 'Recorded');
+    await tester.tap(find.byKey(const Key('dialog-confirm')));
+    await tester.pumpAndSettle();
+    expect(store.collections.single.name, 'Recorded');
+    expect(store.collections.single.items.length, 3);
     expect(tester.takeException(), isNull);
   });
   testWidgets('guards unsaved edits and undoes removals', (tester) async {

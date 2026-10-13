@@ -14,8 +14,12 @@ view. One Rust core does the networking and powers all three front ends.
 - **gRPC:** load methods by server reflection or from a `.proto` file and call them with
   JSON messages, including streaming methods.
 - **Collections and environments:** `{{variables}}`, folders and standalone requests.
-- **Import:** Postman, OpenAPI / Swagger (file or URL), curl and `.env`.
+- **Import:** Postman, OpenAPI / Swagger (file or URL), HAR, curl and `.env`.
 - **Export:** Postman, Bruno, curl, `.env`, and the session as a HAR file.
+- **HAR analysis:** totals, a timeline and findings (failures, slow or oversized
+  responses, credentials in URLs) for any HAR file or the current session.
+- **Redaction:** one checkbox on any export replaces tokens, passwords, cookies and
+  keys with `[REDACTED]`.
 - **CLI:** send requests, run whole collections, and convert between formats.
 
 ## Status
@@ -64,11 +68,15 @@ reqorb GET httpbin.org/get -i
 reqorb GET '{{base}}/get' -e dev.env --var base=https://httpbin.org
 reqorb POST https://httpbin.org/post --json '{"n": 1}'
 reqorb GET httpbin.org/get --har session.har             # save the exchanges as HAR
+reqorb GET httpbin.org/get --har session.har --redact    # the same, without credentials
 
 reqorb import shop.postman_collection.json -o shop.reqorb.json
 reqorb import https://petstore.swagger.io/v2/swagger.json -o petstore.reqorb.json
 reqorb run shop.reqorb.json -e dev.env                   # or one request by name
 reqorb export shop.reqorb.json -f bruno                  # reqorb | postman | bruno | curl | dotenv
+reqorb export shop.reqorb.json -f postman --redact       # safe to share
+reqorb import session.har -o session.reqorb.json         # a HAR from reqorb or a browser
+reqorb analyze session.har                               # totals, slowest requests and findings
 
 reqorb ws wss://echo.websocket.org -m hello -n 2
 reqorb grpc grpcb.in:9000                                # list methods
@@ -88,6 +96,7 @@ environment, then the collection's own variables.
 | Postman v2.0/v2.1 | collections, environments | collections (v2.1), environments |
 | OpenAPI 3.x / Swagger 2.0 (JSON or YAML, file or URL) | collection | – |
 | Bruno (collection JSON) | – | collections |
+| HAR 1.2 | collection, one request per entry | the session's exchanges |
 | curl | one command | one command per request |
 | `.env` | environment | environment |
 
@@ -119,7 +128,9 @@ reqorb POST https://httpbin.org/post --binary photo.png
 
 - **HAR:** every HTTP exchange is recorded, including redirects and authorization round
   trips. The app exports the session from the response pane or the sidebar; the CLI
-  writes it with `--har FILE` on a send or a `run`.
+  writes it with `--har FILE` on a send or a `run`. Importing a HAR file, from reqorb
+  or from a browser's developer tools, makes a collection with one request per entry;
+  the recorded responses are not kept.
 - **WebSocket:** choose `WS` where the HTTP method goes. Headers and header-based
   authorization go with the handshake; `http(s)://` addresses are read as `ws(s)://`.
 - **gRPC:** choose `GRPC`. Methods come from server reflection or a `.proto` file, and
@@ -130,6 +141,41 @@ reqorb POST https://httpbin.org/post --binary photo.png
 
 WebSocket and gRPC requests are saved in reqorb's own format only; Postman, Bruno and
 curl exports leave them out.
+
+## Analysing a HAR file
+
+In the app, choose **Analyse HAR file…** from the import menu, or click the **Session**
+row in the sidebar to analyse what you have sent so far. `reqorb analyze FILE` prints
+the same report, and `--json` gives it as JSON for scripts. The report has:
+
+- totals: requests, failures, bytes transferred, and the time from first to last
+- requests grouped by status, host and kind of content
+- every request with its status, size and time, on a timeline in the app
+- findings, most serious first: requests with no response, 5xx and 4xx errors,
+  requests of a second or longer, responses over 1 MB, credentials in URLs, plain
+  `http://` to a remote host, cookies without `Secure` or `HttpOnly`, uncompressed
+  text over 10 KB, redirects and repeated requests
+
+In the app, clicking a finding narrows the request table to the requests it is about,
+and **Import as collection** keeps the archive's requests. The compression check is
+skipped for archives reqorb recorded itself, as it stores responses decompressed.
+
+## Redacting exports
+
+Every export in the app opens a short dialog with a **Redact sensitive data** checkbox;
+the CLI has `--redact` on `export` and alongside `--har`. Redaction replaces these with
+`[REDACTED]`:
+
+- `Authorization` credentials (the scheme is kept), cookie values, and headers such as
+  `X-Api-Key`
+- URL passwords and query parameters such as `api_key` or `access_token`
+- JSON and form fields named like a credential (`password`, `client_secret`, `token`…)
+- the secret fields of a request's authorization, and variables named like a credential
+
+A value that is only a `{{variable}}` is left alone, so a redacted collection still
+works once the variables are filled in. Values are found by the name they are stored
+under, so a secret in free text or under an unrelated name is not caught: look the
+file over before sharing it.
 
 ## Project layout
 

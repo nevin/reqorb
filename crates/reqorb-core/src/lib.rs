@@ -1,5 +1,6 @@
 //! Request engine shared by the reqorb CLI and desktop/iPad app.
 
+mod analyze;
 mod auth;
 mod cookies;
 mod export;
@@ -8,11 +9,13 @@ mod har;
 mod import;
 mod model;
 mod openapi;
+mod redact;
 mod vars;
 mod ws;
 
 use std::time::{Duration, Instant};
 
+pub use analyze::{HarCount, HarEntry, HarFinding, HarReport, HarSeverity, analyze_har};
 pub use auth::{Auth, AuthField, AuthKind, AuthParam, auth_fields};
 pub use cookies::{Cookie, cookie_header, store_set_cookie};
 pub use export::{ExportFormat, export_collection, export_environment, export_native, to_curl};
@@ -25,6 +28,7 @@ pub use model::{
     AppTheme, BodyMode, Collection, DisabledTls, Environment, Exchange, FormField, Header,
     HttpMode, Item, Request, RequestSettings, Response, SendOptions, Settings, Variable, Workspace,
 };
+pub use redact::{REDACTED, redact_collection, redact_environment, redact_exchanges, redact_text};
 pub use vars::{Resolved, resolve};
 pub use ws::{WsEvent, WsEventKind, WsHandle, ws_connect};
 

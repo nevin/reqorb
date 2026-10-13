@@ -1,5 +1,6 @@
 //! Importers for Postman collections and environments, OpenAPI/Swagger
-//! documents, curl commands, `.env` files and reqorb's own JSON format.
+//! documents, curl commands, `.env` files and reqorb's own JSON format. HAR
+//! archives are read in `har`.
 
 use base64::Engine;
 use serde::{Deserialize, Serialize};
@@ -26,7 +27,7 @@ pub(crate) struct NativeFile {
 #[derive(Debug, Clone, Default)]
 pub struct ImportResult {
     /// What the input was recognised as: `reqorb`, `postman-collection`,
-    /// `postman-environment`, `openapi`, `curl` or `dotenv`.
+    /// `postman-environment`, `openapi`, `har`, `curl` or `dotenv`.
     pub source: String,
     pub collections: Vec<Collection>,
     pub environments: Vec<Environment>,
@@ -96,8 +97,11 @@ pub(crate) fn import_from(
                 warnings: Vec::new(),
             });
         }
+        if crate::har::is_har(&value) {
+            return Ok(crate::har::from_har(&value, name_hint));
+        }
         return Err(Error::Format(
-            "JSON is not a reqorb file, Postman collection, Postman environment or OpenAPI document"
+            "JSON is not a reqorb file, Postman collection, Postman environment, OpenAPI document or HAR archive"
                 .into(),
         ));
     }

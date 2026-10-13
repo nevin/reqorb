@@ -199,11 +199,7 @@ class _Loaded extends StatelessWidget {
                   ),
                 ),
                 _Fact(Icons.schedule, '${response.elapsedMs} ms', 'Time'),
-                _Fact(
-                  Icons.data_usage,
-                  _formatSize(response.sizeBytes),
-                  'Size',
-                ),
+                _Fact(Icons.data_usage, formatSize(response.sizeBytes), 'Size'),
                 Text(response.httpVersion, style: muted),
                 if (unresolved.isNotEmpty)
                   Tooltip(
@@ -410,7 +406,8 @@ class _Headers extends StatelessWidget {
   }
 }
 
-String _formatSize(int bytes) {
+/// A byte count in the largest unit that keeps it readable.
+String formatSize(int bytes) {
   if (bytes < 1024) return '$bytes B';
   if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
   return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';

@@ -24,16 +24,32 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Run requests from a collection (reqorb, Postman, OpenAPI/Swagger or curl)
+    /// Run requests from a collection (reqorb, Postman, OpenAPI/Swagger, HAR or curl)
     Run(RunArgs),
-    /// Convert Postman, OpenAPI/Swagger, curl or .env input to reqorb JSON
+    /// Convert Postman, OpenAPI/Swagger, HAR, curl or .env input to reqorb JSON
     Import(ImportArgs),
     /// Convert a collection or environment file to another format
     Export(ExportArgs),
+    /// Report on a HAR archive: totals, slow and failed requests, and risks
+    Analyze(AnalyzeArgs),
     /// Open a WebSocket, send messages and print what arrives
     Ws(WsArgs),
     /// List a gRPC server's methods, or call one with JSON messages
     Grpc(GrpcArgs),
+}
+
+#[derive(Args)]
+struct AnalyzeArgs {
+    /// HAR file to analyse; `-` reads stdin
+    file: PathBuf,
+
+    /// Print the whole report as JSON
+    #[arg(long)]
+    json: bool,
+
+    /// How many of the slowest requests to list
+    #[arg(short = 'n', long, value_name = "N", default_value_t = 5)]
+    top: usize,
 }
 
 #[derive(Args)]
@@ -230,13 +246,21 @@ struct OutputArgs {
     /// Write every HTTP exchange made, redirects included, to a HAR file
     #[arg(long, value_name = "FILE")]
     har: Option<PathBuf>,
+
+    /// Replace tokens, passwords, cookies and keys in the HAR file with [REDACTED]
+    #[arg(long, requires = "har")]
+    redact: bool,
 }
 
 /// Writes the session's exchanges as a HAR file when `--har` was given.
 fn write_har(output: &OutputArgs, exchanges: &[reqorb_core::Exchange]) -> Result<()> {
     if let Some(path) = &output.har {
-        std::fs::write(path, reqorb_core::to_har(exchanges))
-            .with_context(|| format!("cannot write {}", path.display()))?;
+        let har = if output.redact {
+            reqorb_core::to_har(&reqorb_core::redact_exchanges(exchanges))
+        } else {
+            reqorb_core::to_har(exchanges)
+        };
+        std::fs::write(path, har).with_context(|| format!("cannot write {}", path.display()))?;
         eprintln!(
             "wrote {} exchange(s) to {}",
             exchanges.len(),
@@ -280,7 +304,7 @@ struct ImportArgs {
 
 #[derive(Args)]
 struct ExportArgs {
-    /// Collection or environment file or URL (reqorb, Postman, OpenAPI/Swagger, curl or .env)
+    /// Collection or environment file or URL (reqorb, Postman, OpenAPI/Swagger, HAR, curl or .env)
     file: String,
 
     /// Target format
@@ -294,6 +318,10 @@ struct ExportArgs {
     /// Write the result here instead of stdout
     #[arg(short, long, value_name = "FILE")]
     output: Option<PathBuf>,
+
+    /// Replace tokens, passwords, cookies and keys with [REDACTED]
+    #[arg(long)]
+    redact: bool,
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -799,6 +827,99 @@ async fn import(args: ImportArgs) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
+fn human_bytes(bytes: u64) -> String {
+    match bytes {
+        b if b >= 1 << 20 => format!("{:.1} MB", b as f64 / (1 << 20) as f64),
+        b if b >= 1 << 10 => format!("{:.1} KB", b as f64 / (1 << 10) as f64),
+        b => format!("{b} B"),
+    }
+}
+
+fn human_ms(ms: u64) -> String {
+    if ms >= 1000 {
+        format!("{:.2} s", ms as f64 / 1000.0)
+    } else {
+        format!("{ms} ms")
+    }
+}
+
+fn analyze(args: AnalyzeArgs) -> Result<ExitCode> {
+    let report = reqorb_core::analyze_har(&read_input(&args.file)?)
+        .with_context(|| format!("analysing {}", args.file.display()))?;
+    if args.json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    println!(
+        "{} request(s), {} failed, {} transferred, {} from first to last ({} added up)",
+        report.entries.len(),
+        report.failed,
+        human_bytes(report.total_bytes),
+        human_ms(report.span_ms),
+        human_ms(report.total_time_ms),
+    );
+    if !report.creator.is_empty() {
+        println!("recorded by {}", report.creator);
+    }
+    for (title, counts) in [
+        ("Status", &report.statuses),
+        ("Hosts", &report.hosts),
+        ("Content", &report.kinds),
+    ] {
+        if counts.is_empty() {
+            continue;
+        }
+        println!("\n{title}");
+        for count in counts.iter().take(10) {
+            println!(
+                "  {:<32} {:>5}  {:>10}  {:>9}",
+                count.name,
+                count.count,
+                human_bytes(count.bytes),
+                human_ms(count.time_ms),
+            );
+        }
+        if counts.len() > 10 {
+            println!("  and {} more", counts.len() - 10);
+        }
+    }
+
+    let mut slowest: Vec<_> = report.entries.iter().collect();
+    slowest.sort_by_key(|e| std::cmp::Reverse(e.time_ms));
+    if args.top > 0 && !slowest.is_empty() {
+        println!("\nSlowest");
+        for entry in slowest.iter().take(args.top) {
+            println!(
+                "  {:>9}  {:>10}  {:>3}  {} {}",
+                human_ms(entry.time_ms),
+                human_bytes(entry.size_bytes),
+                entry.status,
+                entry.method,
+                entry.url,
+            );
+        }
+    }
+
+    if report.findings.is_empty() {
+        println!("\nNothing stands out.");
+    } else {
+        println!("\nFindings");
+    }
+    for finding in &report.findings {
+        let mark = match finding.severity {
+            reqorb_core::HarSeverity::Error => "✗",
+            reqorb_core::HarSeverity::Warning => "!",
+            reqorb_core::HarSeverity::Info => "·",
+        };
+        println!("{mark} {}", finding.title);
+        for line in finding.detail.lines() {
+            println!("    {line}");
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
 async fn export(args: ExportArgs) -> Result<ExitCode> {
     let imported = load_source(&args.file).await?;
     let format = ExportFormat::from(args.format);
@@ -820,6 +941,12 @@ async fn export(args: ExportArgs) -> Result<ExitCode> {
         .collect();
 
     let text = match (collections.as_slice(), environments.as_slice()) {
+        ([collection], []) if args.redact => {
+            reqorb_core::export_collection(&reqorb_core::redact_collection(collection), format)?
+        }
+        ([], [environment]) if args.redact => {
+            reqorb_core::export_environment(&reqorb_core::redact_environment(environment), format)?
+        }
         ([collection], []) => reqorb_core::export_collection(collection, format)?,
         ([], [environment]) => reqorb_core::export_environment(environment, format)?,
         ([], []) => bail!("nothing to export in {}", args.file),
@@ -847,6 +974,7 @@ async fn main() -> ExitCode {
         Some(Command::Run(args)) => run(args).await,
         Some(Command::Import(args)) => import(args).await,
         Some(Command::Export(args)) => export(args).await,
+        Some(Command::Analyze(args)) => analyze(args),
         Some(Command::Ws(args)) => ws(args).await,
         Some(Command::Grpc(args)) => grpc(args).await,
         None => send(cli.send).await,

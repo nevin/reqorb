@@ -136,6 +136,12 @@ class _SidebarState extends State<Sidebar> {
                         value: () => importFromPaste(context, store),
                         child: const Text('Paste curl or JSON…'),
                       ),
+                      const PopupMenuDivider(),
+                      PopupMenuItem(
+                        key: const Key('analyze-har'),
+                        value: () => analyzeHarFile(context, store),
+                        child: const Text('Analyse HAR file…'),
+                      ),
                     ],
                   ),
                 ],
@@ -180,6 +186,7 @@ class _SidebarState extends State<Sidebar> {
               ListTile(
                 key: const Key('session'),
                 dense: true,
+                onTap: () => analyzeSession(context, store),
                 leading: const Icon(Icons.history, size: 20),
                 title: Text(
                   'Session · ${store.session.length} '
@@ -192,6 +199,11 @@ class _SidebarState extends State<Sidebar> {
                   icon: const Icon(Icons.more_horiz),
                   onSelected: (action) => action(),
                   itemBuilder: (_) => [
+                    PopupMenuItem(
+                      key: const Key('session-analyze'),
+                      value: () => analyzeSession(context, store),
+                      child: const Text('Analyse session'),
+                    ),
                     PopupMenuItem(
                       key: const Key('session-export-har'),
                       value: () => exportSessionHar(context, store),
@@ -230,8 +242,8 @@ class _SidebarState extends State<Sidebar> {
         if (store.collections.isEmpty)
           _hint(
             theme,
-            'Import a swagger.json, a Postman collection or a curl '
-            'command, or save a request into a new collection.',
+            'Import a swagger.json, a Postman collection, a HAR file or '
+            'a curl command, or save a request into a new collection.',
           ),
         for (var i = 0; i < store.collections.length; i++) _collection(i),
         const Divider(height: 24),

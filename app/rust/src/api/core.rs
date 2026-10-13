@@ -11,7 +11,7 @@ use crate::frb_generated::StreamSink;
 pub use reqorb_core::{
     AppTheme, Auth, AuthField, AuthKind, AuthParam, BodyMode, Collection, Cookie, DisabledTls,
     Environment, Exchange, ExportFormat, FormField, GrpcCall, GrpcMethod, GrpcReply, GrpcSchema,
-    Header, HttpMode, ImportResult, Item, Request, RequestSettings, Response, Sent, Settings,
+    HarCount, HarEntry, HarFinding, HarReport, HarSeverity, Header, HttpMode, ImportResult, Item, Request, RequestSettings, Response, Sent, Settings,
     Variable, Workspace, WsEvent, WsEventKind,
 };
 
@@ -434,6 +434,85 @@ pub fn export_environment(
     format: ExportFormat,
 ) -> Result<String, String> {
     reqorb_core::export_environment(&environment, format).map_err(|e| e.to_string())
+}
+
+#[frb(mirror(HarSeverity))]
+pub enum _HarSeverity {
+    Error,
+    Warning,
+    Info,
+}
+
+#[frb(mirror(HarFinding))]
+pub struct _HarFinding {
+    pub severity: HarSeverity,
+    pub title: String,
+    pub detail: String,
+    pub entries: Vec<u32>,
+}
+
+#[frb(mirror(HarEntry))]
+pub struct _HarEntry {
+    pub offset_ms: u64,
+    pub method: String,
+    pub url: String,
+    pub host: String,
+    pub status: u16,
+    pub kind: String,
+    pub size_bytes: u64,
+    pub time_ms: u64,
+    pub wait_ms: Option<u64>,
+}
+
+#[frb(mirror(HarCount))]
+pub struct _HarCount {
+    pub name: String,
+    pub count: u32,
+    pub bytes: u64,
+    pub time_ms: u64,
+}
+
+#[frb(mirror(HarReport))]
+pub struct _HarReport {
+    pub creator: String,
+    pub entries: Vec<HarEntry>,
+    pub failed: u32,
+    pub total_bytes: u64,
+    pub total_time_ms: u64,
+    pub span_ms: u64,
+    pub hosts: Vec<HarCount>,
+    pub statuses: Vec<HarCount>,
+    pub kinds: Vec<HarCount>,
+    pub findings: Vec<HarFinding>,
+}
+
+/// Reports on the text of a HAR archive: totals, breakdowns and findings.
+pub fn analyze_har(text: String) -> Result<HarReport, String> {
+    reqorb_core::analyze_har(&text).map_err(|e| e.to_string())
+}
+
+/// Copies with tokens, passwords, cookies and keys replaced, for exports
+/// that are going to be shared.
+#[frb(sync)]
+pub fn redact_exchanges(exchanges: Vec<Exchange>) -> Vec<Exchange> {
+    reqorb_core::redact_exchanges(&exchanges)
+}
+
+#[frb(sync)]
+pub fn redact_collection(collection: Collection) -> Collection {
+    reqorb_core::redact_collection(&collection)
+}
+
+#[frb(sync)]
+pub fn redact_environment(environment: Environment) -> Environment {
+    reqorb_core::redact_environment(&environment)
+}
+
+/// Masks the values under sensitive keys of a JSON document; other text is
+/// returned unchanged.
+#[frb(sync)]
+pub fn redact_text(text: String) -> String {
+    reqorb_core::redact_text(&text)
 }
 
 #[frb(sync)]
