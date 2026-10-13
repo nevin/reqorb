@@ -7,6 +7,9 @@ import 'package:flutter/material.dart' hide FormField;
 import 'package:flutter/services.dart';
 import 'package:reqorb/protocols/grpc_session.dart';
 import 'package:reqorb/protocols/ws_session.dart';
+import 'package:reqorb/request/environment_picker.dart';
+import 'package:reqorb/request/request_title.dart';
+import 'package:reqorb/request/url_bar.dart';
 import 'package:reqorb/request/send_session.dart';
 import 'package:reqorb/environments/environments.dart';
 import 'package:reqorb/protocols/grpc_view.dart';
@@ -29,15 +32,7 @@ import 'package:reqorb/src/rust/api/core.dart';
 import 'package:reqorb/transfer/export_actions.dart';
 import 'package:reqorb/workspace/workspace_store.dart';
 
-const _methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
-
-/// Other kinds of request, chosen where an HTTP method would be.
-const _protocols = ['WS', 'GRPC'];
-
 const _sidebarWidth = 280.0;
-
-/// Dropdown value meaning "no environment"; real names are never empty.
-const _noEnvironment = '';
 
 class RequestPage extends StatefulWidget {
   const RequestPage({super.key, required this.store});
@@ -96,11 +91,6 @@ class _RequestPageState extends State<RequestPage> {
   /// The name given to a request that has not been saved yet.
   String? _draftName;
 
-  /// Whether the title is being edited in place.
-  bool _editingTitle = false;
-  final _titleText = TextEditingController();
-  final _titleFocus = FocusNode();
-
   /// Notifies on any edit to the request, for the title and the tab badges.
   Listenable get _edits => _draft;
 
@@ -135,10 +125,6 @@ class _RequestPageState extends State<RequestPage> {
     for (final session in [_http, _ws, _grpc]) {
       session.addListener(_sessionChanged);
     }
-    // Clicking away from the title keeps what was typed.
-    _titleFocus.addListener(() {
-      if (!_titleFocus.hasFocus && _editingTitle) _commitTitle();
-    });
   }
 
   @override
@@ -148,8 +134,6 @@ class _RequestPageState extends State<RequestPage> {
     _ws.dispose();
     _grpc.dispose();
     _urlFocus.dispose();
-    _titleText.dispose();
-    _titleFocus.dispose();
     super.dispose();
   }
 
@@ -278,22 +262,10 @@ class _RequestPageState extends State<RequestPage> {
     return (origin == null ? null : _store.itemAt(origin)?.name) ?? _draftName;
   }
 
-  void _editTitle() {
-    final name = _name ?? '';
-    _titleText
-      ..text = name
-      ..selection = TextSelection(baseOffset: 0, extentOffset: name.length);
-    setState(() => _editingTitle = true);
-  }
-
   /// Renames the saved request, or names the draft for when it is saved.
-  void _commitTitle() {
-    if (!_editingTitle) return;
-    final name = _titleText.text.trim();
+  void _rename(String name) {
     final origin = _origin;
     setState(() {
-      _editingTitle = false;
-      if (name.isEmpty) return;
       if (origin != null && _store.itemAt(origin) != null) {
         _store.renameItem(origin, name);
       } else {
@@ -301,6 +273,22 @@ class _RequestPageState extends State<RequestPage> {
       }
     });
   }
+
+  /// The collection the open request is saved in, if any.
+  String? get _collectionName {
+    final origin = _origin;
+    if (origin == null || _store.itemAt(origin) == null) return null;
+    final inCollection =
+        origin.collection >= 0 && origin.collection < _store.collections.length;
+    return inCollection ? _store.collections[origin.collection].name : null;
+  }
+
+  void _setMethod(String method) => setState(() {
+    // Leaving a WebSocket or gRPC request for another kind ends its session.
+    if (_isWs && method != _method) _wsReset();
+    if (_isGrpc && method != _method) _grpcReset();
+    _method = method;
+  });
 
   /// Runs [then], which replaces what is in the editor, after making sure
   /// unsaved edits to a saved request are not lost without being asked.
@@ -349,7 +337,6 @@ class _RequestPageState extends State<RequestPage> {
       _origin = ref;
       _http.reset();
       _draftName = null;
-      _editingTitle = false;
     });
     if (_scaffold.currentState?.isDrawerOpen ?? false) {
       _scaffold.currentState!.closeDrawer();
@@ -365,7 +352,6 @@ class _RequestPageState extends State<RequestPage> {
       _draft.clear();
       _http.reset();
       _draftName = null;
-      _editingTitle = false;
     });
     _urlFocus.requestFocus();
     if (_scaffold.currentState?.isDrawerOpen ?? false) {
@@ -556,254 +542,11 @@ class _RequestPageState extends State<RequestPage> {
     tests: linesOf(_tests.text).length + linesOf(_captures.text).length,
   );
 
-  /// Where the open request is saved and whether it has unsaved edits.
-  /// Double-clicking or long-pressing the name edits it in place.
-  Widget _title(ThemeData theme) {
-    final scheme = theme.colorScheme;
-    final origin = _origin;
-    final item = origin == null ? null : _store.itemAt(origin);
-    final muted = TextStyle(color: scheme.onSurfaceVariant);
-    const strong = TextStyle(fontWeight: FontWeight.w600);
-    final name = _name;
-    final collection =
-        item != null &&
-            origin!.collection >= 0 &&
-            origin.collection < _store.collections.length
-        ? '${_store.collections[origin.collection].name}  /  '
-        : null;
-
-    final Widget label;
-    if (_editingTitle) {
-      label = Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (collection != null) Text(collection, style: muted),
-          Flexible(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 360),
-              child: CallbackShortcuts(
-                bindings: {
-                  // Escape leaves the name as it was.
-                  const SingleActivator(LogicalKeyboardKey.escape): () =>
-                      setState(() => _editingTitle = false),
-                },
-                child: TextField(
-                  key: const Key('title-field'),
-                  controller: _titleText,
-                  focusNode: _titleFocus,
-                  autofocus: true,
-                  style: theme.textTheme.bodyMedium?.merge(strong),
-                  textInputAction: TextInputAction.done,
-                  decoration: const InputDecoration(
-                    hintText: 'Request name',
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 7,
-                    ),
-                  ),
-                  onSubmitted: (_) => _commitTitle(),
-                ),
-              ),
-            ),
-          ),
-        ],
-      );
-    } else {
-      final text = Text.rich(
-        TextSpan(
-          children: [
-            if (collection != null) TextSpan(text: collection, style: muted),
-            TextSpan(
-              text: name ?? 'Untitled request',
-              style: name == null ? muted : strong,
-            ),
-          ],
-        ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      );
-      final target = GestureDetector(
-        key: const Key('title'),
-        behavior: HitTestBehavior.opaque,
-        onDoubleTap: _editTitle,
-        onLongPress: _editTitle,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: text,
-        ),
-      );
-      // The hint wraps the gesture target, because a tooltip inside it would
-      // win the long press; on touch screens it is left out altogether.
-      label = isDesktop
-          ? Tooltip(message: 'Double-click to rename', child: target)
-          : target;
-    }
-    return Row(
-      children: [
-        Flexible(child: label),
-        if (_dirty)
-          Tooltip(
-            message: 'Unsaved changes (${shortcutModifier}S to save)',
-            child: Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.circle, size: 8, color: scheme.primary),
-                  const SizedBox(width: 5),
-                  Text(
-                    'Edited',
-                    key: const Key('unsaved'),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _environmentPicker(ThemeData theme) {
-    final scheme = theme.colorScheme;
-    final active = _store.activeEnvironment;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border.all(color: scheme.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.only(left: 10),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.layers_outlined,
-              size: 16,
-              // Coloured while an environment is supplying variables.
-              color: active == null ? scheme.outline : scheme.primary,
-            ),
-            const SizedBox(width: 6),
-            DropdownButton<String>(
-              key: const Key('environment'),
-              value: active ?? _noEnvironment,
-              isDense: true,
-              style: theme.textTheme.bodyMedium,
-              underline: const SizedBox.shrink(),
-              items: [
-                const DropdownMenuItem(
-                  value: _noEnvironment,
-                  child: Text('No environment'),
-                ),
-                for (final e in _store.environments)
-                  DropdownMenuItem(value: e.name, child: Text(e.name)),
-              ],
-              onChanged: (name) => _store.setActiveEnvironment(
-                name == _noEnvironment ? null : name,
-              ),
-            ),
-            IconButton(
-              key: const Key('manage-environments'),
-              tooltip: 'Manage environments',
-              iconSize: 18,
-              // Kept full size on touch screens, where it is hard to hit.
-              visualDensity: isDesktop ? VisualDensity.compact : null,
-              icon: const Icon(Icons.tune),
-              onPressed: _manageEnvironments,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// The method and URL in one field, as they are read together.
-  Widget _urlBar(ThemeData theme) {
-    final scheme = theme.colorScheme;
-    return ListenableBuilder(
-      listenable: _urlFocus,
-      builder: (context, child) => DecoratedBox(
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: _urlFocus.hasFocus ? scheme.primary : scheme.outlineVariant,
-            width: 1.5,
-          ),
-        ),
-        child: child,
-      ),
-      child: Row(
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(left: 12, right: 2),
-            child: DropdownButton<String>(
-              key: const Key('method'),
-              value: _method,
-              isDense: true,
-              underline: const SizedBox.shrink(),
-              items: [
-                // Imported requests may use a method outside the usual list.
-                for (final m in {..._methods, ..._protocols, _method})
-                  DropdownMenuItem(
-                    value: m,
-                    child: Text(
-                      m,
-                      style: mono.copyWith(
-                        color: methodColor(m, theme.brightness),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-              ],
-              onChanged: (m) => setState(() {
-                // Leaving a WebSocket for another kind ends its connection.
-                if (_isWs && m != _method) _wsReset();
-                if (_isGrpc && m != _method) _grpcReset();
-                _method = m ?? _method;
-              }),
-            ),
-          ),
-          SizedBox(
-            height: 22,
-            child: VerticalDivider(width: 9, color: scheme.outlineVariant),
-          ),
-          Expanded(
-            child: TextField(
-              key: const Key('url'),
-              focusNode: _urlFocus,
-              smartQuotesType: SmartQuotesType.disabled,
-              smartDashesType: SmartDashesType.disabled,
-              controller: _url,
-              autocorrect: false,
-              keyboardType: TextInputType.url,
-              style: mono,
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 11,
-                ),
-                hintText: 'Enter a URL, or paste one: {{base_url}}/users',
-              ),
-              onSubmitted: (_) => _isWs ? _wsConnect() : _primary(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _main(
     BuildContext context, {
     required bool showMenu,
     required VoidCallback onMenu,
   }) {
-    final theme = Theme.of(context);
     final request = RequestEditor(
       params: _params,
       headers: _headers,
@@ -911,11 +654,18 @@ class _RequestPageState extends State<RequestPage> {
               Expanded(
                 child: ListenableBuilder(
                   listenable: _edits,
-                  builder: (context, _) => _title(theme),
+                  builder: (context, _) => RequestTitle(
+                    // A name being typed belongs to the request it was typed for.
+                    key: ValueKey(_generation),
+                    name: _name,
+                    collection: _collectionName,
+                    dirty: _dirty,
+                    onRename: _rename,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
-              _environmentPicker(theme),
+              EnvironmentPicker(store: _store, onManage: _manageEnvironments),
             ],
           ),
         ),
@@ -926,7 +676,15 @@ class _RequestPageState extends State<RequestPage> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(child: _urlBar(theme)),
+                Expanded(
+                  child: UrlBar(
+                    method: _method,
+                    onMethodChanged: _setMethod,
+                    controller: _url,
+                    focusNode: _urlFocus,
+                    onSubmitted: () => _isWs ? _wsConnect() : _primary(),
+                  ),
+                ),
                 const SizedBox(width: 8),
                 if (_isWs && (_wsOpen || _wsConnecting))
                   FilledButton.tonal(

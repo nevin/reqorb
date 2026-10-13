@@ -232,14 +232,20 @@ crates/reqorb-cli/src/      the `reqorb` command
   input.rs  output.rs       reading what the user gave; printing and writing files
   commands/                 one module per command
 app/lib/                    the Flutter UI, one folder per feature
-  request/                  the main page, the request model and its editors
-  response/  protocols/     the response pane; WebSocket and gRPC views
+  bridge/                   Engine: the one interface to the Rust library
+  request/                  the main page, the request model, the send session and the editors
+  response/  protocols/     the response pane; WebSocket and gRPC sessions and views
   sidebar/  environments/  settings/  har/
   transfer/                 import and export actions
   workspace/                the saved workspace and collection actions
   shared/                   theme, messages and small reusable widgets
 app/rust/                   the bridge crate exposing the core to Dart
 ```
+
+In the app, widgets show state and hand actions on; the state lives in models that
+notify when they change (`RequestDraft`, `SendSession`, `WsSession`, `GrpcSession`,
+`WorkspaceStore`), and everything that reaches the Rust library goes through `Engine`.
+Tests put a stand-in engine in its place, so the whole app runs headlessly.
 
 Dependencies point one way: the CLI and the bridge depend on the core, never the
 reverse, and inside the core `model` depends on nothing while the protocol and format
@@ -251,7 +257,7 @@ modules depend on it.
 cargo test --workspace                               # core tests, and the CLI run against a local server
 cargo clippy --workspace --all-targets -- -D warnings
 cd app && flutter analyze
-cd app && flutter test                               # widget and logic tests, no window needed
+cd app && flutter test                               # the app against a stand-in engine, no window needed
 cd app && caffeinate -d flutter test integration_test -d macos   # the real app, end to end
 cd app && flutter_rust_bridge_codegen generate       # after changing app/rust/src/api
 ```
@@ -259,8 +265,10 @@ cd app && flutter_rust_bridge_codegen generate       # after changing app/rust/s
 GitHub Actions runs all of these on every push (`.github/workflows/ci.yml`); the
 end-to-end job is reported but does not fail the run.
 
-The end-to-end tests drive the real UI and wait for screen frames, so they stall if the display
-goes to sleep; `caffeinate -d` keeps it awake for the run.
+The end-to-end tests drive the real window and need it to stay in front: they stall if
+the display sleeps (`caffeinate -d` prevents that) and taps go astray if another window
+takes focus, so do not use the machine while they run. They pass on CI's clean runner;
+prefer `flutter test` for everyday work.
 
 ## License
 

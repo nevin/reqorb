@@ -168,6 +168,68 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('renames a request in place and flags unsaved edits', (
+    tester,
+  ) async {
+    await open(tester);
+    Future<void> rename(String name) async {
+      await tester.longPress(find.byKey(const Key('title')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('title-field')), name);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+    }
+
+    // A request can be named before it is saved anywhere.
+    expect(find.text('Untitled request'), findsOneWidget);
+    await rename('Draft');
+    expect(find.text('Draft'), findsOneWidget);
+    expect(find.byKey(const Key('title-field')), findsNothing);
+
+    final ref = store.addStandaloneRequest(
+      'Ping',
+      const Request(
+        method: 'GET',
+        url: 'https://api.test/ping',
+        headers: [],
+        form: [],
+        tests: [],
+        captures: [],
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ping'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('unsaved')), findsNothing);
+
+    // Renaming a saved request renames it in the workspace.
+    await rename('Pong');
+    expect(store.itemAt(ref)!.name, 'Pong');
+
+    await enterUrl(tester, 'https://api.test/pong');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('unsaved')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('save')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('unsaved')), findsNothing);
+    expect(store.itemAt(ref)!.request!.url, 'https://api.test/pong');
+    await tester.pump(const Duration(seconds: 5));
+  });
+
+  testWidgets('switching the kind of request ends a WebSocket session', (
+    tester,
+  ) async {
+    await open(tester);
+    await choose(tester, 'WS');
+    await enterUrl(tester, 'echo.test');
+    await tapSend(tester);
+    final socket = engine.sockets.values.single;
+    expect(socket.isClosed, isFalse);
+    await choose(tester, 'POST');
+    expect(socket.isClosed, isTrue);
+    expect(find.text('Send'), findsOneWidget);
+  });
+
   testWidgets('saves the workspace through the engine', (tester) async {
     await open(tester);
     store.addStandaloneRequest(
