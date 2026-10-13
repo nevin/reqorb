@@ -11,7 +11,7 @@ use crate::frb_generated::StreamSink;
 use reqorb_core::Keychain;
 pub use reqorb_core::{
     AppTheme, Auth, AuthField, AuthKind, AuthParam, BodyMode, CodeTarget, Collection, Cookie,
-    DirAccess, DisabledTls, Environment, Exchange, ExportFormat, FormField, GraphQlArg,
+    DirAccess, DisabledTls, Environment, Exchange, ExportFormat, FolderLink, FormField, GraphQlArg,
     GraphQlDraft, GraphQlField, GraphQlQuery, GraphQlSchema, GraphQlType, GrpcCall, GrpcMethod,
     GrpcReply, GrpcSchema, HarCount, HarEntry, HarFinding, HarPhase, HarReport, HarSeverity,
     Header, HistoryEntry, HttpMode, ImportResult, Indent, Item, Layout, ProxyMode, Request,
@@ -299,11 +299,18 @@ pub struct _Item {
     pub items: Vec<Item>,
 }
 
+#[frb(mirror(FolderLink))]
+pub struct _FolderLink {
+    pub path: String,
+    pub grant: String,
+}
+
 #[frb(mirror(Collection))]
 pub struct _Collection {
     pub name: String,
     pub variables: Vec<Variable>,
     pub items: Vec<Item>,
+    pub link: Option<FolderLink>,
 }
 
 #[frb(mirror(Workspace))]
@@ -896,6 +903,27 @@ pub fn generate_code(
     target: CodeTarget,
 ) -> Result<String, String> {
     reqorb_core::generate_code(&request, &variables, target).map_err(|e| e.to_string())
+}
+
+/// Writes a collection into a folder, one file for each request and
+/// without its credentials. Only files that changed are touched.
+pub async fn write_collection_dir(dir: String, collection: Collection) -> Result<(), String> {
+    reqorb_core::write_collection_dir(&dir, &collection).map_err(|e| e.to_string())
+}
+
+/// Reads the collection kept in a folder. `local`, the copy this machine
+/// holds, supplies the credentials the files leave out.
+pub async fn read_collection_dir(
+    dir: String,
+    local: Option<Collection>,
+) -> Result<Collection, String> {
+    reqorb_core::read_collection_dir(&dir, local.as_ref()).map_err(|e| e.to_string())
+}
+
+/// Whether a folder holds a collection written by reqorb.
+#[frb(sync)]
+pub fn is_collection_dir(dir: String) -> bool {
+    reqorb_core::is_collection_dir(&dir)
 }
 
 /// The rows of a CSV or JSON data file, each as the variables it sets

@@ -81,6 +81,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Environment dco_decode_box_autoadd_environment(dynamic raw);
 
   @protected
+  FolderLink dco_decode_box_autoadd_folder_link(dynamic raw);
+
+  @protected
   GraphQlDraft dco_decode_box_autoadd_graph_ql_draft(dynamic raw);
 
   @protected
@@ -136,6 +139,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ExportFormat dco_decode_export_format(dynamic raw);
+
+  @protected
+  FolderLink dco_decode_folder_link(dynamic raw);
 
   @protected
   FormField dco_decode_form_field(dynamic raw);
@@ -321,6 +327,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BodyMode? dco_decode_opt_box_autoadd_body_mode(dynamic raw);
 
   @protected
+  Collection? dco_decode_opt_box_autoadd_collection(dynamic raw);
+
+  @protected
+  FolderLink? dco_decode_opt_box_autoadd_folder_link(dynamic raw);
+
+  @protected
   GraphQlDraft? dco_decode_opt_box_autoadd_graph_ql_draft(dynamic raw);
 
   @protected
@@ -459,6 +471,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Environment sse_decode_box_autoadd_environment(SseDeserializer deserializer);
 
   @protected
+  FolderLink sse_decode_box_autoadd_folder_link(SseDeserializer deserializer);
+
+  @protected
   GraphQlDraft sse_decode_box_autoadd_graph_ql_draft(
     SseDeserializer deserializer,
   );
@@ -520,6 +535,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ExportFormat sse_decode_export_format(SseDeserializer deserializer);
+
+  @protected
+  FolderLink sse_decode_folder_link(SseDeserializer deserializer);
 
   @protected
   FormField sse_decode_form_field(SseDeserializer deserializer);
@@ -711,6 +729,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BodyMode? sse_decode_opt_box_autoadd_body_mode(SseDeserializer deserializer);
 
   @protected
+  Collection? sse_decode_opt_box_autoadd_collection(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  FolderLink? sse_decode_opt_box_autoadd_folder_link(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   GraphQlDraft? sse_decode_opt_box_autoadd_graph_ql_draft(
     SseDeserializer deserializer,
   );
@@ -870,6 +898,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_folder_link(
+    FolderLink self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_graph_ql_draft(
     GraphQlDraft self,
     SseSerializer serializer,
@@ -946,6 +980,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_export_format(ExportFormat self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_folder_link(FolderLink self, SseSerializer serializer);
 
   @protected
   void sse_encode_form_field(FormField self, SseSerializer serializer);
@@ -1187,6 +1224,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_body_mode(
     BodyMode? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_collection(
+    Collection? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_folder_link(
+    FolderLink? self,
     SseSerializer serializer,
   );
 

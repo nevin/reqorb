@@ -17,7 +17,7 @@ class FakeFolders implements Folders {
   final grants = <String, String?>{};
 
   @override
-  Future<String?> choose({String? initial}) async {
+  Future<String?> choose({String? initial, String? title}) async {
     asked.add(initial);
     return next;
   }

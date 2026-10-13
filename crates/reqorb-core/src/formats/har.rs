@@ -171,6 +171,7 @@ fn from_har_entries(value: &Value, name: &str, only: Option<&[u32]>) -> ImportRe
             name: name.to_string(),
             variables: Vec::new(),
             items,
+            link: None,
         }],
         environments: Vec::new(),
         warnings,

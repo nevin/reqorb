@@ -87,6 +87,14 @@ pub(crate) fn read_input(path: &Path) -> Result<String> {
 pub(crate) async fn load_source(source: &str) -> Result<ImportResult> {
     let result = if source.starts_with("http://") || source.starts_with("https://") {
         reqorb_core::import_url(source).await
+    } else if Path::new(source).is_dir() {
+        // A collection kept as a folder, one file for each request.
+        reqorb_core::read_collection_dir(source, None).map(|collection| ImportResult {
+            source: "reqorb-folder".into(),
+            collections: vec![collection],
+            environments: Vec::new(),
+            warnings: Vec::new(),
+        })
     } else {
         let path = Path::new(source);
         let hint = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");

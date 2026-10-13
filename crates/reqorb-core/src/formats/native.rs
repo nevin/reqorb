@@ -22,7 +22,14 @@ pub(crate) struct NativeFile {
 pub fn export_native(collections: &[Collection], environments: &[Environment]) -> String {
     pretty(&NativeFile {
         reqorb: NATIVE_VERSION,
-        collections: collections.to_vec(),
+        // Where a collection is kept on this machine is nobody else's concern.
+        collections: collections
+            .iter()
+            .map(|collection| Collection {
+                link: None,
+                ..collection.clone()
+            })
+            .collect(),
         environments: environments.to_vec(),
     })
 }

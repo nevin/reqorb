@@ -37,6 +37,7 @@ pub(super) fn sample() -> Collection {
                 items: Vec::new(),
             },
         ],
+        link: None,
     }
 }
 
@@ -134,6 +135,7 @@ fn auth_survives_postman_and_reaches_other_formats() {
                 items: Vec::new(),
             })
             .collect(),
+        link: None,
     };
 
     // Postman keeps every type, parameter for parameter.
@@ -204,6 +206,7 @@ fn body_types_reach_every_format() {
             }),
             with("none", &|r| r.body_mode = Some(BodyMode::None)),
         ],
+        link: None,
     };
 
     // Postman keeps every type; an explicit "none" comes back as no body.
@@ -303,6 +306,7 @@ fn request_settings_survive_postman() {
                 items: Vec::new(),
             },
         ],
+        link: None,
     };
     let text = export_collection(&collection, ExportFormat::Postman).unwrap();
     let value: Value = serde_json::from_str(&text).unwrap();
@@ -415,6 +419,7 @@ fn other_tools_formats_leave_out_websocket_and_grpc_requests() {
             item("Feed", "WS"),
             item("Call", "GRPC"),
         ],
+        link: None,
     };
     for format in [
         ExportFormat::Postman,

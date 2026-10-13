@@ -179,6 +179,7 @@ class WorkspaceStore extends ChangeNotifier {
     try {
       final saving = _workspace;
       final why = await engine.saveWorkspace(path: path, workspace: saving);
+      await _writeLinked(saving.collections);
       // Entering a locked credential again replaces it, so the count of
       // those still locked can only be known by looking.
       final locked = lockedSecrets == 0
@@ -383,9 +384,156 @@ class WorkspaceStore extends ChangeNotifier {
     all[index] = Collection(
       name: name,
       variables: target.variables,
+      link: target.link,
       items: target.items,
     );
     _set(collections: all);
+  }
+
+  // -------------------------------------------------------------- folders
+
+  /// What went wrong the last time a collection's folder was read or
+  /// written, by the folder's path. Empty when all is well.
+  final folderProblems = <String, String>{};
+
+  /// Each linked collection as it was last written to its folder, so that
+  /// only one that has changed is written again.
+  final _written = <String, Collection>{};
+
+  Collection _linked(Collection collection, FolderLink? link) => Collection(
+    name: collection.name,
+    variables: collection.variables,
+    items: collection.items,
+    link: link,
+  );
+
+  /// Keeps the collection at [index] in the folder at [dir] from now on,
+  /// one file for each request, and writes it there. Returns what went
+  /// wrong, or null.
+  Future<String?> linkCollection(int index, String dir, String grant) async {
+    if (index < 0 || index >= collections.length) return null;
+    if (engine.isCollectionDir(dir: dir)) {
+      return 'That folder already holds a collection. Choose an empty '
+          'folder, or use Open collection folder to work on the one there.';
+    }
+    final linked = _linked(
+      collections[index],
+      FolderLink(path: dir, grant: grant),
+    );
+    try {
+      await engine.writeCollectionDir(dir: dir, collection: linked);
+    } catch (e) {
+      return '$e';
+    }
+    _written[dir] = linked;
+    folderProblems.remove(dir);
+    _set(collections: [...collections]..[index] = linked);
+    return null;
+  }
+
+  /// Stops keeping the collection at [index] in its folder. The files stay
+  /// where they are.
+  void unlinkCollection(int index) {
+    if (index < 0 || index >= collections.length) return;
+    final dir = collections[index].link?.path;
+    if (dir == null) return;
+    _written.remove(dir);
+    folderProblems.remove(dir);
+    _set(
+      collections: [...collections]
+        ..[index] = _linked(collections[index], null),
+    );
+  }
+
+  /// Reads the collection at [index] again from its folder, as after the
+  /// files were changed by a pull or by hand. Credentials, which the files
+  /// do not hold, are kept from the copy here. Returns what went wrong.
+  Future<String?> reloadCollection(int index) async {
+    if (index < 0 || index >= collections.length) return null;
+    final local = collections[index];
+    final link = local.link;
+    if (link == null) return null;
+    try {
+      final read = await engine.readCollectionDir(dir: link.path, local: local);
+      folderProblems.remove(link.path);
+      final at = collections.indexOf(local);
+      if (at < 0) return null;
+      // As read, it is also what the folder holds.
+      _written[link.path] = read;
+      if (read != local) {
+        _set(collections: [...collections]..[at] = read);
+      } else {
+        notifyListeners();
+      }
+      return null;
+    } catch (e) {
+      folderProblems[link.path] = '$e';
+      notifyListeners();
+      return '$e';
+    }
+  }
+
+  /// Adds the collection kept in the folder at [dir], and keeps it there.
+  /// Returns what went wrong, or null.
+  Future<String?> openCollectionDir(String dir, String grant) async {
+    if (collections.any((c) => c.link?.path == dir)) {
+      return 'That folder is already open as a collection.';
+    }
+    try {
+      final read = await engine.readCollectionDir(dir: dir);
+      final linked = _linked(read, FolderLink(path: dir, grant: grant));
+      _written[dir] = linked;
+      _set(collections: [...collections, linked]);
+      return null;
+    } catch (e) {
+      return '$e';
+    }
+  }
+
+  /// Takes up each linked folder again after a start: the permission to
+  /// use it, which a sandboxed app must ask for anew, and then whatever
+  /// the files hold now.
+  Future<void> restoreLinks(Folders folders) async {
+    for (var i = 0; i < collections.length; i++) {
+      final link = collections[i].link;
+      if (link == null) continue;
+      if (link.grant.isNotEmpty) {
+        final path = await folders.restore(link.grant);
+        // The folder may have been moved or renamed since.
+        if (path != null && path != link.path) {
+          _set(
+            collections: [...collections]
+              ..[i] = _linked(
+                collections[i],
+                FolderLink(path: path, grant: link.grant),
+              ),
+          );
+        }
+      }
+      await reloadCollection(i);
+    }
+  }
+
+  /// Writes every linked collection that has changed to its folder.
+  Future<void> _writeLinked(List<Collection> saving) async {
+    var changed = false;
+    for (final collection in saving) {
+      final dir = collection.link?.path;
+      if (dir == null || identical(_written[dir], collection)) continue;
+      // One that could not be read is not written over what is there.
+      if (folderProblems.containsKey(dir) && !_written.containsKey(dir)) {
+        continue;
+      }
+      try {
+        await engine.writeCollectionDir(dir: dir, collection: collection);
+        _written[dir] = collection;
+        changed = folderProblems.remove(dir) != null || changed;
+      } catch (e) {
+        changed = folderProblems[dir] != '$e' || changed;
+        folderProblems[dir] = '$e';
+      }
+    }
+    if (changed) notifyListeners();
   }
 
   void removeCollection(int index) {
@@ -421,6 +569,7 @@ class WorkspaceStore extends ChangeNotifier {
     all[collection] = Collection(
       name: target.name,
       variables: target.variables,
+      link: target.link,
       items: [...target.items, item],
     );
     _set(collections: all);
@@ -463,6 +612,7 @@ class WorkspaceStore extends ChangeNotifier {
     all[ref.collection] = Collection(
       name: target.name,
       variables: target.variables,
+      link: target.link,
       items: _insert(target.items, ref.path, item),
     );
     _set(collections: all);
@@ -506,6 +656,7 @@ class WorkspaceStore extends ChangeNotifier {
     all[ref.collection] = Collection(
       name: target.name,
       variables: target.variables,
+      link: target.link,
       items: _replace(target.items, ref.path, change),
     );
     _set(collections: all);

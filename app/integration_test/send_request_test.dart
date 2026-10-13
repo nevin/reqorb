@@ -1688,6 +1688,84 @@ void main() {
     expect(find.byKey(const Key('test-results-tab')), findsNothing);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('keeps a collection as files and reads them back', (
+    tester,
+  ) async {
+    await start(tester);
+    await launch(tester);
+    Item saved(String name, {String? password}) => Item(
+      name: name,
+      request: Request(
+        method: 'GET',
+        url: 'https://api.test/${name.toLowerCase()}',
+        headers: const [],
+        form: const [],
+        tests: const [],
+        captures: const [],
+        auth: password == null
+            ? null
+            : Auth(
+                kind: AuthKind.basic,
+                params: [
+                  const AuthParam(key: 'username', value: 'ada'),
+                  AuthParam(key: 'password', value: password),
+                ],
+              ),
+      ),
+      items: const [],
+    );
+    store.merge(
+      ImportResult(
+        source: 'test',
+        collections: [
+          Collection(
+            name: 'Shop',
+            variables: const [],
+            items: [
+              saved('Login', password: 's3cret'),
+              Item(name: 'Orders', items: [saved('List')]),
+            ],
+          ),
+        ],
+        environments: const [],
+        warnings: const [],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final dir = '${tmp.path}/shop';
+    late String login;
+    await tester.runAsync(() async {
+      expect(await store.linkCollection(0, dir, ''), isNull);
+      await store.flush();
+      login = await File('$dir/Login.request.json').readAsString();
+      expect(await File('$dir/collection.json').exists(), isTrue);
+      expect(await File('$dir/Orders/List.request.json').exists(), isTrue);
+    });
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('folder-mark')), findsOneWidget);
+    // The password is not in the file; who it belongs to is.
+    expect(login, contains('"ada"'));
+    expect(login, isNot(contains('s3cret')));
+
+    // As a pull might leave the folder: one request renamed, one gone.
+    await tester.runAsync(() async {
+      await File('$dir/Login.request.json')
+          .writeAsString(login.replaceFirst('"Login"', '"Sign in"'));
+      await Directory('$dir/Orders').delete(recursive: true);
+    });
+    await tester.tap(find.byTooltip('Collection actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('reload-collection')));
+    await waitFor(tester, find.text('Sign in'));
+    await tester.pumpAndSettle();
+    expect(find.text('Orders'), findsNothing);
+    // The password it was read without is the one this machine still has.
+    final auth = store.collections.single.items.single.request!.auth!;
+    expect(auth.params.last.value, 's3cret');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('shows a stream of events as it arrives, and stops it', (
     tester,
   ) async {

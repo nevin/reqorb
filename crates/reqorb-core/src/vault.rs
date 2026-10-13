@@ -399,6 +399,7 @@ pub(crate) mod tests {
                         items: Vec::new(),
                     }],
                 }],
+                link: None,
             }],
             requests: vec![Item {
                 name: "Loose".into(),

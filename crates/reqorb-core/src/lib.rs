@@ -41,7 +41,8 @@ pub use error::Error;
 pub use files::{DirAccess, FileAccess, check_directory};
 pub use formats::{
     ExportFormat, ImportResult, export_collection, export_environment, export_native, import,
-    import_har, import_url, to_curl, to_har,
+    import_har, import_url, is_collection_dir, read_collection_dir, to_curl, to_har,
+    write_collection_dir,
 };
 pub use graphql::{
     GraphQlArg, GraphQlDraft, GraphQlField, GraphQlQuery, GraphQlSchema, GraphQlType,
@@ -55,8 +56,8 @@ pub use history::{History, HistoryEntry, append_history, clear_history, load_his
 pub use http::cookies::{Cookie, cookie_header, store_set_cookie};
 pub use http::{Cancel, SendEvent, Sent, Watch, send, send_opts, send_watched, send_with};
 pub use model::{
-    AppTheme, BodyMode, Collection, DisabledTls, Environment, Exchange, FormField, Header,
-    HttpMode, Indent, Item, Layout, Proxy, ProxyMode, Request, RequestSettings, Response,
+    AppTheme, BodyMode, Collection, DisabledTls, Environment, Exchange, FolderLink, FormField,
+    Header, HttpMode, Indent, Item, Layout, Proxy, ProxyMode, Request, RequestSettings, Response,
     SendOptions, Settings, Variable, Workspace,
 };
 pub use redact::{REDACTED, redact_collection, redact_environment, redact_exchanges, redact_text};

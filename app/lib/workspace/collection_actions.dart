@@ -4,6 +4,8 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:reqorb/shared/folders.dart';
+import 'package:reqorb/shared/messages.dart';
 import 'package:reqorb/shared/text_dialog.dart';
 import 'package:reqorb/workspace/workspace_store.dart';
 
@@ -70,4 +72,48 @@ Future<void> renameCollection(
   // Look the collection up again in case the list changed meanwhile.
   final current = store.collections.indexOf(collection);
   if (name != null && current >= 0) store.renameCollection(current, name);
+}
+
+/// Asks for a folder and keeps the collection at [index] there from now
+/// on, one file for each request.
+Future<void> keepInFolder(
+  BuildContext context,
+  WorkspaceStore store,
+  int index,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final name = store.collections[index].name;
+  final path = await folders.choose(title: 'Choose a folder for $name');
+  if (path == null) return;
+  final grant = await folders.grant(path);
+  final problem = await store.linkCollection(index, path, grant);
+  notify(
+    messenger,
+    problem ?? '$name is now kept in $path, one file for each request',
+  );
+}
+
+/// Asks for a folder that holds a collection, and opens it.
+Future<void> openCollectionFolder(
+  BuildContext context,
+  WorkspaceStore store,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final path = await folders.choose(title: 'Open a collection folder');
+  if (path == null) return;
+  final grant = await folders.grant(path);
+  final problem = await store.openCollectionDir(path, grant);
+  if (problem != null) notify(messenger, problem);
+}
+
+/// Reads the collection at [index] again from its folder.
+Future<void> reloadFromFolder(
+  BuildContext context,
+  WorkspaceStore store,
+  int index,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final name = store.collections[index].name;
+  final problem = await store.reloadCollection(index);
+  notify(messenger, problem ?? '$name was read again from its folder');
 }

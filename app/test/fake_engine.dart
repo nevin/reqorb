@@ -484,6 +484,51 @@ class FakeEngine extends Engine {
     return '$comment ${target.name}\n\t${request.method} "${request.url}"\n';
   }
 
+  // ---------------------------------------------------------------- folders
+
+  /// What each folder holds, by its path, as a real disk would.
+  final folderFiles = <String, Collection>{};
+
+  /// How many times each folder was written.
+  final folderWrites = <String, int>{};
+
+  /// Makes reading or writing a folder fail, when set.
+  String? folderFailure;
+
+  @override
+  Future<void> writeCollectionDir({
+    required String dir,
+    required Collection collection,
+  }) async {
+    if (folderFailure case final failure?) throw failure;
+    folderWrites[dir] = (folderWrites[dir] ?? 0) + 1;
+    // The files hold neither the link nor any credentials.
+    folderFiles[dir] = Collection(
+      name: collection.name,
+      variables: collection.variables,
+      items: collection.items,
+    );
+  }
+
+  @override
+  Future<Collection> readCollectionDir({
+    required String dir,
+    Collection? local,
+  }) async {
+    if (folderFailure case final failure?) throw failure;
+    final read = folderFiles[dir];
+    if (read == null) throw '$dir is not a reqorb collection';
+    return Collection(
+      name: read.name,
+      variables: read.variables,
+      items: read.items,
+      link: local?.link,
+    );
+  }
+
+  @override
+  bool isCollectionDir({required String dir}) => folderFiles.containsKey(dir);
+
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw UnimplementedError('FakeEngine has no ${invocation.memberName}');

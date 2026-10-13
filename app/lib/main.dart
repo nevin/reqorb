@@ -16,6 +16,7 @@ Future<void> main() async {
   await store.load();
   await store.loadHistory();
   await store.restoreWorkingDir(folders);
+  await store.restoreLinks(folders);
   runApp(ReqorbApp(store: store));
 }
 

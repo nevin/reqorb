@@ -11,7 +11,8 @@ import 'package:macos_secure_bookmarks/macos_secure_bookmarks.dart';
 /// what lets the app open the folder again after a restart.
 abstract class Folders {
   /// Asks the user for a folder, starting at [initial]; null when cancelled.
-  Future<String?> choose({String? initial});
+  /// [title] says what the folder is wanted for.
+  Future<String?> choose({String? initial, String? title});
 
   /// A grant for [path], which must have just been chosen. Empty where the
   /// platform needs none, or offers none.
@@ -30,10 +31,11 @@ class SystemFolders implements Folders {
       !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
 
   @override
-  Future<String?> choose({String? initial}) => FilePicker.getDirectoryPath(
-    dialogTitle: 'Choose the working directory',
-    initialDirectory: (initial == null || initial.isEmpty) ? null : initial,
-  );
+  Future<String?> choose({String? initial, String? title}) =>
+      FilePicker.getDirectoryPath(
+        dialogTitle: title ?? 'Choose the working directory',
+        initialDirectory: (initial == null || initial.isEmpty) ? null : initial,
+      );
 
   @override
   Future<String> grant(String path) async {

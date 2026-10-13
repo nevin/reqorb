@@ -252,6 +252,28 @@ String generateCode({
   target: target,
 );
 
+/// Writes a collection into a folder, one file for each request and
+/// without its credentials. Only files that changed are touched.
+Future<void> writeCollectionDir({
+  required String dir,
+  required Collection collection,
+}) => RustLib.instance.api.crateApiCoreWriteCollectionDir(
+  dir: dir,
+  collection: collection,
+);
+
+/// Reads the collection kept in a folder. `local`, the copy this machine
+/// holds, supplies the credentials the files leave out.
+Future<Collection> readCollectionDir({
+  required String dir,
+  Collection? local,
+}) =>
+    RustLib.instance.api.crateApiCoreReadCollectionDir(dir: dir, local: local);
+
+/// Whether a folder holds a collection written by reqorb.
+bool isCollectionDir({required String dir}) =>
+    RustLib.instance.api.crateApiCoreIsCollectionDir(dir: dir);
+
 /// The rows of a CSV or JSON data file, each as the variables it sets
 /// for one time through a run.
 List<List<Variable>> parseRunData({
@@ -463,15 +485,18 @@ class Collection {
   final String name;
   final List<Variable> variables;
   final List<Item> items;
+  final FolderLink? link;
 
   const Collection({
     required this.name,
     required this.variables,
     required this.items,
+    this.link,
   });
 
   @override
-  int get hashCode => name.hashCode ^ variables.hashCode ^ items.hashCode;
+  int get hashCode =>
+      name.hashCode ^ variables.hashCode ^ items.hashCode ^ link.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -480,7 +505,8 @@ class Collection {
           runtimeType == other.runtimeType &&
           name == other.name &&
           variables == other.variables &&
-          items == other.items;
+          items == other.items &&
+          link == other.link;
 }
 
 class Cookie {
@@ -599,6 +625,24 @@ class Exchange {
 }
 
 enum ExportFormat { reqorb, postman, bruno, curl, dotenv }
+
+class FolderLink {
+  final String path;
+  final String grant;
+
+  const FolderLink({required this.path, required this.grant});
+
+  @override
+  int get hashCode => path.hashCode ^ grant.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FolderLink &&
+          runtimeType == other.runtimeType &&
+          path == other.path &&
+          grant == other.grant;
+}
 
 class FormField {
   final String key;

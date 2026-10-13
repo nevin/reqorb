@@ -189,6 +189,25 @@ abstract class Engine {
     required CodeTarget target,
   });
 
+  // ---------------------------------------------------------------- folders
+
+  /// Writes [collection] into the folder at [dir], one file for each
+  /// request and without its credentials.
+  Future<void> writeCollectionDir({
+    required String dir,
+    required Collection collection,
+  });
+
+  /// Reads the collection kept in the folder at [dir]. [local], the copy
+  /// held here, supplies the credentials the files leave out.
+  Future<Collection> readCollectionDir({
+    required String dir,
+    Collection? local,
+  });
+
+  /// Whether the folder at [dir] holds a collection written by reqorb.
+  bool isCollectionDir({required String dir});
+
   /// The rows of a CSV or JSON data file, each as the variables it sets
   /// for one time through a run; throws when the file cannot be read.
   List<List<Variable>> parseRunData({
@@ -424,6 +443,21 @@ class RustEngine extends Engine {
     required CodeTarget target,
   }) =>
       rust.generateCode(request: request, variables: variables, target: target);
+
+  @override
+  Future<void> writeCollectionDir({
+    required String dir,
+    required Collection collection,
+  }) => rust.writeCollectionDir(dir: dir, collection: collection);
+
+  @override
+  Future<Collection> readCollectionDir({
+    required String dir,
+    Collection? local,
+  }) => rust.readCollectionDir(dir: dir, local: local);
+
+  @override
+  bool isCollectionDir({required String dir}) => rust.isCollectionDir(dir: dir);
 
   @override
   List<List<Variable>> parseRunData({

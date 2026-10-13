@@ -537,6 +537,7 @@ mod tests {
                     items: Vec::new(),
                 }],
             }],
+            link: None,
         };
         let redacted = redact_collection(&collection);
         assert_eq!(redacted.variables[0].value, "https://api.test");

@@ -27,6 +27,8 @@ view. One Rust core does the networking and powers all three front ends.
 - **Tests and chaining:** check each response with one-line tests, and capture values
   from it to use in later requests.
 - **Collections and environments:** `{{variables}}`, folders and standalone requests.
+- **Collections as files:** keep a collection in a folder, one file for each request,
+  to put under version control and share; credentials stay out of the files.
 - **Runner:** run a collection or a folder and see how each request came out, once or
   once for each row of a CSV or JSON data file.
 - **Import:** Postman, OpenAPI / Swagger (file or URL), HAR, curl and `.env`.
@@ -101,6 +103,8 @@ reqorb import shop.postman_collection.json -o shop.reqorb.json
 reqorb import https://petstore.swagger.io/v2/swagger.json -o petstore.reqorb.json
 reqorb run shop.reqorb.json -e dev.env                   # or one request by name
 reqorb run shop.reqorb.json --data users.csv --bail      # once per row, stop at a failure
+reqorb export shop.reqorb.json -f folder -o shop/        # one file per request, for git
+reqorb run shop/                                         # a folder runs like a file
 reqorb export shop.reqorb.json -f bruno                  # reqorb | postman | bruno | curl | dotenv
 reqorb export shop.reqorb.json -f postman --redact       # safe to share
 reqorb import session.har -o session.reqorb.json         # a HAR from reqorb or a browser
@@ -250,6 +254,48 @@ to the ones after it, which is how a login request hands its token on.
 request with tests passes or fails by them alone, so `status == 404` can be a pass.
 Tests and captures are kept in reqorb's own format; Postman, Bruno and curl exports
 leave them out.
+
+## Keeping a collection in a folder
+
+A collection can be kept as a folder of files, so that a change to one request is a
+change to one file and two people's changes merge as files do.
+
+```text
+shop/
+  collection.json              the name, the variables and the order of things
+  Login.request.json           a request, under the name it goes by
+  Orders/
+    folder.json                the folder's name and order
+    List orders.request.json
+```
+
+- **Keep in a folder…** in a collection's menu asks for a folder and writes the
+  collection there. From then on every change is written as it is made, touching only
+  the files that changed. A small folder icon marks the collection.
+- **Open collection folder…** in the import menu opens a folder someone else keeps,
+  for instance one you have just cloned.
+- **Reload from folder** reads the files again after a pull, a checkout or an edit by
+  hand. This also happens for every such collection when the app starts. reqorb does
+  not watch the folder while it is open.
+- **Credentials are not written.** Passwords, tokens, keys, secret variables and
+  headers such as `Authorization` are blank in the files, unless the value is only a
+  `{{variable}}`. Their values stay in the workspace on your machine and are put back
+  when the folder is read, matched by the request's place and name, or failing that
+  by its method and address. Someone opening the folder for the first time fills in
+  their own.
+- **What else is in the folder is left alone:** a README, a `.git` directory, anything
+  that is not a request file or a folder reqorb made. Deleting a request deletes its
+  file.
+- **When the folder cannot be read or written** the icon turns into a warning that
+  says why, such as a merge conflict left in a file. The collection is then not
+  written over what is there until it reads cleanly again; your changes are still
+  saved in the workspace.
+- **Stop keeping in folder** leaves the files where they are.
+
+Environments, standalone requests, cookies and history are not kept in folders. A
+request that is renamed and given a new address in the same pull comes back without its
+credentials. The CLI reads such a folder wherever it reads a collection file, and
+writes one with `reqorb export … -f folder -o <dir>`.
 
 ## Running a collection
 
@@ -540,7 +586,8 @@ crates/reqorb-core/src/     the request engine, used by everything else
   graphql.rs                GraphQL over HTTP: the request, its errors, the schema
   subscribe.rs              GraphQL subscriptions over a WebSocket
   auth/                     auth types, signing a request, negotiating with a server
-  formats/                  one module per format, each with its import and export
+  formats/                  one module per format, each with its import and export,
+                            and the folder of files a collection can be kept as
   codegen/                  a request as code: one generator per language
   vars.rs  checks.rs        variable substitution; tests and captures
   redact.rs  analyze.rs     redaction; the HAR report

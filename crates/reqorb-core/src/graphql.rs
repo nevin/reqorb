@@ -1266,6 +1266,7 @@ mod tests {
                 request: Some(request),
                 items: Vec::new(),
             }],
+            link: None,
         }
     }
 

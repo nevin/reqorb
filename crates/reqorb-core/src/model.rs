@@ -288,6 +288,17 @@ pub struct Item {
     pub items: Vec<Item>,
 }
 
+/// The folder a collection is also kept in, one file for each request, so
+/// that it can be put under version control and shared.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct FolderLink {
+    pub path: String,
+    /// What lets a sandboxed app open the folder again after a restart;
+    /// empty where the platform needs nothing of the kind.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub grant: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Collection {
     pub name: String,
@@ -296,6 +307,10 @@ pub struct Collection {
     pub variables: Vec<Variable>,
     #[serde(default)]
     pub items: Vec<Item>,
+    /// Where the collection is kept as files, if it is. This belongs to
+    /// the machine it was set on, and is left out of every export.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link: Option<FolderLink>,
 }
 
 impl Collection {

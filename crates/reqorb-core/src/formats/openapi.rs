@@ -95,6 +95,7 @@ pub(crate) fn collection(
             .to_string(),
         variables: ctx.variables,
         items,
+        link: None,
     }
 }
 

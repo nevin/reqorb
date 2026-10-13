@@ -149,6 +149,11 @@ class _SidebarState extends State<Sidebar> {
                         value: () => importFromPaste(context, store),
                         child: const Text('Paste curl or JSON…'),
                       ),
+                      PopupMenuItem(
+                        key: const Key('open-folder'),
+                        value: () => openCollectionFolder(context, store),
+                        child: const Text('Open collection folder…'),
+                      ),
                       const PopupMenuDivider(),
                       PopupMenuItem(
                         key: const Key('analyze-har'),
@@ -403,11 +408,24 @@ class _SidebarState extends State<Sidebar> {
       controlAffinity: ListTileControlAffinity.leading,
       shape: const Border(),
       tilePadding: const EdgeInsets.only(left: 8, right: 4),
-      title: Text(
-        collection.name,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontWeight: FontWeight.w600),
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(
+              collection.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          if (collection.link case final link?) ...[
+            const SizedBox(width: 6),
+            _FolderMark(
+              path: link.path,
+              problem: store.folderProblems[link.path],
+            ),
+          ],
+        ],
       ),
       trailing: PopupMenuButton<VoidCallback>(
         tooltip: 'Collection actions',
@@ -430,6 +448,25 @@ class _SidebarState extends State<Sidebar> {
             value: () => renameCollection(context, store, index),
             child: const Text('Rename…'),
           ),
+          const PopupMenuDivider(),
+          if (collection.link == null)
+            PopupMenuItem(
+              key: const Key('link-collection'),
+              value: () => keepInFolder(context, store, index),
+              child: const Text('Keep in a folder…'),
+            )
+          else ...[
+            PopupMenuItem(
+              key: const Key('reload-collection'),
+              value: () => reloadFromFolder(context, store, index),
+              child: const Text('Reload from folder'),
+            ),
+            PopupMenuItem(
+              key: const Key('unlink-collection'),
+              value: () => store.unlinkCollection(index),
+              child: const Text('Stop keeping in folder'),
+            ),
+          ],
           const PopupMenuDivider(),
           for (final (label, format) in const [
             ('Export as curl…', ExportFormat.curl),
@@ -646,6 +683,32 @@ class _RequestTileState extends State<_RequestTile> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Marks a collection that is kept in a folder, and says so when the
+/// folder could not be read or written.
+class _FolderMark extends StatelessWidget {
+  const _FolderMark({required this.path, required this.problem});
+
+  final String path;
+  final String? problem;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final problem = this.problem;
+    return Tooltip(
+      message: problem == null
+          ? 'Kept in $path'
+          : 'The folder $path is out of step: $problem',
+      child: Icon(
+        problem == null ? Icons.folder_outlined : Icons.sync_problem,
+        key: Key(problem == null ? 'folder-mark' : 'folder-problem'),
+        size: 15,
+        color: problem == null ? scheme.onSurfaceVariant : scheme.error,
       ),
     );
   }

@@ -393,7 +393,7 @@ fn code_target(name: &str) -> Result<CodeTarget, String> {
 
 #[derive(Args)]
 pub(crate) struct ExportArgs {
-    /// Collection or environment file or URL (reqorb, Postman, OpenAPI/Swagger, HAR, curl or .env)
+    /// Collection or environment file, folder or URL (reqorb, Postman, OpenAPI/Swagger, HAR, curl or .env)
     pub(crate) file: String,
 
     /// Target format
@@ -404,7 +404,7 @@ pub(crate) struct ExportArgs {
     #[arg(short, long)]
     pub(crate) name: Option<String>,
 
-    /// Write the result here instead of stdout
+    /// Write the result here instead of stdout; for `-f folder`, the folder
     #[arg(short, long, value_name = "FILE")]
     pub(crate) output: Option<PathBuf>,
 
@@ -415,6 +415,9 @@ pub(crate) struct ExportArgs {
 
 #[derive(Clone, Copy, ValueEnum)]
 pub(crate) enum Format {
+    /// A folder with one file for each request, to keep under version
+    /// control; needs --output to name the folder
+    Folder,
     Reqorb,
     Postman,
     Bruno,
@@ -425,7 +428,8 @@ pub(crate) enum Format {
 impl From<Format> for ExportFormat {
     fn from(f: Format) -> Self {
         match f {
-            Format::Reqorb => ExportFormat::Reqorb,
+            // A folder is many files, written by its own command.
+            Format::Folder | Format::Reqorb => ExportFormat::Reqorb,
             Format::Postman => ExportFormat::Postman,
             Format::Bruno => ExportFormat::Bruno,
             Format::Curl => ExportFormat::Curl,

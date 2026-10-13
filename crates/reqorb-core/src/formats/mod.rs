@@ -10,6 +10,7 @@ pub(crate) mod har;
 mod native;
 mod openapi;
 mod postman;
+mod tree;
 pub(crate) mod util;
 
 #[cfg(test)]
@@ -22,6 +23,7 @@ use serde_json::{Value, json};
 pub use curl::to_curl;
 pub use har::{import_har, to_har};
 pub use native::export_native;
+pub use tree::{is_collection_dir, read_collection_dir, write_collection_dir};
 
 use self::bruno::bruno_collection;
 use self::curl::curl;
@@ -231,6 +233,7 @@ fn http_only(collection: &Collection) -> Collection {
         name: collection.name.clone(),
         variables: collection.variables.clone(),
         items: keep(&collection.items),
+        link: None,
     }
 }
 

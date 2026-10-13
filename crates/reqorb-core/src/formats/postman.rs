@@ -58,6 +58,7 @@ impl Postman {
                 .to_string(),
             variables: postman_variables(&value["variable"]),
             items: self.items(&value["item"], own_auth(value)),
+            link: None,
         }
     }
 

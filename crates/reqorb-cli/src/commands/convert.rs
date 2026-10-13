@@ -5,7 +5,7 @@ use std::process::ExitCode;
 use anyhow::{Result, anyhow, bail};
 use reqorb_core::ExportFormat;
 
-use crate::cli::{ExportArgs, ImportArgs};
+use crate::cli::{ExportArgs, Format, ImportArgs};
 use crate::input::load_source;
 use crate::output::write_output;
 
@@ -49,6 +49,24 @@ pub(crate) async fn export(args: ExportArgs) -> Result<ExitCode> {
         .iter()
         .filter(|e| by_name(&e.name))
         .collect();
+
+    if matches!(args.format, Format::Folder) {
+        let ([collection], Some(folder)) = (collections.as_slice(), &args.output) else {
+            bail!("-f folder writes one collection into the folder named by --output");
+        };
+        let collection = if args.redact {
+            reqorb_core::redact_collection(collection)
+        } else {
+            (*collection).clone()
+        };
+        reqorb_core::write_collection_dir(&folder.to_string_lossy(), &collection)?;
+        eprintln!(
+            "wrote {} request(s) to {}; credentials are left out",
+            collection.requests().len(),
+            folder.display()
+        );
+        return Ok(ExitCode::SUCCESS);
+    }
 
     let text = match (collections.as_slice(), environments.as_slice()) {
         ([collection], []) if args.redact => {

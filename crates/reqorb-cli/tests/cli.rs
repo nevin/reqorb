@@ -243,6 +243,36 @@ fn runs_a_collection_once_for_each_row_of_a_data_file() {
 }
 
 #[test]
+fn keeps_a_collection_as_a_folder_and_runs_it_from_there() {
+    let base = serve();
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("chain.reqorb.json");
+    let folder = dir.path().join("chain");
+    std::fs::write(&file, chain(&base, "status == 200")).unwrap();
+    let (file, folder_arg) = (file.to_str().unwrap(), folder.to_str().unwrap());
+
+    let written = reqorb(&["export", file, "-f", "folder", "-o", folder_arg]);
+    assert!(written.status.success(), "{}", stderr(&written));
+    assert!(stderr(&written).contains("wrote 2 request(s)"));
+    for name in ["collection.json", "Login.request.json", "Me.request.json"] {
+        assert!(folder.join(name).is_file(), "{name} is missing");
+    }
+
+    // The folder is run as the file was, in the same order.
+    let ran = reqorb(&["run", folder_arg]);
+    assert!(ran.status.success(), "{}", stderr(&ran));
+    assert!(stderr(&ran).contains("2 run, 0 failed"));
+    assert!(stderr(&ran).contains("5 test(s), 0 failed"));
+
+    // And it turns back into a single file.
+    let back = reqorb(&["import", folder_arg]);
+    assert!(stdout(&back).contains("\"name\": \"Chain\""));
+
+    let unnamed = reqorb(&["export", file, "-f", "folder"]);
+    assert!(stderr(&unnamed).contains("--output"));
+}
+
+#[test]
 fn records_redacts_analyses_and_imports_a_har_file() {
     let base = serve();
     let dir = tempfile::tempdir().unwrap();
