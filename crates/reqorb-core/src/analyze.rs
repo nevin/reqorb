@@ -866,6 +866,7 @@ mod tests {
             }],
             body: "x".repeat(20_000),
             size_bytes: 20_000,
+            bytes: None,
             elapsed_ms: 12,
         };
         let har = crate::to_har(&[crate::Exchange {

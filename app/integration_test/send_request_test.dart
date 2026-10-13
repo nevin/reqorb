@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart' hide FormField;
 import 'package:flutter_test/flutter_test.dart';
@@ -84,6 +85,11 @@ final _swagger = jsonEncode({
   },
 });
 
+/// A one-pixel PNG, which is not valid text.
+final _png = base64Decode(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+);
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async => await RustLib.init());
@@ -121,6 +127,14 @@ void main() {
           request.response
             ..statusCode = 302
             ..headers.set('location', '/new?from=old');
+          await request.response.close();
+          return;
+        }
+        // A binary body: the smallest PNG there is.
+        if (request.uri.path == '/logo.png') {
+          request.response
+            ..headers.contentType = ContentType('image', 'png')
+            ..add(_png);
           await request.response.close();
           return;
         }
@@ -1541,6 +1555,47 @@ void main() {
     await tester.pumpAndSettle();
     expect(seen.path, '/ping?ok=true');
     expect(find.byKey(const Key('test-results-tab')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('shows a binary response and records what was sent', (
+    tester,
+  ) async {
+    await start(tester);
+    await launch(tester);
+    final saved = <String, Uint8List>{};
+    final realSaver = fileSaver;
+    fileSaver = ({required fileName, required bytes}) async {
+      saved[fileName] = bytes;
+      return fileName;
+    };
+    addTearDown(() => fileSaver = realSaver);
+
+    final url = 'http://127.0.0.1:${server.port}/logo.png';
+    await type(tester, find.byKey(const Key('url')), url);
+    await tester.tap(find.byKey(const Key('send')));
+    await waitFor(tester, find.byKey(const Key('status')));
+    await tester.pumpAndSettle();
+    // The image is shown and saved byte for byte, not mangled into text.
+    expect(find.text('image/png · ${_png.length} B'), findsOneWidget);
+    expect(find.byType(Image), findsOneWidget);
+    await tester.tap(find.byKey(const Key('binary-save')));
+    await tester.pumpAndSettle();
+    expect(saved['response.png'], _png);
+
+    // The session records the headers the client added, and the body.
+    final har =
+        jsonDecode(exportHar(exchanges: store.session)) as Map<String, dynamic>;
+    final entry = har['log']['entries'][0] as Map<String, dynamic>;
+    final sent = {
+      for (final h in entry['request']['headers'] as List)
+        h['name'] as String: h['value'] as String,
+    };
+    expect(sent['host'], '127.0.0.1:${server.port}');
+    expect(sent['user-agent'], startsWith('reqorb/'));
+    expect(sent['accept'], '*/*');
+    expect(seen.headers!.value('user-agent'), sent['user-agent']);
+    expect(entry['response']['content']['encoding'], 'base64');
+    expect(entry['response']['content']['text'], base64Encode(_png));
     expect(tester.takeException(), isNull);
   });
   testWidgets('guards unsaved edits and undoes removals', (tester) async {

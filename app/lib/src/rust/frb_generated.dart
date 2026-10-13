@@ -1540,6 +1540,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  Uint8List? dco_decode_opt_list_prim_u_8_strict(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_list_prim_u_8_strict(raw);
+  }
+
+  @protected
   Request dco_decode_request(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -1586,16 +1592,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Response dco_decode_response(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 7)
-      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return Response(
       status: dco_decode_u_16(arr[0]),
       statusText: dco_decode_String(arr[1]),
       httpVersion: dco_decode_String(arr[2]),
       headers: dco_decode_list_header(arr[3]),
       body: dco_decode_String(arr[4]),
-      sizeBytes: dco_decode_CastedPrimitive_u_64(arr[5]),
-      elapsedMs: dco_decode_CastedPrimitive_u_64(arr[6]),
+      bytes: dco_decode_opt_list_prim_u_8_strict(arr[5]),
+      sizeBytes: dco_decode_CastedPrimitive_u_64(arr[6]),
+      elapsedMs: dco_decode_CastedPrimitive_u_64(arr[7]),
     );
   }
 
@@ -2528,6 +2535,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  Uint8List? sse_decode_opt_list_prim_u_8_strict(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_list_prim_u_8_strict(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   Request sse_decode_request(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_method = sse_decode_String(deserializer);
@@ -2597,6 +2615,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_httpVersion = sse_decode_String(deserializer);
     var var_headers = sse_decode_list_header(deserializer);
     var var_body = sse_decode_String(deserializer);
+    var var_bytes = sse_decode_opt_list_prim_u_8_strict(deserializer);
     var var_sizeBytes = sse_decode_CastedPrimitive_u_64(deserializer);
     var var_elapsedMs = sse_decode_CastedPrimitive_u_64(deserializer);
     return Response(
@@ -2605,6 +2624,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       httpVersion: var_httpVersion,
       headers: var_headers,
       body: var_body,
+      bytes: var_bytes,
       sizeBytes: var_sizeBytes,
       elapsedMs: var_elapsedMs,
     );
@@ -3455,6 +3475,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_list_prim_u_8_strict(
+    Uint8List? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_list_prim_u_8_strict(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_request(Request self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.method, serializer);
@@ -3498,6 +3531,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.httpVersion, serializer);
     sse_encode_list_header(self.headers, serializer);
     sse_encode_String(self.body, serializer);
+    sse_encode_opt_list_prim_u_8_strict(self.bytes, serializer);
     sse_encode_CastedPrimitive_u_64(self.sizeBytes, serializer);
     sse_encode_CastedPrimitive_u_64(self.elapsedMs, serializer);
   }

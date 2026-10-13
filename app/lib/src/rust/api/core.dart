@@ -954,6 +954,7 @@ class Response {
   final String httpVersion;
   final List<Header> headers;
   final String body;
+  final Uint8List? bytes;
   final int sizeBytes;
   final int elapsedMs;
 
@@ -963,6 +964,7 @@ class Response {
     required this.httpVersion,
     required this.headers,
     required this.body,
+    this.bytes,
     required this.sizeBytes,
     required this.elapsedMs,
   });
@@ -974,6 +976,7 @@ class Response {
       httpVersion.hashCode ^
       headers.hashCode ^
       body.hashCode ^
+      bytes.hashCode ^
       sizeBytes.hashCode ^
       elapsedMs.hashCode;
 
@@ -987,6 +990,7 @@ class Response {
           httpVersion == other.httpVersion &&
           headers == other.headers &&
           body == other.body &&
+          bytes == other.bytes &&
           sizeBytes == other.sizeBytes &&
           elapsedMs == other.elapsedMs;
 }

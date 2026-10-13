@@ -489,9 +489,21 @@ fn print_response(response: &Response, output: &OutputArgs) -> Result<()> {
     }
 
     let mut out = std::io::stdout().lock();
-    out.write_all(response.body.as_bytes())?;
-    if out.is_terminal() && !response.body.ends_with('\n') {
-        writeln!(out)?;
+    match &response.bytes {
+        // Binary is written as it is when piped or redirected, but would
+        // only garble a terminal.
+        Some(bytes) if out.is_terminal() => writeln!(
+            err,
+            "binary body, {} bytes: redirect the output to a file to keep it",
+            bytes.len()
+        )?,
+        Some(bytes) => out.write_all(bytes)?,
+        None => {
+            out.write_all(response.body.as_bytes())?;
+            if out.is_terminal() && !response.body.ends_with('\n') {
+                writeln!(out)?;
+            }
+        }
     }
     out.flush()?;
 

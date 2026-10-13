@@ -186,44 +186,83 @@ async fn send_logged(
     let http_mode = settings.http_mode.unwrap_or(options.http_mode);
     let use_jar = !settings.disable_cookie_jar;
 
-    let jar = std::sync::Arc::new(cookies::Jar::new(cookies));
-    // The client leaves a request's own Cookie header alone, so jar cookies
-    // the request does not already name are added to it here.
-    if use_jar
-        && let Some(own) = request
-            .headers
-            .iter_mut()
-            .find(|h| h.name.eq_ignore_ascii_case("cookie"))
-        && let Ok(url) = reqwest::Url::parse(&request.url)
-        && let Some(stored) = cookie_header(&jar.snapshot(), &url, cookies::now())
-    {
-        let named: Vec<&str> = own
-            .value
-            .split(';')
-            .filter_map(|pair| pair.split('=').next())
-            .map(str::trim)
-            .collect();
-        let extra: Vec<&str> = stored
-            .split("; ")
-            .filter(|pair| !named.contains(&pair.split('=').next().unwrap_or("")))
-            .collect();
-        if !extra.is_empty() {
-            own.value = format!(
-                "{}; {}",
-                own.value.trim_end_matches([';', ' ']),
-                extra.join("; ")
-            );
+    let jar = use_jar.then(|| std::sync::Arc::new(cookies::Jar::new(cookies)));
+    let transport = Transport {
+        client: client_for(&settings, http_mode, auth.kind == AuthKind::Ntlm)?,
+        settings,
+        jar: jar.clone(),
+        log: Default::default(),
+    };
+
+    let started = Instant::now();
+    let result = if auth::sign(&mut request, &auth, &auth::Clock::now())? {
+        execute(&transport, &request).await
+    } else {
+        auth::negotiate(&transport, request, &auth).await
+    };
+    if let Some(jar) = jar {
+        *cookies = jar.snapshot();
+    }
+    match result {
+        Ok(mut response) => {
+            response.elapsed_ms = started.elapsed().as_millis() as u64;
+            let exchanges = std::mem::take(&mut *transport.log.lock().unwrap());
+            Ok((response, exchanges))
         }
+        // A server that only speaks HTTP/1.1 fails in ways that do not name the cause.
+        Err(Error::Http(message)) if http_mode == HttpMode::Http2 => Err(Error::Http(format!(
+            "{message} (HTTP/2 is forced in settings; the server may only support HTTP/1.1)"
+        ))),
+        Err(e) => Err(e),
+    }
+}
+
+const USER_AGENT: &str = concat!("reqorb/", env!("CARGO_PKG_VERSION"));
+
+/// The encodings the client offers to decode, as it sends them when the
+/// request does not name its own.
+const ACCEPT_ENCODING: &str = "zstd,gzip,deflate,br";
+
+/// What makes one HTTP client differ from another.
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct ClientKey {
+    /// A client's connections belong to the runtime that opened them.
+    runtime: tokio::runtime::Id,
+    verify_ssl: bool,
+    strict_http_parser: bool,
+    disabled_tls: DisabledTls,
+    http_mode: HttpMode,
+}
+
+/// Clients already built, so that sends with the same settings share
+/// connections instead of each paying for a new handshake.
+static CLIENTS: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashMap<ClientKey, reqwest::Client>>,
+> = std::sync::LazyLock::new(Default::default);
+
+/// The client for these settings, built on first use.
+fn client_for(
+    settings: &RequestSettings,
+    http_mode: HttpMode,
+    own_connection: bool,
+) -> Result<reqwest::Client, Error> {
+    let key = ClientKey {
+        runtime: tokio::runtime::Handle::current().id(),
+        verify_ssl: settings.verify_ssl,
+        strict_http_parser: settings.strict_http_parser,
+        disabled_tls: settings.disabled_tls,
+        http_mode,
+    };
+    if !own_connection && let Some(client) = CLIENTS.lock().unwrap().get(&key) {
+        return Ok(client.clone());
     }
 
+    // Headers the client would add are set on each request instead, so that
+    // what is recorded as sent is what was sent. Redirects and cookies are
+    // handled by `execute`, which knows the request's rules.
     let mut builder = reqwest::Client::builder()
-        .user_agent(concat!("reqorb/", env!("CARGO_PKG_VERSION")))
-        // Redirects are followed by `execute`, which knows the request's rules.
         .redirect(reqwest::redirect::Policy::none())
         .danger_accept_invalid_certs(!settings.verify_ssl);
-    if use_jar {
-        builder = builder.cookie_provider(jar.clone());
-    }
     if !settings.strict_http_parser {
         builder = builder
             .http1_ignore_invalid_headers_in_responses(true)
@@ -241,43 +280,22 @@ async fn send_logged(
         // Speaks HTTP/2 from the first byte, with no fallback to HTTP/1.1.
         HttpMode::Http2 => builder.http2_prior_knowledge(),
     };
-    if auth.kind == AuthKind::Ntlm {
-        // NTLM authenticates a connection, so every step must reuse the same one.
-        builder = builder.pool_max_idle_per_host(1);
+    if own_connection {
+        // NTLM authenticates a connection, so every step must reuse the same
+        // one, and no other send may be handed it afterwards.
+        return Ok(builder.pool_max_idle_per_host(1).build()?);
     }
-    let transport = Transport {
-        client: builder.build()?,
-        settings,
-        log: Default::default(),
-    };
-
-    let started = Instant::now();
-    let result = if auth::sign(&mut request, &auth, &auth::Clock::now())? {
-        execute(&transport, &request).await
-    } else {
-        auth::negotiate(&transport, request, &auth).await
-    };
-    if use_jar {
-        *cookies = jar.snapshot();
-    }
-    match result {
-        Ok(mut response) => {
-            response.elapsed_ms = started.elapsed().as_millis() as u64;
-            let exchanges = std::mem::take(&mut *transport.log.lock().unwrap());
-            Ok((response, exchanges))
-        }
-        // A server that only speaks HTTP/1.1 fails in ways that do not name the cause.
-        Err(Error::Http(message)) if http_mode == HttpMode::Http2 => Err(Error::Http(format!(
-            "{message} (HTTP/2 is forced in settings; the server may only support HTTP/1.1)"
-        ))),
-        Err(e) => Err(e),
-    }
+    let client = builder.build()?;
+    CLIENTS.lock().unwrap().insert(key, client.clone());
+    Ok(client)
 }
 
 /// The HTTP client for one send, with the request's redirect rules.
 pub(crate) struct Transport {
     client: reqwest::Client,
     settings: RequestSettings,
+    /// Cookies to send and update, unless the request turned the jar off.
+    jar: Option<std::sync::Arc<cookies::Jar>>,
     /// Each exchange made through this transport, for the session log.
     log: std::sync::Mutex<Vec<Exchange>>,
 }
@@ -289,10 +307,13 @@ pub(crate) async fn execute(transport: &Transport, request: &Request) -> Result<
     let mut hops = 0;
     loop {
         let started_ms = cookies::now_ms();
-        let response = execute_once(&transport.client, &current).await?;
+        let (response, sent) = execute_once(transport, &current).await?;
         transport.log.lock().unwrap().push(Exchange {
             started_ms,
-            request: current.clone(),
+            request: Request {
+                headers: sent,
+                ..current.clone()
+            },
             response: response.clone(),
         });
         let location = response
@@ -361,8 +382,22 @@ pub(crate) async fn execute(transport: &Transport, request: &Request) -> Result<
     }
 }
 
-/// Performs one HTTP exchange exactly as the request is written.
-async fn execute_once(client: &reqwest::Client, request: &Request) -> Result<Response, Error> {
+/// Whether a body with this Content-Type is text, whatever its bytes say.
+fn is_text(content_type: &str) -> bool {
+    let mime = content_type.to_ascii_lowercase();
+    let mime = mime.split(';').next().unwrap_or("").trim();
+    mime.starts_with("text/")
+        || ["json", "xml", "javascript", "x-www-form-urlencoded", "yaml"]
+            .iter()
+            .any(|kind| mime.contains(kind))
+}
+
+/// Performs one HTTP exchange exactly as the request is written. Returns the
+/// response and the headers that were sent, the client's own included.
+async fn execute_once(
+    transport: &Transport,
+    request: &Request,
+) -> Result<(Response, Vec<Header>), Error> {
     let method = reqwest::Method::from_bytes(request.method.to_uppercase().as_bytes())
         .map_err(|_| Error::InvalidMethod(request.method.clone()))?;
     let url = reqwest::Url::parse(&request.url).map_err(|e| Error::InvalidUrl {
@@ -374,13 +409,34 @@ async fn execute_once(client: &reqwest::Client, request: &Request) -> Result<Res
     let unreadable = |path: &str, e: std::io::Error| {
         Error::Io(format!("cannot read `{path}`: {e}; choose the file again"))
     };
-    let mut builder = client.request(method, url);
+    let mut builder = transport.client.request(method, url.clone());
     for h in &request.headers {
-        // A multipart body brings its own Content-Type, with the boundary in it.
-        if mode == BodyMode::FormData && h.name.eq_ignore_ascii_case("content-type") {
+        // A multipart body brings its own Content-Type, with the boundary in
+        // it, and the Cookie header is worked out with the jar below.
+        if (mode == BodyMode::FormData && h.name.eq_ignore_ascii_case("content-type"))
+            || h.name.eq_ignore_ascii_case("cookie")
+        {
             continue;
         }
         builder = builder.header(&h.name, &h.value);
+    }
+    if !request.has_header("user-agent") {
+        builder = builder.header("User-Agent", USER_AGENT);
+    }
+    if !request.has_header("accept") {
+        builder = builder.header("Accept", "*/*");
+    }
+    let own_cookies = request
+        .headers
+        .iter()
+        .find(|h| h.name.eq_ignore_ascii_case("cookie"))
+        .map(|h| h.value.as_str());
+    let cookies = match &transport.jar {
+        Some(jar) => jar.header_for(&url, own_cookies),
+        None => own_cookies.map(str::to_string),
+    };
+    if let Some(cookies) = cookies {
+        builder = builder.header("Cookie", cookies);
     }
     match (mode, &request.body) {
         (BodyMode::Raw | BodyMode::UrlEncoded, Some(body)) => builder = builder.body(body.clone()),
@@ -416,12 +472,8 @@ async fn execute_once(client: &reqwest::Client, request: &Request) -> Result<Res
         builder = builder.timeout(Duration::from_millis(ms));
     }
 
-    let started = Instant::now();
-    let resp = builder.send().await?;
-
-    let status = resp.status();
-    let http_version = format!("{:?}", resp.version());
-    let headers = resp
+    let built = builder.build()?;
+    let mut sent: Vec<Header> = built
         .headers()
         .iter()
         .map(|(name, value)| Header {
@@ -429,18 +481,87 @@ async fn execute_once(client: &reqwest::Client, request: &Request) -> Result<Res
             value: String::from_utf8_lossy(value.as_bytes()).into_owned(),
         })
         .collect();
+    // The rest are added on the way out, so they are noted here to match.
+    let has = |sent: &[Header], name: &str| sent.iter().any(|h| h.name == name);
+    if !has(&sent, "accept-encoding") && !has(&sent, "range") {
+        sent.push(Header {
+            name: "accept-encoding".into(),
+            value: ACCEPT_ENCODING.into(),
+        });
+    }
+    if let Some(body) = built.body().and_then(|b| b.as_bytes())
+        && !has(&sent, "content-length")
+    {
+        sent.push(Header {
+            name: "content-length".into(),
+            value: body.len().to_string(),
+        });
+    }
+
+    let started = Instant::now();
+    let resp = transport.client.execute(built).await?;
+
+    let status = resp.status();
+    let version = resp.version();
+    let headers: Vec<Header> = resp
+        .headers()
+        .iter()
+        .map(|(name, value)| Header {
+            name: name.to_string(),
+            value: String::from_utf8_lossy(value.as_bytes()).into_owned(),
+        })
+        .collect();
+    if let Some(jar) = &transport.jar {
+        let set = headers
+            .iter()
+            .filter(|h| h.name.eq_ignore_ascii_case("set-cookie"))
+            .map(|h| h.value.as_str());
+        jar.store(set, &url);
+    }
+    // HTTP/1 names the host in a header; HTTP/2 carries it another way.
+    if version < reqwest::Version::HTTP_2
+        && let Some(host) = url.host_str()
+    {
+        let value = match url.port() {
+            Some(port) => format!("{host}:{port}"),
+            None => host.to_string(),
+        };
+        sent.insert(
+            0,
+            Header {
+                name: "host".into(),
+                value,
+            },
+        );
+    }
+
     let bytes = resp.bytes().await?;
     let elapsed_ms = started.elapsed().as_millis() as u64;
+    let content_type = headers
+        .iter()
+        .find(|h| h.name.eq_ignore_ascii_case("content-type"))
+        .map_or("", |h| h.value.as_str());
+    // Bytes that are not UTF-8 are kept as they are, unless the server says
+    // they are text in some other encoding.
+    let (body, raw) = match std::str::from_utf8(&bytes) {
+        Ok(text) => (text.to_string(), None),
+        Err(_) if is_text(content_type) => (String::from_utf8_lossy(&bytes).into_owned(), None),
+        Err(_) => (String::new(), Some(bytes.to_vec())),
+    };
 
-    Ok(Response {
-        status: status.as_u16(),
-        status_text: status.canonical_reason().unwrap_or("").to_string(),
-        http_version,
-        headers,
-        size_bytes: bytes.len() as u64,
-        body: String::from_utf8_lossy(&bytes).into_owned(),
-        elapsed_ms,
-    })
+    Ok((
+        Response {
+            status: status.as_u16(),
+            status_text: status.canonical_reason().unwrap_or("").to_string(),
+            http_version: format!("{version:?}"),
+            headers,
+            size_bytes: bytes.len() as u64,
+            body,
+            bytes: raw,
+            elapsed_ms,
+        },
+        sent,
+    ))
 }
 
 #[cfg(test)]
@@ -487,6 +608,128 @@ mod tests {
         assert!(raw.starts_with("POST /echo HTTP/1.1"));
         assert!(raw.to_lowercase().contains("x-test: yes"));
         assert!(raw.ends_with("hello"));
+    }
+
+    /// The header lines of a raw request, lower-cased and sorted.
+    fn header_lines(raw: &str) -> Vec<String> {
+        let head = raw.split("\r\n\r\n").next().unwrap();
+        let mut lines: Vec<String> = head.lines().skip(1).map(str::to_lowercase).collect();
+        lines.sort();
+        lines
+    }
+
+    #[tokio::test]
+    async fn records_the_headers_that_were_sent() {
+        let (url, server) =
+            serve_once("HTTP/1.1 200 OK\r\nSet-Cookie: seen=1\r\nContent-Length: 0\r\n\r\n");
+        let mut request = Request::new("POST", &url);
+        request.add_header("X-Test", "yes");
+        request.add_header("Cookie", "own=1");
+        request.body = Some("hello".into());
+        let host = url.trim_start_matches("http://").trim_end_matches("/echo");
+        let mut jar = vec![Cookie {
+            name: "stored".into(),
+            value: "2".into(),
+            domain: "127.0.0.1".into(),
+            path: "/".into(),
+            expires: None,
+            secure: false,
+            http_only: false,
+            host_only: true,
+        }];
+
+        let (_, exchanges) = send_logged(request, &SendOptions::default(), &mut jar)
+            .await
+            .unwrap();
+        let mut recorded: Vec<String> = exchanges[0]
+            .request
+            .headers
+            .iter()
+            .map(|h| format!("{}: {}", h.name, h.value).to_lowercase())
+            .collect();
+        recorded.sort();
+        // What the exchange says was sent is what the server received.
+        assert_eq!(recorded, header_lines(&server.join().unwrap()));
+        assert_eq!(
+            recorded,
+            [
+                "accept-encoding: zstd,gzip,deflate,br".to_string(),
+                "accept: */*".to_string(),
+                "content-length: 5".to_string(),
+                "cookie: own=1; stored=2".to_string(),
+                format!("host: {host}"),
+                format!("user-agent: {}", USER_AGENT.to_lowercase()),
+                "x-test: yes".to_string(),
+            ]
+        );
+        // The jar still learns what the server set.
+        assert!(jar.iter().any(|c| c.name == "seen"));
+    }
+
+    #[tokio::test]
+    async fn reuses_the_connection_between_sends() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/", listener.local_addr().unwrap());
+        listener.set_nonblocking(true).unwrap();
+        // Answers every request on every connection, counting connections.
+        let connections = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = connections.clone();
+        let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let stop = done.clone();
+        let server = std::thread::spawn(move || {
+            use std::sync::atomic::Ordering::SeqCst;
+            let mut streams = Vec::new();
+            while !stop.load(SeqCst) {
+                if let Ok((stream, _)) = listener.accept() {
+                    stream.set_nonblocking(true).unwrap();
+                    counter.fetch_add(1, SeqCst);
+                    streams.push(stream);
+                }
+                for stream in &mut streams {
+                    let mut buf = [0u8; 4096];
+                    if matches!(stream.read(&mut buf), Ok(n) if n > 0) {
+                        stream
+                            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+                            .unwrap();
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(2));
+            }
+        });
+
+        for _ in 0..3 {
+            assert_eq!(send(Request::new("GET", &url)).await.unwrap().body, "ok");
+        }
+        done.store(true, std::sync::atomic::Ordering::SeqCst);
+        server.join().unwrap();
+        assert_eq!(connections.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn keeps_binary_bodies_as_bytes() {
+        // A PNG signature is not valid UTF-8.
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/logo.png", listener.local_addr().unwrap());
+        let png: &[u8] = &[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0xff, 0x00];
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 4096];
+            let _ = stream.read(&mut buf).unwrap();
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: 10\r\n\r\n",
+                )
+                .unwrap();
+            stream.write_all(png).unwrap();
+        });
+        let response = send(Request::new("GET", url)).await.unwrap();
+        assert_eq!(response.bytes.as_deref(), Some(png));
+        assert_eq!((response.body.as_str(), response.size_bytes), ("", 10));
+
+        // Text in another encoding is still treated as text.
+        assert!(is_text("text/plain; charset=latin1"));
+        assert!(is_text("application/problem+json"));
+        assert!(!is_text("image/png"));
     }
 
     #[tokio::test]

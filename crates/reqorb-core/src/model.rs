@@ -91,7 +91,7 @@ impl FormField {
 }
 
 /// A TLS version a request refuses to negotiate.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DisabledTls {
     #[default]
@@ -202,15 +202,20 @@ pub struct Response {
     pub status_text: String,
     pub http_version: String,
     pub headers: Vec<Header>,
-    /// Body decoded as text; invalid UTF-8 is replaced.
+    /// Body decoded as text; empty when the body is binary.
     pub body: String,
+    /// The body exactly as received, when it is not text: an image, an
+    /// archive, a PDF. Text bodies are in `body` alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bytes: Option<Vec<u8>>,
     /// Size of the decompressed body in bytes.
     pub size_bytes: u64,
     /// Time from sending the request to receiving the full body.
     pub elapsed_ms: u64,
 }
 
-/// One request as it went out and the response that came back.
+/// One request as it went out and the response that came back. The
+/// request's headers are the ones sent, including those the client added.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Exchange {
     /// When the request was sent, in milliseconds since the Unix epoch.
@@ -304,7 +309,7 @@ pub enum AppTheme {
     Dark,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum HttpMode {
     /// Let the client and server agree, preferring HTTP/2 over TLS.

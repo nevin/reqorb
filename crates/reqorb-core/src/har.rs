@@ -1,6 +1,7 @@
 //! HTTP Archive (HAR 1.2): export of the exchanges a session made, and
 //! import of the requests an archive recorded.
 
+use base64::Engine;
 use serde_json::{Value, json};
 
 use crate::import::{ImportResult, str_field};
@@ -26,7 +27,15 @@ pub(crate) fn is_har(value: &Value) -> bool {
 }
 
 /// Headers a recording holds that the client works out again for itself.
-const COMPUTED_HEADERS: &[&str] = &["host", "content-length", "connection", "transfer-encoding"];
+/// Accept-Encoding is among them because a request that names its own
+/// encodings gets the response back still compressed.
+const COMPUTED_HEADERS: &[&str] = &[
+    "host",
+    "content-length",
+    "connection",
+    "transfer-encoding",
+    "accept-encoding",
+];
 
 /// Turns the requests recorded in a HAR document into a collection named
 /// `name`, one request per entry and in the order they were made. The
@@ -237,11 +246,7 @@ fn entry(exchange: &Exchange) -> Value {
             "httpVersion": response.http_version,
             "cookies": response_cookies(&response.headers),
             "headers": headers(&response.headers),
-            "content": {
-                "size": response.size_bytes,
-                "mimeType": header(&response.headers, "content-type").unwrap_or(""),
-                "text": response.body,
-            },
+            "content": content(response),
             "redirectURL": header(&response.headers, "location").unwrap_or(""),
             "headersSize": -1,
             "bodySize": -1,
@@ -250,6 +255,20 @@ fn entry(exchange: &Exchange) -> Value {
         // Only the total is measured, so it is all reported as waiting.
         "timings": { "send": 0, "wait": response.elapsed_ms, "receive": 0 },
     })
+}
+
+/// The response body: text as it is, anything else base64-encoded.
+fn content(response: &crate::Response) -> Value {
+    let mut content = json!({
+        "size": response.size_bytes,
+        "mimeType": header(&response.headers, "content-type").unwrap_or(""),
+        "text": response.body,
+    });
+    if let Some(bytes) = &response.bytes {
+        content["text"] = json!(base64::engine::general_purpose::STANDARD.encode(bytes));
+        content["encoding"] = json!("base64");
+    }
+    content
 }
 
 fn header<'a>(headers: &'a [Header], name: &str) -> Option<&'a str> {
@@ -342,6 +361,7 @@ mod tests {
             ],
             body: r#"{"ok":true}"#.into(),
             size_bytes: 11,
+            bytes: None,
             elapsed_ms: 42,
         };
         let har = to_har(&[Exchange {
@@ -475,6 +495,30 @@ mod tests {
     }
 
     #[test]
+    fn exports_binary_bodies_as_base64() {
+        let response = Response {
+            status: 200,
+            status_text: "OK".into(),
+            http_version: "HTTP/1.1".into(),
+            headers: Vec::new(),
+            body: String::new(),
+            size_bytes: 3,
+            bytes: Some(vec![0xff, 0x00, 0x10]),
+            elapsed_ms: 1,
+        };
+        let har = to_har(&[Exchange {
+            started_ms: 0,
+            request: Request::new("GET", "https://api.test/logo.png"),
+            response,
+        }]);
+        let doc: Value = serde_json::from_str(&har).unwrap();
+        let content = &doc["log"]["entries"][0]["response"]["content"];
+        assert_eq!(content["text"], "/wAQ");
+        assert_eq!(content["encoding"], "base64");
+        assert_eq!(content["size"], 3);
+    }
+
+    #[test]
     fn imports_what_it_exported() {
         let mut json = Request::new("PUT", "https://api.test/a?token=abc");
         json.add_header("Content-Type", "application/json");
@@ -497,6 +541,7 @@ mod tests {
             headers: Vec::new(),
             body: String::new(),
             size_bytes: 0,
+            bytes: None,
             elapsed_ms: 1,
         };
         let exchanges: Vec<Exchange> = sent

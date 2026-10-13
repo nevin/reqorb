@@ -264,6 +264,7 @@ mod tests {
             }],
             body: r#"{"token":"abc","user":{"id":42,"name":"Ann","tags":["a","b"]},"none":null,"odd key":true,"items":[{"price":9.5}]}"#.into(),
             size_bytes: 100,
+            bytes: None,
             elapsed_ms: 120,
         }
     }

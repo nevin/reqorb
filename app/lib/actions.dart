@@ -484,6 +484,21 @@ Future<void> exportSessionHar(BuildContext context, WorkspaceStore store) =>
       ),
     );
 
+/// Saves [bytes] as they are to a file the user chooses.
+Future<void> saveBytesFile(
+  BuildContext context,
+  String fileName,
+  Uint8List bytes,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    final saved = await fileSaver(fileName: fileName, bytes: bytes);
+    if (saved != null) _notify(messenger, 'Saved $fileName');
+  } catch (e) {
+    _notify(messenger, 'Could not save the file: $e');
+  }
+}
+
 /// Saves [text] to a file the user chooses, suggesting [fileName].
 Future<void> saveTextFile(BuildContext context, String fileName, String text) =>
     _saveExport(

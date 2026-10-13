@@ -312,12 +312,26 @@ class _Loaded extends StatelessWidget {
                           saveTextFile(context, 'response.json', json ?? ''),
                       child: const Text('Save body as JSON…'),
                     ),
-                    PopupMenuItem(
-                      key: const Key('export-text'),
-                      value: () =>
-                          saveTextFile(context, 'response.txt', response.body),
-                      child: const Text('Save body as text…'),
-                    ),
+                    if (response.bytes case final bytes?)
+                      PopupMenuItem(
+                        key: const Key('export-file'),
+                        value: () => saveBytesFile(
+                          context,
+                          _binaryFileName(response),
+                          bytes,
+                        ),
+                        child: const Text('Save body as file…'),
+                      )
+                    else
+                      PopupMenuItem(
+                        key: const Key('export-text'),
+                        value: () => saveTextFile(
+                          context,
+                          'response.txt',
+                          response.body,
+                        ),
+                        child: const Text('Save body as text…'),
+                      ),
                     const PopupMenuDivider(),
                     PopupMenuItem(
                       key: const Key('export-har'),
@@ -336,14 +350,25 @@ class _Loaded extends StatelessWidget {
           Expanded(
             child: TabBarView(
               children: [
-                body.isEmpty
-                    ? Center(
-                        child: Text(
-                          'The response has no body',
-                          style: TextStyle(color: scheme.onSurfaceVariant),
-                        ),
-                      )
-                    : _Body(text: body, json: _isJson(response)),
+                if (response.bytes case final bytes?)
+                  _Binary(
+                    bytes: bytes,
+                    contentType: _contentType(response),
+                    onSave: () => saveBytesFile(
+                      context,
+                      _binaryFileName(response),
+                      bytes,
+                    ),
+                  )
+                else
+                  body.isEmpty
+                      ? Center(
+                          child: Text(
+                            'The response has no body',
+                            style: TextStyle(color: scheme.onSurfaceVariant),
+                          ),
+                        )
+                      : _Body(text: body, json: _isJson(response)),
                 _Headers(headers: response.headers),
                 if (hasTests)
                   _Tests(
@@ -430,6 +455,89 @@ class _Tests extends StatelessWidget {
             line(Icons.warning_amber_outlined, scheme.error, problem),
         ],
       ],
+    );
+  }
+}
+
+String _contentType(Response response) {
+  for (final h in response.headers) {
+    if (h.name.toLowerCase() == 'content-type') {
+      return h.value.split(';').first.trim().toLowerCase();
+    }
+  }
+  return '';
+}
+
+/// A file name for a binary body, with an extension taken from its type.
+String _binaryFileName(Response response) {
+  final type = _contentType(response);
+  final subtype = type.contains('/') ? type.split('/').last : '';
+  final extension = switch (subtype) {
+    'jpeg' => 'jpg',
+    'svg+xml' => 'svg',
+    'x-icon' || 'vnd.microsoft.icon' => 'ico',
+    'octet-stream' || '' => 'bin',
+    _ => subtype.replaceAll(RegExp(r'[^a-z0-9]'), ''),
+  };
+  return 'response.${extension.isEmpty ? 'bin' : extension}';
+}
+
+/// A body that is not text: shown if it is an image, and saved as it is.
+class _Binary extends StatelessWidget {
+  const _Binary({
+    required this.bytes,
+    required this.contentType,
+    required this.onSave,
+  });
+
+  final Uint8List bytes;
+  final String contentType;
+  final VoidCallback onSave;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final about = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.insert_drive_file_outlined,
+          size: 32,
+          color: scheme.outlineVariant,
+        ),
+        const SizedBox(height: 10),
+        Text(
+          '${contentType.isEmpty ? 'Binary' : contentType} · '
+          '${formatSize(bytes.length)}',
+          key: const Key('binary-body'),
+          style: TextStyle(color: scheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          key: const Key('binary-save'),
+          icon: const Icon(Icons.save_alt, size: 18),
+          label: const Text('Save to file…'),
+          onPressed: onSave,
+        ),
+      ],
+    );
+    if (!contentType.startsWith('image/')) return Center(child: about);
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          Expanded(
+            child: Image.memory(
+              bytes,
+              fit: BoxFit.scaleDown,
+              // A format the platform cannot decode is still a file to save.
+              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          about,
+        ],
+      ),
     );
   }
 }

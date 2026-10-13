@@ -3,7 +3,6 @@
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use reqwest::header::HeaderValue;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -117,8 +116,8 @@ pub fn cookie_header(jar: &[Cookie], url: &Url, now: i64) -> Option<String> {
     })
 }
 
-/// Lets the HTTP client read and update the jar, so that cookies also flow
-/// through redirects and multi-step authentication.
+/// The jar for one send, shared by every exchange it makes so that cookies
+/// also flow through redirects and multi-step authentication.
 pub(crate) struct Jar(Mutex<Vec<Cookie>>);
 
 impl Jar {
@@ -138,20 +137,39 @@ impl Jar {
     }
 }
 
-impl reqwest::cookie::CookieStore for Jar {
-    fn set_cookies(&self, headers: &mut dyn Iterator<Item = &HeaderValue>, url: &Url) {
+impl Jar {
+    /// Stores the `Set-Cookie` headers of a response from `url`.
+    pub fn store<'a>(&self, headers: impl Iterator<Item = &'a str>, url: &Url) {
         let mut jar = self.0.lock().unwrap();
         let now = now();
         for header in headers {
-            if let Ok(text) = std::str::from_utf8(header.as_bytes()) {
-                store_set_cookie(&mut jar, text, url, now);
-            }
+            store_set_cookie(&mut jar, header, url, now);
         }
     }
 
-    fn cookies(&self, url: &Url) -> Option<HeaderValue> {
-        let header = cookie_header(&self.0.lock().unwrap(), url, now())?;
-        HeaderValue::from_str(&header).ok()
+    /// The `Cookie` header for a request to `url`. Cookies the request names
+    /// itself in `own` win over stored ones of the same name.
+    pub fn header_for(&self, url: &Url, own: Option<&str>) -> Option<String> {
+        let stored = cookie_header(&self.0.lock().unwrap(), url, now());
+        let Some(own) = own else {
+            return stored;
+        };
+        let named: Vec<&str> = own
+            .split(';')
+            .filter_map(|pair| pair.split('=').next())
+            .map(str::trim)
+            .collect();
+        let stored = stored.unwrap_or_default();
+        let extra: Vec<&str> = stored
+            .split("; ")
+            .filter(|pair| !pair.is_empty())
+            .filter(|pair| !named.contains(&pair.split('=').next().unwrap_or("")))
+            .collect();
+        Some(if extra.is_empty() {
+            own.to_string()
+        } else {
+            format!("{}; {}", own.trim_end_matches([';', ' ']), extra.join("; "))
+        })
     }
 }
 

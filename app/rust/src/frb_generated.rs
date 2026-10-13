@@ -1090,6 +1090,7 @@ const _: fn() = || {
         let _: String = Response.http_version;
         let _: Vec<crate::api::core::Header> = Response.headers;
         let _: String = Response.body;
+        let _: Option<Vec<u8>> = Response.bytes;
         let _: u64 = Response.size_bytes;
         let _: u64 = Response.elapsed_ms;
     }
@@ -1986,6 +1987,17 @@ impl SseDecode for Option<crate::api::core::RequestSettings> {
     }
 }
 
+impl SseDecode for Option<Vec<u8>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<Vec<u8>>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for crate::api::core::Request {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2057,6 +2069,7 @@ impl SseDecode for crate::api::core::Response {
         let mut var_httpVersion = <String>::sse_decode(deserializer);
         let mut var_headers = <Vec<crate::api::core::Header>>::sse_decode(deserializer);
         let mut var_body = <String>::sse_decode(deserializer);
+        let mut var_bytes = <Option<Vec<u8>>>::sse_decode(deserializer);
         let mut var_sizeBytes = <u64>::sse_decode(deserializer);
         let mut var_elapsedMs = <u64>::sse_decode(deserializer);
         return crate::api::core::Response {
@@ -2065,6 +2078,7 @@ impl SseDecode for crate::api::core::Response {
             http_version: var_httpVersion,
             headers: var_headers,
             body: var_body,
+            bytes: var_bytes,
             size_bytes: var_sizeBytes,
             elapsed_ms: var_elapsedMs,
         };
@@ -3007,6 +3021,7 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::Response> {
             self.0.http_version.into_into_dart().into_dart(),
             self.0.headers.into_into_dart().into_dart(),
             self.0.body.into_into_dart().into_dart(),
+            self.0.bytes.into_into_dart().into_dart(),
             self.0.size_bytes.into_into_dart().into_dart(),
             self.0.elapsed_ms.into_into_dart().into_dart(),
         ]
@@ -3872,6 +3887,16 @@ impl SseEncode for Option<crate::api::core::RequestSettings> {
     }
 }
 
+impl SseEncode for Option<Vec<u8>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <Vec<u8>>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for crate::api::core::Request {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3915,6 +3940,7 @@ impl SseEncode for crate::api::core::Response {
         <String>::sse_encode(self.http_version, serializer);
         <Vec<crate::api::core::Header>>::sse_encode(self.headers, serializer);
         <String>::sse_encode(self.body, serializer);
+        <Option<Vec<u8>>>::sse_encode(self.bytes, serializer);
         <u64>::sse_encode(self.size_bytes, serializer);
         <u64>::sse_encode(self.elapsed_ms, serializer);
     }

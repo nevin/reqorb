@@ -185,6 +185,7 @@ pub struct _Response {
     pub http_version: String,
     pub headers: Vec<Header>,
     pub body: String,
+    pub bytes: Option<Vec<u8>>,
     pub size_bytes: u64,
     pub elapsed_ms: u64,
 }
