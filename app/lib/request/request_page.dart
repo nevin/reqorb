@@ -10,6 +10,7 @@ import 'package:reqorb/graphql/graphql_editor.dart';
 import 'package:reqorb/graphql/graphql_session.dart';
 import 'package:reqorb/graphql/schema_browser.dart';
 import 'package:reqorb/history/history_page.dart';
+import 'package:reqorb/palette/command_palette.dart';
 import 'package:reqorb/protocols/grpc_session.dart';
 import 'package:reqorb/protocols/ws_session.dart';
 import 'package:reqorb/request/environment_picker.dart';
@@ -32,12 +33,17 @@ import 'package:reqorb/request/request_settings_editor.dart';
 import 'package:reqorb/request/save_dialog.dart';
 import 'package:reqorb/request/tests_editor.dart';
 import 'package:reqorb/response/response_view.dart';
+import 'package:reqorb/runner/collection_run.dart';
+import 'package:reqorb/runner/runner_dialog.dart';
+import 'package:reqorb/settings/settings_dialog.dart';
 import 'package:reqorb/shared/messages.dart';
 import 'package:reqorb/shared/split_view.dart';
 import 'package:reqorb/shared/theme.dart';
 import 'package:reqorb/sidebar/sidebar.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 import 'package:reqorb/transfer/export_actions.dart';
+import 'package:reqorb/transfer/import_actions.dart';
+import 'package:reqorb/workspace/collection_actions.dart';
 import 'package:reqorb/workspace/workspace_store.dart';
 
 const _sidebarWidth = 280.0;
@@ -536,6 +542,177 @@ class _RequestPageState extends State<RequestPage> {
     }
   }
 
+  // -------------------------------------------------------------- palette
+
+  /// Everything the palette offers: open tabs, saved requests,
+  /// environments, then the actions of the app.
+  List<PaletteItem> _paletteItems(VoidCallback toggleSidebar) {
+    final items = <PaletteItem>[];
+    final labels = _tabLabels();
+    for (final (i, tab) in labels.indexed) {
+      if (i == _active) continue;
+      items.add(
+        PaletteItem(
+          title: tab.name,
+          detail: tab.dirty ? 'unsaved changes' : '',
+          kind: 'Open tab',
+          method: tab.method,
+          run: () => _selectTab(i),
+        ),
+      );
+    }
+    void walk(int collection, List<Item> list, List<int> parent, String where) {
+      for (final (i, item) in list.indexed) {
+        final ref = RequestRef(collection, [...parent, i]);
+        if (item.request case final request?) {
+          items.add(
+            PaletteItem(
+              title: item.name,
+              detail: where,
+              kind: 'Request',
+              method: request.method,
+              run: () => _open(ref),
+            ),
+          );
+        }
+        walk(
+          collection,
+          item.items,
+          ref.path,
+          where.isEmpty ? item.name : '$where / ${item.name}',
+        );
+      }
+    }
+
+    for (final (i, collection) in _store.collections.indexed) {
+      walk(i, collection.items, const [], collection.name);
+    }
+    walk(RequestRef.noCollection, _store.requests, const [], '');
+
+    final active = _store.activeEnvironment;
+    for (final environment in _store.environments) {
+      if (environment.name == active) continue;
+      items.add(
+        PaletteItem(
+          title: 'Use ${environment.name}',
+          kind: 'Environment',
+          icon: Icons.layers_outlined,
+          run: () => _store.setActiveEnvironment(environment.name),
+        ),
+      );
+    }
+    if (active != null) {
+      items.add(
+        PaletteItem(
+          title: 'Use no environment',
+          kind: 'Environment',
+          icon: Icons.layers_clear_outlined,
+          run: () => _store.setActiveEnvironment(null),
+        ),
+      );
+    }
+
+    PaletteItem action(
+      String title,
+      IconData icon,
+      VoidCallback run, {
+      String? shortcut,
+      String detail = '',
+    }) => PaletteItem(
+      title: title,
+      detail: detail,
+      kind: 'Action',
+      icon: icon,
+      shortcut: shortcut,
+      run: run,
+    );
+    final http = !_isWs && !_isGrpc;
+    items.addAll([
+      action(
+        _isGrpc
+            ? 'Call the method'
+            : !_isWs
+            ? 'Send the request'
+            : _wsOpen
+            ? 'Send the message'
+            : 'Connect',
+        Icons.send_outlined,
+        _primary,
+        shortcut: shortcutModifier == '⌘' ? '↵' : 'Enter',
+      ),
+      action('New request', Icons.add, _newRequest, shortcut: 'N'),
+      action('Save the request', Icons.save_outlined, _save, shortcut: 'S'),
+      if (http) action('Show as code', Icons.code, _showCode, detail: 'curl'),
+      action(
+        'Close this tab',
+        Icons.close,
+        () => _closeTab(_active),
+        shortcut: 'W',
+      ),
+      action(
+        'Go to the address',
+        Icons.link,
+        _urlFocus.requestFocus,
+        shortcut: 'L',
+      ),
+      action(
+        'Show or hide the sidebar',
+        Icons.menu_open,
+        toggleSidebar,
+        shortcut: 'B',
+      ),
+      action('History', Icons.history, _openHistory),
+      action(
+        'Settings',
+        Icons.settings_outlined,
+        () => SettingsDialog.show(context, _store),
+      ),
+      action('Manage environments', Icons.tune, _manageEnvironments),
+      action(
+        'New collection',
+        Icons.create_new_folder_outlined,
+        () => newCollection(context, _store),
+      ),
+      for (final (i, collection) in _store.collections.indexed)
+        if (collection.items.isNotEmpty)
+          action(
+            'Run ${collection.name}',
+            Icons.play_arrow_outlined,
+            () => showRunner(
+              context,
+              store: _store,
+              name: collection.name,
+              steps: runSteps(collection.items, i),
+            ),
+            detail: 'collection',
+          ),
+      action(
+        'Import a file',
+        Icons.file_download_outlined,
+        () => importFromFile(context, _store),
+        detail: 'Postman, OpenAPI, HAR',
+      ),
+      action(
+        'Import from a URL',
+        Icons.link,
+        () => importFromUrl(context, _store),
+        detail: 'swagger.json',
+      ),
+      action(
+        'Paste to import',
+        Icons.content_paste,
+        () => importFromPaste(context, _store),
+        detail: 'curl, JSON',
+      ),
+      if (_store.session.isNotEmpty)
+        action('Clear the session', Icons.clear_all, _store.clearSession),
+    ]);
+    return items;
+  }
+
+  void _openPalette(VoidCallback toggleSidebar) =>
+      showCommandPalette(context, _paletteItems(toggleSidebar));
+
   // -------------------------------------------------------------- history
 
   /// Shows the requests sent before, and opens the one chosen.
@@ -713,53 +890,60 @@ class _RequestPageState extends State<RequestPage> {
                 (LogicalKeyboardKey.keyN, _newRequest),
                 (LogicalKeyboardKey.keyW, () => _closeTab(_active)),
                 (LogicalKeyboardKey.keyL, _urlFocus.requestFocus),
+                (LogicalKeyboardKey.keyK, () => _openPalette(toggle)),
+                (LogicalKeyboardKey.keyP, () => _openPalette(toggle)),
               ]) ...{
                 SingleActivator(key, meta: true): action,
                 SingleActivator(key, control: true): action,
               },
             },
-            child: Scaffold(
-              key: _scaffold,
-              drawer: docked ? null : Drawer(child: SafeArea(child: sidebar)),
-              body: SafeArea(
-                child: Row(
-                  children: [
-                    if (docked)
-                      // The sidebar keeps its width and slides out of view,
-                      // so its contents never reflow while animating.
-                      ClipRect(
-                        child: AnimatedContainer(
-                          key: const Key('sidebar'),
-                          duration: const Duration(milliseconds: 180),
-                          curve: Curves.easeOut,
-                          width: collapsed ? 0 : width,
-                          child: OverflowBox(
-                            alignment: Alignment.centerRight,
-                            minWidth: width,
-                            maxWidth: width,
-                            child: ExcludeFocus(
-                              excluding: collapsed,
-                              child: Row(
-                                children: [
-                                  SizedBox(
-                                    width: _sidebarWidth,
-                                    child: sidebar,
-                                  ),
-                                  const VerticalDivider(width: 1),
-                                ],
+            // Holds the focus when no field does, so that the shortcuts
+            // work from the moment the window opens.
+            child: Focus(
+              autofocus: true,
+              child: Scaffold(
+                key: _scaffold,
+                drawer: docked ? null : Drawer(child: SafeArea(child: sidebar)),
+                body: SafeArea(
+                  child: Row(
+                    children: [
+                      if (docked)
+                        // The sidebar keeps its width and slides out of view,
+                        // so its contents never reflow while animating.
+                        ClipRect(
+                          child: AnimatedContainer(
+                            key: const Key('sidebar'),
+                            duration: const Duration(milliseconds: 180),
+                            curve: Curves.easeOut,
+                            width: collapsed ? 0 : width,
+                            child: OverflowBox(
+                              alignment: Alignment.centerRight,
+                              minWidth: width,
+                              maxWidth: width,
+                              child: ExcludeFocus(
+                                excluding: collapsed,
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: _sidebarWidth,
+                                      child: sidebar,
+                                    ),
+                                    const VerticalDivider(width: 1),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
                         ),
+                      Expanded(
+                        child: _main(
+                          context,
+                          showMenu: !docked || collapsed,
+                          onMenu: toggle,
+                        ),
                       ),
-                    Expanded(
-                      child: _main(
-                        context,
-                        showMenu: !docked || collapsed,
-                        onMenu: toggle,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -939,7 +1123,14 @@ class _RequestPageState extends State<RequestPage> {
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              IconButton(
+                key: const Key('palette'),
+                tooltip: 'Find anything (${shortcutModifier}K)',
+                iconSize: 20,
+                icon: const Icon(Icons.search),
+                onPressed: () => _openPalette(onMenu),
+              ),
+              const SizedBox(width: 4),
               EnvironmentPicker(store: _store, onManage: _manageEnvironments),
             ],
           ),

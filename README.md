@@ -13,6 +13,8 @@ view. One Rust core does the networking and powers all three front ends.
 - **GraphQL:** a query and variables editor, the server's schema to browse and write
   queries from, and the errors a `200` response hides.
 - **Tabs:** several requests open at once, each keeping its own edits and response.
+- **Find anything:** `⌘K` finds a saved request, an open tab, an environment or an
+  action by a few letters of its name.
 - **Code editor:** bodies, GraphQL queries, messages, tests, variables and responses are
   coloured by language, with line numbers, bracket matching, find and replace, folding of
   responses, and completion of `{{variables}}` and GraphQL fields.
@@ -303,6 +305,12 @@ open is brought forward rather than opened twice, and a tab nothing has been don
 is reused. A dot marks a tab with unsaved changes to a saved request; closing it asks
 whether to save them. `⌘N` opens a tab and `⌘W` closes one (`Ctrl` elsewhere).
 
+`⌘K` (or the magnifier beside the environment) opens a box that finds things by a few
+letters of their name, in order: `crord` finds "Create order". It lists open tabs,
+saved requests with the collection and folder they are in, environments to switch to,
+and the app's actions, such as running a collection or importing a file. The arrows
+move through the list and Return chooses.
+
 ## The code editor
 
 Raw bodies, GraphQL queries and variables, WebSocket and gRPC messages, tests and
@@ -493,7 +501,7 @@ app/lib/                    the Flutter UI, one folder per feature
   editor/                   the code editor: colouring, typing aids, find and replace,
                             folding, completion
   graphql/                  the GraphQL editor, schema browser and schema session
-  runner/                   running a collection: the run and its dialog
+  runner/  palette/         running a collection; the find-anything box
   sidebar/  environments/  settings/  har/  history/
   transfer/                 import and export actions
   workspace/                the saved workspace and collection actions

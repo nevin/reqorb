@@ -710,6 +710,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
       ('Close request', 'W'),
       ('Go to the address', 'L'),
       ('Show or hide the sidebar', 'B'),
+      ('Find anything: requests, environments, actions', 'K'),
     ];
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
