@@ -129,6 +129,15 @@ pub(crate) struct SendArgs {
     #[arg(long = "test", value_name = "TEST")]
     pub(crate) tests: Vec<String>,
 
+    /// JavaScript to run before the request is sent; `@file` reads a file
+    #[arg(long, value_name = "SCRIPT")]
+    pub(crate) pre_script: Option<String>,
+
+    /// JavaScript to run on the response, with `test(…)` and `expect(…)`;
+    /// `@file` reads a file
+    #[arg(long, value_name = "SCRIPT")]
+    pub(crate) post_script: Option<String>,
+
     /// Request body; `@file` reads a file, `@-` reads stdin
     #[arg(short, long, value_name = "DATA")]
     pub(crate) data: Option<String>,

@@ -22,6 +22,8 @@ pub enum Error {
     Auth(String),
     #[error("{0}")]
     Io(String),
+    #[error("{0}")]
+    Script(String),
 }
 
 impl From<reqwest::Error> for Error {

@@ -423,6 +423,11 @@ class _ResultTile extends StatelessWidget {
           Text(problem, style: small?.copyWith(color: scheme.error)),
         for (final error in sent.graphqlErrors)
           Text(error, style: small?.copyWith(color: scheme.error)),
+        for (final printed in sent.console)
+          Text(
+            '› $printed',
+            style: mono?.copyWith(color: scheme.onSurfaceVariant),
+          ),
         for (final variable in sent.captured)
           Text('${variable.key} = ${variable.value}', style: mono),
         if (!passed && sent.response.body.trim().isNotEmpty)

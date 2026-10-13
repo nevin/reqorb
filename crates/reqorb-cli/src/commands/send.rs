@@ -59,6 +59,8 @@ pub(crate) async fn send(args: SendArgs) -> Result<ExitCode> {
     request.timeout_ms = args.timeout.map(|s| (s * 1000.0) as u64);
     request.auth = auth;
     request.tests = args.tests.clone();
+    request.pre_script = args.pre_script.as_deref().map(read_body).transpose()?;
+    request.post_script = args.post_script.as_deref().map(read_body).transpose()?;
     let request = args.http.apply(&request);
 
     let variables = load_variables(&args.vars).await?;

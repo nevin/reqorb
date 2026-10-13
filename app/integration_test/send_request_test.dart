@@ -1688,6 +1688,77 @@ void main() {
     expect(find.byKey(const Key('test-results-tab')), findsNothing);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('runs scripts before a request and on its response', (
+    tester,
+  ) async {
+    await start(tester);
+    await launch(tester);
+    final base = 'http://127.0.0.1:${server.port}';
+    await type(tester, find.byKey(const Key('url')), '$base/ping?ok={{flag}}');
+    await tester.ensureVisible(find.byKey(const Key('scripts-tab')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('scripts-tab')));
+    await tester.pumpAndSettle();
+    await type(
+      tester,
+      find.byKey(const Key('pre-script')),
+      "vars.set('flag', ['y', 'e', 's'].join(''));\n"
+      "request.setHeader('X-From', 'a script');",
+    );
+    await type(
+      tester,
+      find.byKey(const Key('post-script')),
+      "test('was answered', () => expect(response.status).toBeGreaterThan(0));\n"
+      "test('is a teapot', () => expect(response.status).toBe(418));\n"
+      "console.log('sent to', request.url.split('?')[1]);\n"
+      "vars.set('after', response.status);",
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('send')));
+    await waitFor(tester, find.byKey(const Key('status')));
+    await tester.pumpAndSettle();
+    // The script's variable and header went out with the request.
+    expect(seen.path, '/ping?ok=yes');
+    expect(seen.headers!.value('x-from'), 'a script');
+
+    expect(find.text('Tests (1/2)'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('test-results-tab')));
+    await tester.pumpAndSettle();
+    // Once in the script, and once among the results.
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('test-results')),
+        matching: find.textContaining('was answered'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('to equal 418'), findsOneWidget);
+    expect(find.text('sent to ok=yes'), findsOneWidget);
+    // What the scripts set is kept for the requests that follow.
+    final kept = {for (final v in store.captured) v.key: v.value};
+    expect(kept['flag'], 'yes');
+    expect(kept['after'], isNotEmpty);
+
+    // A script that fails before the request stops it and says where.
+    seen.path = null;
+    await tester.ensureVisible(find.byKey(const Key('pre-script')));
+    await type(
+      tester,
+      find.byKey(const Key('pre-script')),
+      'ok();\nnope.x = 1;',
+    );
+    await tester.tap(find.byKey(const Key('send')));
+    await waitFor(tester, find.byKey(const Key('error')));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('the pre-request script failed'),
+      findsOneWidget,
+    );
+    expect(seen.path, isNull);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('keeps a collection as files and reads them back', (
     tester,
   ) async {

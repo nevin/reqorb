@@ -31,6 +31,7 @@ import 'package:reqorb/request/request_draft.dart';
 import 'package:reqorb/request/request_editor.dart';
 import 'package:reqorb/request/request_settings_editor.dart';
 import 'package:reqorb/request/save_dialog.dart';
+import 'package:reqorb/request/scripts_editor.dart';
 import 'package:reqorb/request/tests_editor.dart';
 import 'package:reqorb/response/response_view.dart';
 import 'package:reqorb/runner/collection_run.dart';
@@ -965,6 +966,9 @@ class _RequestPageState extends State<RequestPage> {
     cookies: _store.cookies.length,
     settings: _settings != null,
     tests: linesOf(_tests.text).length + linesOf(_captures.text).length,
+    scripts:
+        _draft.preScript.text.trim().isNotEmpty ||
+        _draft.postScript.text.trim().isNotEmpty,
   );
 
   Widget _main(
@@ -981,6 +985,11 @@ class _RequestPageState extends State<RequestPage> {
       tests: TestsEditor(
         tests: _tests,
         captures: _captures,
+        variables: _variableNames,
+      ),
+      scripts: ScriptsEditor(
+        before: _draft.preScript,
+        after: _draft.postScript,
         variables: _variableNames,
       ),
       edits: _edits,

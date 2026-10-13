@@ -13,6 +13,7 @@ typedef RequestBadges = ({
   int cookies,
   bool settings,
   int tests,
+  bool scripts,
 });
 
 class RequestEditor extends StatelessWidget {
@@ -21,6 +22,7 @@ class RequestEditor extends StatelessWidget {
     required this.params,
     required this.headers,
     required this.tests,
+    required this.scripts,
     required this.body,
     required this.auth,
     required this.cookies,
@@ -50,6 +52,7 @@ class RequestEditor extends StatelessWidget {
   final Widget cookies;
   final Widget settings;
   final Widget tests;
+  final Widget scripts;
 
   /// Names of the key-value tabs currently shown as text.
   final Set<String> bulk;
@@ -74,7 +77,7 @@ class RequestEditor extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 7,
+      length: 8,
       initialIndex: section,
       child: _SectionWatcher(
         onChanged: onSectionChanged,
@@ -128,6 +131,11 @@ class RequestEditor extends StatelessWidget {
                       height: 40,
                       child: TabLabel('Tests', count: has.tests),
                     ),
+                    Tab(
+                      key: const Key('scripts-tab'),
+                      height: 40,
+                      child: TabLabel('Scripts', set: has.scripts),
+                    ),
                   ],
                 );
               },
@@ -157,6 +165,7 @@ class RequestEditor extends StatelessWidget {
                   cookies,
                   _form(settings),
                   _form(tests),
+                  _form(scripts),
                 ],
               ),
             ),

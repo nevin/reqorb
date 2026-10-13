@@ -1384,6 +1384,8 @@ class Request {
   final String? graphqlOperation;
   final List<String> tests;
   final List<String> captures;
+  final String? preScript;
+  final String? postScript;
 
   const Request({
     required this.method,
@@ -1401,6 +1403,8 @@ class Request {
     this.graphqlOperation,
     required this.tests,
     required this.captures,
+    this.preScript,
+    this.postScript,
   });
 
   @override
@@ -1419,7 +1423,9 @@ class Request {
       graphqlVariables.hashCode ^
       graphqlOperation.hashCode ^
       tests.hashCode ^
-      captures.hashCode;
+      captures.hashCode ^
+      preScript.hashCode ^
+      postScript.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1440,7 +1446,9 @@ class Request {
           graphqlVariables == other.graphqlVariables &&
           graphqlOperation == other.graphqlOperation &&
           tests == other.tests &&
-          captures == other.captures;
+          captures == other.captures &&
+          preScript == other.preScript &&
+          postScript == other.postScript;
 }
 
 class RequestSettings {
@@ -1620,6 +1628,7 @@ class Sent {
   final List<Variable> captured;
   final List<String> captureProblems;
   final List<String> graphqlErrors;
+  final List<String> console;
 
   const Sent({
     required this.response,
@@ -1630,6 +1639,7 @@ class Sent {
     required this.captured,
     required this.captureProblems,
     required this.graphqlErrors,
+    required this.console,
   });
 
   @override
@@ -1641,7 +1651,8 @@ class Sent {
       tests.hashCode ^
       captured.hashCode ^
       captureProblems.hashCode ^
-      graphqlErrors.hashCode;
+      graphqlErrors.hashCode ^
+      console.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1655,7 +1666,8 @@ class Sent {
           tests == other.tests &&
           captured == other.captured &&
           captureProblems == other.captureProblems &&
-          graphqlErrors == other.graphqlErrors;
+          graphqlErrors == other.graphqlErrors &&
+          console == other.console;
 }
 
 class Settings {

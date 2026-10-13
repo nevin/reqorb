@@ -26,6 +26,8 @@ view. One Rust core does the networking and powers all three front ends.
   JSON messages, including streaming methods, whose responses are shown as they arrive.
 - **Tests and chaining:** check each response with one-line tests, and capture values
   from it to use in later requests.
+- **Scripts:** JavaScript before a request, to prepare it, and on its response, to test
+  it; scripts written for Postman with `pm.*` run as they are.
 - **Collections and environments:** `{{variables}}`, folders and standalone requests.
 - **Collections as files:** keep a collection in a folder, one file for each request,
   to put under version control and share; credentials stay out of the files.
@@ -92,6 +94,7 @@ reqorb GET httpbin.org/get -i
 reqorb GET '{{base}}/get' -e dev.env --var base=https://httpbin.org
 reqorb POST https://httpbin.org/post --json '{"n": 1}'
 reqorb GET httpbin.org/get --test 'status == 200' --test 'body.url exists'
+reqorb GET httpbin.org/get --post-script "test('ok', () => expect(response.status).toBe(200))"
 reqorb GET httpbin.org/get --har session.har             # save the exchanges as HAR
 reqorb GET httpbin.org/get --har session.har --redact    # the same, without credentials
 
@@ -253,7 +256,7 @@ to the ones after it, which is how a login request hands its token on.
 `reqorb run` prints each test under its request and exits with 1 if any failed. A
 request with tests passes or fails by them alone, so `status == 404` can be a pass.
 Tests and captures are kept in reqorb's own format; Postman, Bruno and curl exports
-leave them out.
+leave them out. For anything they cannot express there are [scripts](#scripts).
 
 ## Keeping a collection in a folder
 
@@ -321,6 +324,63 @@ unticked, and then sends them in order.
 `reqorb run` does the same from the command line with `--data`, `-n/--iterations`,
 `--delay` and `--bail`. In the app the list of results is not kept after the runner is
 closed.
+
+## Scripts
+
+The **Scripts** tab holds two pieces of JavaScript: one run before the request is sent,
+and one run on its response. They are for what one-line tests and captures cannot say:
+a value worked out from another, a loop over a list, a check with an `if` in it.
+
+```js
+// Before the request
+const stamp = String(Date.now());
+vars.set('stamp', stamp);
+request.setHeader('X-Stamp', '{{stamp}}');
+request.body = { name: vars.get('user'), at: stamp };
+
+// After the response
+const order = response.json();
+test('is an order', () => {
+  expect(response.status).toBe(201);
+  expect(order.items).toHaveLength(2);
+});
+vars.set('orderId', order.id);
+console.log('made', order.id);
+```
+
+- **Before the request** a script sees `request` as it is written, with its
+  `{{variables}}` not yet filled in: `method`, `url`, `body`, `headers`,
+  `header(name)`, `setHeader(name, value)` and `removeHeader(name)`. What it sets with
+  `vars.set` can be used by those variables. If it fails, nothing is sent and the error
+  says which line.
+- **After the response** a script sees `response`: `status`, `statusText`, `time`,
+  `size`, `body`, `headers`, `header(name)` and `json()`; and the request as it was
+  sent. Each `test(name, fn)` passes unless it throws, and is listed with the request's
+  other tests. A script that fails outside any test counts as one failed test.
+- **`expect(value)`** reads as Jest does (`toBe`, `toEqual`, `toContain`,
+  `toHaveProperty`, `toBeGreaterThan`, `toMatch`…) and as Chai does (`to.equal`,
+  `to.eql`, `to.include`, `to.be.above`, `to.have.property`, `to.be.a('string')`,
+  `not`…). `assert(condition, message)` is there too.
+- **Variables:** `vars.get`, `vars.set`, `vars.unset`, `vars.has` and
+  `vars.replaceIn(text)`. What a script sets is kept like a capture, for the requests
+  that follow, until the session is cleared. Unsetting hides a variable from this
+  request only.
+- **`console.log`** output is shown under **Console** in the response's Tests tab, and
+  by the CLI and the runner.
+- **Postman scripts** run as they are for the common part of `pm`: `pm.test`,
+  `pm.expect`, `pm.response` (`code`, `json()`, `text()`, `headers.get`,
+  `to.have.status`, `to.be.ok`…), `pm.request` (`url`, `method`, `headers.add`,
+  `upsert`, `remove`) and `pm.variables`, `pm.environment`, `pm.collectionVariables`
+  and `pm.globals`, which here are all the same set of variables. Importing a Postman
+  collection brings its scripts along, a folder's in front of each request's inside
+  it, and exporting to Postman writes them back.
+
+A script can reach nothing but the request, the response and the variables: no files,
+no network, no timers, so `pm.sendRequest`, `require`, `setTimeout` and `fetch` are not
+there, and an import says so when a script uses the first two. A script that loops
+without end is stopped. Scripts are not run for WebSocket or gRPC requests, and Bruno
+and curl exports leave them out. In the CLI, `--pre-script` and `--post-script` take a
+script or `@file`.
 
 ## Authorization
 
@@ -590,6 +650,8 @@ crates/reqorb-core/src/     the request engine, used by everything else
                             and the folder of files a collection can be kept as
   codegen/                  a request as code: one generator per language
   vars.rs  checks.rs        variable substitution; tests and captures
+  script.rs                 scripts: the JavaScript run before a request and on its
+                            response, and what it can see (script_prelude.js)
   redact.rs  analyze.rs     redaction; the HAR report
   data.rs                   the data file of a run: CSV or JSON rows as variables
   vault.rs  history.rs      what is kept on disk: the workspace, its credentials

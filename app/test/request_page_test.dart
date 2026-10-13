@@ -102,6 +102,50 @@ void main() {
     expect(variables.single.key, 'token');
   });
 
+  testWidgets('sends and saves a request with its scripts', (tester) async {
+    await open(tester);
+    await enterUrl(tester, 'https://api.test/login');
+    // The last of the tabs, which a narrow pane scrolls to.
+    await tester.ensureVisible(find.byKey(const Key('scripts-tab')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('scripts-tab')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('pre-script')),
+      "vars.set('n', 1);",
+    );
+    await tester.enterText(
+      find.byKey(const Key('post-script')),
+      "test('ok', () => {});\nconsole.log('seen');",
+    );
+    await tester.pumpAndSettle();
+
+    engine.onSend = (_) async => sentWith(
+      response(),
+      tests: const [TestResult(test: 'ok', passed: true, detail: '')],
+      console: const ['seen', 'error: and this'],
+    );
+    await tapSend(tester);
+    // The scripts go with the request, for the engine to run.
+    final (sent, _) = engine.sends.single;
+    expect(sent.preScript, "vars.set('n', 1);");
+    expect(sent.postScript, "test('ok', () => {});\nconsole.log('seen');");
+
+    // What they printed is shown with how the tests came out.
+    expect(find.text('Tests (1/1)'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('test-results-tab')));
+    await tester.pumpAndSettle();
+    expect(find.text('Console'), findsOneWidget);
+    expect(find.byKey(const Key('console-1')), findsOneWidget);
+
+    // Emptied, a script is not kept as an empty one.
+    await tester.enterText(find.byKey(const Key('pre-script')), '  ');
+    await tester.pumpAndSettle();
+    await tapSend(tester);
+    expect(engine.sends.last.$1.preScript, isNull);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('holds a WebSocket conversation', (tester) async {
     await open(tester);
     await choose(tester, 'WS');

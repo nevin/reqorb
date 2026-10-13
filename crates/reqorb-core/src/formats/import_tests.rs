@@ -68,7 +68,45 @@ fn imports_postman_collection() {
     assert_eq!(requests[3].1.body_mode, Some(BodyMode::FormData));
     assert_eq!(login.auth, None, "noauth overrides inherited auth");
 
-    assert_eq!(result.warnings.len(), 1, "{:?}", result.warnings);
+    // The collection's own script comes with every request in it.
+    assert!(result.warnings.is_empty(), "{:?}", result.warnings);
+    for (_, request) in &requests {
+        assert_eq!(request.post_script.as_deref(), Some("pm.test()"));
+        assert_eq!(request.pre_script, None);
+    }
+}
+
+#[test]
+fn postman_scripts_come_in_and_go_back_out() {
+    let text = r#"{
+      "info": {"name": "Scripted", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+      "event": [{"listen": "prerequest", "script": {"exec": ["const all = 1;"]}}],
+      "item": [{"name": "Folder",
+        "event": [{"listen": "test", "script": {"exec": "pm.sendRequest('x');"}}],
+        "item": [{"name": "Get",
+          "event": [
+            {"listen": "prerequest", "script": {"exec": ["pm.variables.set('a', all);", "// done"]}},
+            {"listen": "test", "script": {"exec": ["pm.test('ok', () => {});"]}}
+          ],
+          "request": {"method": "GET", "url": "https://x.test"}}]}]
+    }"#;
+    let result = import(text, "").unwrap();
+    let collection = &result.collections[0];
+    let get = collection.requests()[0].1.clone();
+    assert_eq!(
+        get.pre_script.as_deref(),
+        Some("const all = 1;\n\npm.variables.set('a', all);\n// done")
+    );
+    assert_eq!(
+        get.post_script.as_deref(),
+        Some("pm.sendRequest('x');\n\npm.test('ok', () => {});")
+    );
+    assert_eq!(result.warnings.len(), 1);
+    assert!(result.warnings[0].contains("pm.sendRequest"));
+
+    let exported = export_collection(collection, ExportFormat::Postman).unwrap();
+    let again = import(&exported, "").unwrap();
+    assert_eq!(again.collections[0].requests()[0].1, &get);
 }
 
 #[test]

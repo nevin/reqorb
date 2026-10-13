@@ -20,6 +20,7 @@ pub use watch::{Cancel, SendEvent, Watch};
 use crate::auth::{self, AuthKind};
 use crate::checks::{TestResult, capture, run_tests};
 use crate::graphql::{self, graphql_errors};
+use crate::script;
 use crate::subscribe;
 use crate::vars::resolve;
 use crate::vault::LOCKED;
@@ -47,6 +48,8 @@ pub struct Sent {
     /// For a GraphQL request, the errors the response reports. A GraphQL
     /// server answers 200 even when the query failed.
     pub graphql_errors: Vec<String>,
+    /// What the request's scripts printed with `console.log`.
+    pub console: Vec<String>,
 }
 
 /// Substitutes `variables` into the request and sends it. Undefined
@@ -70,6 +73,21 @@ pub async fn send_watched(
     cookies: &[Cookie],
     watch: &Watch,
 ) -> Result<Sent, Error> {
+    // The script that prepares the request sees it as written, so that
+    // what it sets can be used by the variables in it.
+    let mut request = request.clone();
+    let prepared = script::before(&mut request, variables)?;
+    let variables: Vec<Variable> = prepared
+        .set
+        .iter()
+        .chain(
+            variables
+                .iter()
+                .filter(|v| !prepared.unset.contains(&v.key)),
+        )
+        .cloned()
+        .collect();
+    let (request, variables) = (&request, variables.as_slice());
     let resolved = resolve(request, variables);
     let unusable = match reqwest::Url::parse(&resolved.request.url) {
         Ok(url) => url
@@ -102,9 +120,22 @@ pub async fn send_watched(
         .filter(|c| !c.value.starts_with(LOCKED))
         .cloned()
         .collect();
+    let as_sent = resolved.request.clone();
     let (response, exchanges) = send_logged(resolved.request, options, &mut jar, watch).await?;
-    let tests = run_tests(&request.tests, &response, variables);
-    let (captured, capture_problems) = capture(&request.captures, &response);
+    let mut tests = run_tests(&request.tests, &response, variables);
+    let (mut captured, capture_problems) = capture(&request.captures, &response);
+    // The script that follows sees what the captures kept, and its own
+    // tests and values come after theirs.
+    let known: Vec<Variable> = captured.iter().chain(variables).cloned().collect();
+    let judged = script::after(&as_sent, &response, &known);
+    tests.extend(judged.tests);
+    // What either script set is kept as a capture is; the last word on a
+    // name is the one that stands.
+    for variable in prepared.set.into_iter().rev().chain(judged.set) {
+        captured.retain(|v| v.key != variable.key);
+        captured.push(variable);
+    }
+    let console: Vec<String> = prepared.console.into_iter().chain(judged.console).collect();
     let graphql_errors = if request.effective_body_mode() == BodyMode::GraphQl {
         graphql_errors(&response.body)
     } else {
@@ -119,6 +150,7 @@ pub async fn send_watched(
         captured,
         capture_problems,
         graphql_errors,
+        console,
     })
 }
 

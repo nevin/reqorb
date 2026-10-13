@@ -99,6 +99,9 @@ pub(crate) fn warn_unresolved(unresolved: &[String]) {
 
 /// Prints how each test came out and returns how many failed.
 pub(crate) fn report_tests(sent: &reqorb_core::Sent, indent: &str) -> usize {
+    for line in &sent.console {
+        eprintln!("{indent}› {line}");
+    }
     for result in &sent.tests {
         if result.passed {
             eprintln!("{indent}✓ {}", result.test);

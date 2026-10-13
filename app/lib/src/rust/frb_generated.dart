@@ -2553,8 +2553,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Request dco_decode_request(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 15)
-      throw Exception('unexpected arr length: expect 15 but see ${arr.length}');
+    if (arr.length != 17)
+      throw Exception('unexpected arr length: expect 17 but see ${arr.length}');
     return Request(
       method: dco_decode_String(arr[0]),
       url: dco_decode_String(arr[1]),
@@ -2571,6 +2571,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       graphqlOperation: dco_decode_opt_String(arr[12]),
       tests: dco_decode_list_String(arr[13]),
       captures: dco_decode_list_String(arr[14]),
+      preScript: dco_decode_opt_String(arr[15]),
+      postScript: dco_decode_opt_String(arr[16]),
     );
   }
 
@@ -2640,8 +2642,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Sent dco_decode_sent(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 8)
-      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
     return Sent(
       response: dco_decode_response(arr[0]),
       unresolved: dco_decode_list_String(arr[1]),
@@ -2651,6 +2653,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       captured: dco_decode_list_variable(arr[5]),
       captureProblems: dco_decode_list_String(arr[6]),
       graphqlErrors: dco_decode_list_String(arr[7]),
+      console: dco_decode_list_String(arr[8]),
     );
   }
 
@@ -4003,6 +4006,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_graphqlOperation = sse_decode_opt_String(deserializer);
     var var_tests = sse_decode_list_String(deserializer);
     var var_captures = sse_decode_list_String(deserializer);
+    var var_preScript = sse_decode_opt_String(deserializer);
+    var var_postScript = sse_decode_opt_String(deserializer);
     return Request(
       method: var_method,
       url: var_url,
@@ -4019,6 +4024,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       graphqlOperation: var_graphqlOperation,
       tests: var_tests,
       captures: var_captures,
+      preScript: var_preScript,
+      postScript: var_postScript,
     );
   }
 
@@ -4113,6 +4120,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_captured = sse_decode_list_variable(deserializer);
     var var_captureProblems = sse_decode_list_String(deserializer);
     var var_graphqlErrors = sse_decode_list_String(deserializer);
+    var var_console = sse_decode_list_String(deserializer);
     return Sent(
       response: var_response,
       unresolved: var_unresolved,
@@ -4122,6 +4130,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       captured: var_captured,
       captureProblems: var_captureProblems,
       graphqlErrors: var_graphqlErrors,
+      console: var_console,
     );
   }
 
@@ -5366,6 +5375,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_String(self.graphqlOperation, serializer);
     sse_encode_list_String(self.tests, serializer);
     sse_encode_list_String(self.captures, serializer);
+    sse_encode_opt_String(self.preScript, serializer);
+    sse_encode_opt_String(self.postScript, serializer);
   }
 
   @protected
@@ -5432,6 +5443,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_variable(self.captured, serializer);
     sse_encode_list_String(self.captureProblems, serializer);
     sse_encode_list_String(self.graphqlErrors, serializer);
+    sse_encode_list_String(self.console, serializer);
   }
 
   @protected

@@ -54,6 +54,14 @@ pub struct Request {
     /// such as `token = body.access_token`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub captures: Vec<String>,
+    /// JavaScript run before the request is sent, which may change it and
+    /// set variables.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pre_script: Option<String>,
+    /// JavaScript run after the response arrives, to test it and to keep
+    /// values from it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub post_script: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

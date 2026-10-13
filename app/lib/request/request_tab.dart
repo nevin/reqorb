@@ -63,7 +63,9 @@ class RequestTab {
         request.auth == null &&
         request.settings == null &&
         request.tests.isEmpty &&
-        request.captures.isEmpty;
+        request.captures.isEmpty &&
+        request.preScript == null &&
+        request.postScript == null;
   }
 
   /// What the tab is called when its request has no name: the path of

@@ -273,6 +273,49 @@ fn keeps_a_collection_as_a_folder_and_runs_it_from_there() {
 }
 
 #[test]
+fn runs_scripts_before_a_request_and_on_its_response() {
+    let base = serve();
+    let dir = tempfile::tempdir().unwrap();
+    let script = dir.path().join("check.js");
+    std::fs::write(
+        &script,
+        "const me = response.json();\n\
+         test('carries the token', () => expect(me.token).toBe('made-up'));\n\
+         test('fails', () => expect(me.token).toBe('other'));\n\
+         console.log('token was', me.token);\n",
+    )
+    .unwrap();
+    let output = reqorb(&[
+        "GET",
+        &format!("{base}/me"),
+        "-H",
+        "X-Token: {{token}}",
+        "--pre-script",
+        "vars.set('token', 'made-' + 'up'); request.url += '?from=script';",
+        "--post-script",
+        &format!("@{}", script.display()),
+    ]);
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    assert_eq!(
+        stdout(&output),
+        r#"{"token":"made-up","query":"from=script"}"#
+    );
+    let said = stderr(&output);
+    assert!(said.contains("› token was made-up"), "{said}");
+    assert!(said.contains("✓ carries the token"), "{said}");
+    assert!(
+        said.contains("✗ fails  (expected made-up to equal other)"),
+        "{said}"
+    );
+
+    // A script that fails before the request stops it from being sent.
+    let broken = reqorb(&["GET", &format!("{base}/me"), "--pre-script", "nope()"]);
+    assert!(!broken.status.success());
+    assert!(stderr(&broken).contains("the pre-request script failed"));
+    assert!(stdout(&broken).is_empty());
+}
+
+#[test]
 fn records_redacts_analyses_and_imports_a_har_file() {
     let base = serve();
     let dir = tempfile::tempdir().unwrap();

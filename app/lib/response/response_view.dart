@@ -132,6 +132,7 @@ class ResponseView extends StatelessWidget {
             captured: sent?.captured ?? const [],
             captureProblems: sent?.captureProblems ?? const [],
             graphqlErrors: sent?.graphqlErrors ?? const [],
+            console: sent?.console ?? const [],
             current: !sending,
             receiving: sending && receiving,
             stopped: stopped && !sending,
@@ -162,6 +163,7 @@ class _Loaded extends StatelessWidget {
     required this.captured,
     required this.captureProblems,
     required this.graphqlErrors,
+    required this.console,
     required this.receiving,
     required this.stopped,
   });
@@ -179,6 +181,9 @@ class _Loaded extends StatelessWidget {
 
   /// What a GraphQL response says went wrong, whatever its status.
   final List<String> graphqlErrors;
+
+  /// What the request's scripts printed.
+  final List<String> console;
 
   final int sessionSize;
   final VoidCallback onExportSession;
@@ -204,7 +209,10 @@ class _Loaded extends StatelessWidget {
 
     final passed = tests.where((t) => t.passed).length;
     final hasTests =
-        tests.isNotEmpty || captured.isNotEmpty || captureProblems.isNotEmpty;
+        tests.isNotEmpty ||
+        captured.isNotEmpty ||
+        captureProblems.isNotEmpty ||
+        console.isNotEmpty;
     final testsFailed = passed < tests.length || captureProblems.isNotEmpty;
 
     // An event stream is read as its events first, and as text second.
@@ -485,6 +493,7 @@ class _Loaded extends StatelessWidget {
                     tests: tests,
                     captured: captured,
                     problems: captureProblems,
+                    console: console,
                   ),
               ],
             ),
@@ -501,8 +510,11 @@ class _Tests extends StatelessWidget {
     required this.tests,
     required this.captured,
     required this.problems,
+    required this.console,
   });
 
+  /// What the scripts printed, oldest first.
+  final List<String> console;
   final List<TestResult> tests;
   final List<Variable> captured;
   final List<String> problems;
@@ -563,6 +575,24 @@ class _Tests extends StatelessWidget {
             ),
           for (final problem in problems)
             line(Icons.warning_amber_outlined, scheme.error, problem),
+        ],
+        if (console.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text('Console', style: theme.textTheme.labelLarge),
+          const SizedBox(height: 6),
+          for (final (i, printed) in console.indexed)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: SelectableText(
+                printed,
+                key: Key('console-$i'),
+                style: small.copyWith(
+                  color: printed.startsWith('error: ')
+                      ? scheme.error
+                      : scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
         ],
       ],
     );

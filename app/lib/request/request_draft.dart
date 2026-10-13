@@ -52,6 +52,10 @@ class RequestDraft extends ChangeNotifier {
   final tests = CodeController();
   final captures = CodeController();
 
+  /// JavaScript run before the request is sent, and on its response.
+  final preScript = CodeController();
+  final postScript = CodeController();
+
   /// An HTTP method, or `WS` or `GRPC`.
   String method = 'GET';
 
@@ -95,6 +99,8 @@ class RequestDraft extends ChangeNotifier {
     graphqlVariables,
     tests,
     captures,
+    preScript,
+    postScript,
   ];
 
   bool get isWs => method == 'WS';
@@ -196,6 +202,8 @@ class RequestDraft extends ChangeNotifier {
       settings: settings,
       tests: linesOf(tests.text),
       captures: linesOf(captures.text),
+      preScript: preScript.text.trim().isEmpty ? null : preScript.text,
+      postScript: postScript.text.trim().isEmpty ? null : postScript.text,
     );
   }
 
@@ -214,6 +222,8 @@ class RequestDraft extends ChangeNotifier {
         .join('\n');
     tests.text = request.tests.join('\n');
     captures.text = request.captures.join('\n');
+    preScript.text = request.preScript ?? '';
+    postScript.text = request.postScript ?? '';
     _loadBody(request);
     auth = request.auth;
     settings = request.settings;
@@ -268,7 +278,9 @@ class RequestDraft extends ChangeNotifier {
         !listEquals(now.headers, was.headers) ||
         !listEquals(now.form, was.form) ||
         !listEquals(now.tests, was.tests) ||
-        !listEquals(now.captures, was.captures);
+        !listEquals(now.captures, was.captures) ||
+        now.preScript != was.preScript ||
+        now.postScript != was.postScript;
   }
 
   /// Shows a request's body in the editor for its type. Text bodies saved

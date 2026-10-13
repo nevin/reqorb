@@ -26,6 +26,7 @@ mod history;
 mod http;
 mod model;
 mod redact;
+mod script;
 mod subscribe;
 mod time;
 mod vars;

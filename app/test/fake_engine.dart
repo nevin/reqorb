@@ -19,6 +19,7 @@ Sent sentWith(
   List<TestResult> tests = const [],
   List<Variable> captured = const [],
   List<String> graphqlErrors = const [],
+  List<String> console = const [],
 }) => Sent(
   response: response,
   unresolved: const [],
@@ -28,6 +29,7 @@ Sent sentWith(
   captured: captured,
   captureProblems: const [],
   graphqlErrors: graphqlErrors,
+  console: console,
 );
 
 /// One report of a watched send.

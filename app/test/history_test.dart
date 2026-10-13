@@ -152,6 +152,7 @@ void main() {
         captured: const [],
         captureProblems: const [],
         graphqlErrors: const [],
+        console: const [],
       );
     }
 

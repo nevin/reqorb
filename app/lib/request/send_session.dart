@@ -24,6 +24,8 @@ Request readdressed(Request request, String url) => Request(
   settings: request.settings,
   tests: request.tests,
   captures: request.captures,
+  preScript: request.preScript,
+  postScript: request.postScript,
 );
 
 /// Whether a response of this type is a stream, read as it arrives
@@ -204,6 +206,7 @@ class SendSession extends ChangeNotifier {
       captured: const [],
       captureProblems: const [],
       graphqlErrors: const [],
+      console: const [],
     );
     _notify();
   }
@@ -222,6 +225,7 @@ class SendSession extends ChangeNotifier {
       captured: const [],
       captureProblems: const [],
       graphqlErrors: const [],
+      console: const [],
     );
     _notify();
   }

@@ -36,52 +36,98 @@ pub(super) fn postman_variables(values: &Value) -> Vec<Variable> {
 #[derive(Default)]
 pub(super) struct Postman {
     warnings: Vec<String>,
-    scripts: usize,
+    /// Scripts that use what reqorb's scripts do not have.
+    out_of_reach: usize,
+}
+
+/// The scripts an entry carries for before a request and after it, each
+/// as one text.
+fn scripts(value: &Value) -> (String, String) {
+    let mut found = (String::new(), String::new());
+    for event in value
+        .get("event")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let text = match &event["script"]["exec"] {
+            Value::Array(lines) => lines
+                .iter()
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>()
+                .join("\n"),
+            Value::String(text) => text.clone(),
+            _ => continue,
+        };
+        match event["listen"].as_str() {
+            Some("prerequest") => found.0 = text,
+            Some("test") => found.1 = text,
+            _ => {}
+        }
+    }
+    found
+}
+
+/// A script with those of the folders around it in front, which is the
+/// order Postman runs them in.
+fn joined(outer: &str, inner: &str) -> String {
+    match (outer.trim().is_empty(), inner.trim().is_empty()) {
+        (true, _) => inner.to_string(),
+        (false, true) => outer.to_string(),
+        (false, false) => format!("{outer}\n\n{inner}"),
+    }
 }
 
 impl Postman {
     pub(super) fn finish(mut self) -> Vec<String> {
-        if self.scripts > 0 {
+        if self.out_of_reach > 0 {
             self.warnings.push(format!(
-                "{} pre-request/test script(s) were not imported",
-                self.scripts
+                "{} script(s) use pm.sendRequest or require, which reqorb's scripts do not have",
+                self.out_of_reach
             ));
         }
         self.warnings
     }
 
     pub(super) fn collection(&mut self, value: &Value, name_hint: &str) -> Collection {
-        self.count_scripts(value);
         Collection {
             name: str_field(&value["info"], "name")
                 .unwrap_or(name_hint)
                 .to_string(),
             variables: postman_variables(&value["variable"]),
-            items: self.items(&value["item"], own_auth(value)),
+            items: self.items(&value["item"], own_auth(value), &scripts(value)),
             link: None,
         }
     }
 
-    fn count_scripts(&mut self, value: &Value) {
-        let events = value.get("event").and_then(Value::as_array);
-        self.scripts += events.into_iter().flatten().count();
-    }
-
-    fn items(&mut self, items: &Value, inherited_auth: Option<&Value>) -> Vec<Item> {
+    fn items(
+        &mut self,
+        items: &Value,
+        inherited_auth: Option<&Value>,
+        inherited: &(String, String),
+    ) -> Vec<Item> {
         let mut out = Vec::new();
         for entry in items.as_array().into_iter().flatten() {
-            self.count_scripts(entry);
+            let own = scripts(entry);
+            let both = (joined(&inherited.0, &own.0), joined(&inherited.1, &own.1));
             let name = str_field(entry, "name").unwrap_or("Untitled").to_string();
             if let Some(children) = entry.get("item") {
                 let auth = own_auth(entry).or(inherited_auth);
                 out.push(Item {
                     name,
                     request: None,
-                    items: self.items(children, auth),
+                    items: self.items(children, auth, &both),
                 });
             } else if let Some(request) = entry.get("request") {
                 let mut request = self.request(request, inherited_auth, &name);
                 request.settings = postman_settings(&entry["protocolProfileBehavior"]);
+                for script in [&both.0, &both.1] {
+                    if script.contains("pm.sendRequest") || script.contains("require(") {
+                        self.out_of_reach += 1;
+                    }
+                }
+                request.pre_script = Some(both.0).filter(|s| !s.trim().is_empty());
+                request.post_script = Some(both.1).filter(|s| !s.trim().is_empty());
                 out.push(Item {
                     name,
                     request: Some(request),
@@ -448,6 +494,25 @@ fn postman_item(item: &Item) -> Value {
         _ => {}
     }
     let mut exported = json!({"name": item.name, "request": out, "response": []});
+    let events: Vec<Value> = [
+        ("prerequest", &request.pre_script),
+        ("test", &request.post_script),
+    ]
+    .into_iter()
+    .filter_map(|(listen, script)| {
+        let script = script.as_deref().filter(|s| !s.trim().is_empty())?;
+        Some(json!({
+            "listen": listen,
+            "script": {
+                "type": "text/javascript",
+                "exec": script.lines().collect::<Vec<_>>(),
+            },
+        }))
+    })
+    .collect();
+    if !events.is_empty() {
+        exported["event"] = events.into();
+    }
     if let Some(profile) = request.settings.as_ref().and_then(postman_profile) {
         exported["protocolProfileBehavior"] = profile;
     }

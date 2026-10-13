@@ -1863,6 +1863,8 @@ const _: fn() = || {
         let _: Option<String> = Request.graphql_operation;
         let _: Vec<String> = Request.tests;
         let _: Vec<String> = Request.captures;
+        let _: Option<String> = Request.pre_script;
+        let _: Option<String> = Request.post_script;
     }
     {
         let RequestSettings = None::<crate::api::core::RequestSettings>.unwrap();
@@ -1898,6 +1900,7 @@ const _: fn() = || {
         let _: Vec<crate::api::core::Variable> = Sent.captured;
         let _: Vec<String> = Sent.capture_problems;
         let _: Vec<String> = Sent.graphql_errors;
+        let _: Vec<String> = Sent.console;
     }
     {
         let Settings = None::<crate::api::core::Settings>.unwrap();
@@ -3237,6 +3240,8 @@ impl SseDecode for crate::api::core::Request {
         let mut var_graphqlOperation = <Option<String>>::sse_decode(deserializer);
         let mut var_tests = <Vec<String>>::sse_decode(deserializer);
         let mut var_captures = <Vec<String>>::sse_decode(deserializer);
+        let mut var_preScript = <Option<String>>::sse_decode(deserializer);
+        let mut var_postScript = <Option<String>>::sse_decode(deserializer);
         return crate::api::core::Request {
             method: var_method,
             url: var_url,
@@ -3253,6 +3258,8 @@ impl SseDecode for crate::api::core::Request {
             graphql_operation: var_graphqlOperation,
             tests: var_tests,
             captures: var_captures,
+            pre_script: var_preScript,
+            post_script: var_postScript,
         };
     }
 }
@@ -3358,6 +3365,7 @@ impl SseDecode for crate::api::core::Sent {
         let mut var_captured = <Vec<crate::api::core::Variable>>::sse_decode(deserializer);
         let mut var_captureProblems = <Vec<String>>::sse_decode(deserializer);
         let mut var_graphqlErrors = <Vec<String>>::sse_decode(deserializer);
+        let mut var_console = <Vec<String>>::sse_decode(deserializer);
         return crate::api::core::Sent {
             response: var_response,
             unresolved: var_unresolved,
@@ -3367,6 +3375,7 @@ impl SseDecode for crate::api::core::Sent {
             captured: var_captured,
             capture_problems: var_captureProblems,
             graphql_errors: var_graphqlErrors,
+            console: var_console,
         };
     }
 }
@@ -4676,6 +4685,8 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::Request> {
             self.0.graphql_operation.into_into_dart().into_dart(),
             self.0.tests.into_into_dart().into_dart(),
             self.0.captures.into_into_dart().into_dart(),
+            self.0.pre_script.into_into_dart().into_dart(),
+            self.0.post_script.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -4806,6 +4817,7 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::Sent> {
             self.0.captured.into_into_dart().into_dart(),
             self.0.capture_problems.into_into_dart().into_dart(),
             self.0.graphql_errors.into_into_dart().into_dart(),
+            self.0.console.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -6024,6 +6036,8 @@ impl SseEncode for crate::api::core::Request {
         <Option<String>>::sse_encode(self.graphql_operation, serializer);
         <Vec<String>>::sse_encode(self.tests, serializer);
         <Vec<String>>::sse_encode(self.captures, serializer);
+        <Option<String>>::sse_encode(self.pre_script, serializer);
+        <Option<String>>::sse_encode(self.post_script, serializer);
     }
 }
 
@@ -6100,6 +6114,7 @@ impl SseEncode for crate::api::core::Sent {
         <Vec<crate::api::core::Variable>>::sse_encode(self.captured, serializer);
         <Vec<String>>::sse_encode(self.capture_problems, serializer);
         <Vec<String>>::sse_encode(self.graphql_errors, serializer);
+        <Vec<String>>::sse_encode(self.console, serializer);
     }
 }
 

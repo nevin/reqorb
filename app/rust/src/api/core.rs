@@ -238,6 +238,8 @@ pub struct _Request {
     pub graphql_operation: Option<String>,
     pub tests: Vec<String>,
     pub captures: Vec<String>,
+    pub pre_script: Option<String>,
+    pub post_script: Option<String>,
 }
 
 #[frb(mirror(Response))]
@@ -262,6 +264,7 @@ pub struct _Sent {
     pub captured: Vec<Variable>,
     pub capture_problems: Vec<String>,
     pub graphql_errors: Vec<String>,
+    pub console: Vec<String>,
 }
 
 #[frb(mirror(TestResult))]
