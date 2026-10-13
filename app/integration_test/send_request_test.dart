@@ -538,15 +538,11 @@ void main() {
 
     await tester.tap(entry);
     await tester.pumpAndSettle();
-    for (final label in const [
-      'Themes',
-      'General',
-      'System',
-      'Dark',
-      'Light',
-    ]) {
+    for (final label in const ['General', 'Themes', 'Proxy', 'About']) {
       expect(find.text(label), findsOneWidget);
     }
+    await tester.tap(find.byKey(const Key('settings-themes')));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Dark'));
     await tester.pumpAndSettle();
     expect(brightness(), Brightness.dark);
@@ -556,12 +552,11 @@ void main() {
 
     await tester.tap(find.byKey(const Key('settings-general')));
     await tester.pumpAndSettle();
-    for (final label in const ['Auto', 'HTTP/1', 'HTTP/2']) {
-      expect(find.text(label), findsOneWidget);
-    }
-    expect(find.textContaining('0 uses the default'), findsOneWidget);
+    expect(find.textContaining('0 waits as long as'), findsOneWidget);
     await type(tester, find.byKey(const Key('settings-timeout')), '7');
-    await tester.tap(find.text('HTTP/2'));
+    await tester.tap(find.byKey(const Key('settings-http')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('HTTP/2').last);
     await tester.pumpAndSettle();
     expect(find.textContaining('abandoned after 7 seconds'), findsOneWidget);
     await tester.tap(find.byKey(const Key('settings-close')));
@@ -583,7 +578,7 @@ void main() {
     expect(find.textContaining('HTTP/2 is forced in settings'), findsOneWidget);
 
     store.updateSettings(
-      const Settings(
+      store.settings.copyWith(
         theme: AppTheme.light,
         httpMode: HttpMode.http1,
         timeoutSecs: 7,

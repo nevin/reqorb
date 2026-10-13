@@ -11,6 +11,10 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 RequestSettings defaultRequestSettings() =>
     RustLib.instance.api.crateApiCoreDefaultRequestSettings();
 
+/// The settings a new workspace starts with.
+Settings defaultSettings() =>
+    RustLib.instance.api.crateApiCoreDefaultSettings();
+
 /// Every auth type, in the order a picker should list them.
 List<AuthChoice> authChoices() =>
     RustLib.instance.api.crateApiCoreAuthChoices();
@@ -806,6 +810,8 @@ class ImportResult {
           warnings == other.warnings;
 }
 
+enum Indent { twoSpaces, fourSpaces, tab }
+
 class Item {
   final String name;
   final Request? request;
@@ -825,6 +831,10 @@ class Item {
           request == other.request &&
           items == other.items;
 }
+
+enum Layout { auto, sideBySide, stacked }
+
+enum ProxyMode { system, none, custom }
 
 class Request {
   final String method;
@@ -1042,15 +1052,48 @@ class Settings {
   final AppTheme theme;
   final HttpMode httpMode;
   final int timeoutSecs;
+  final int maxResponseMb;
+  final bool verifySsl;
+  final bool followRedirects;
+  final bool sendNoCache;
+  final bool confirmDiscard;
+  final Layout layout;
+  final int fontSize;
+  final Indent indent;
+  final ProxyMode proxy;
+  final String proxyUrl;
 
   const Settings({
     required this.theme,
     required this.httpMode,
     required this.timeoutSecs,
+    required this.maxResponseMb,
+    required this.verifySsl,
+    required this.followRedirects,
+    required this.sendNoCache,
+    required this.confirmDiscard,
+    required this.layout,
+    required this.fontSize,
+    required this.indent,
+    required this.proxy,
+    required this.proxyUrl,
   });
 
   @override
-  int get hashCode => theme.hashCode ^ httpMode.hashCode ^ timeoutSecs.hashCode;
+  int get hashCode =>
+      theme.hashCode ^
+      httpMode.hashCode ^
+      timeoutSecs.hashCode ^
+      maxResponseMb.hashCode ^
+      verifySsl.hashCode ^
+      followRedirects.hashCode ^
+      sendNoCache.hashCode ^
+      confirmDiscard.hashCode ^
+      layout.hashCode ^
+      fontSize.hashCode ^
+      indent.hashCode ^
+      proxy.hashCode ^
+      proxyUrl.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1059,7 +1102,17 @@ class Settings {
           runtimeType == other.runtimeType &&
           theme == other.theme &&
           httpMode == other.httpMode &&
-          timeoutSecs == other.timeoutSecs;
+          timeoutSecs == other.timeoutSecs &&
+          maxResponseMb == other.maxResponseMb &&
+          verifySsl == other.verifySsl &&
+          followRedirects == other.followRedirects &&
+          sendNoCache == other.sendNoCache &&
+          confirmDiscard == other.confirmDiscard &&
+          layout == other.layout &&
+          fontSize == other.fontSize &&
+          indent == other.indent &&
+          proxy == other.proxy &&
+          proxyUrl == other.proxyUrl;
 }
 
 class TestResult {

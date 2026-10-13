@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -2004784324;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 792096177;
 
 // Section: executor
 
@@ -163,6 +163,35 @@ fn wire__crate__api__core__default_request_settings_impl(
             deserializer.end();
             transform_result_sse::<_, ()>((move || {
                 let output_ok = Ok::<_, ()>(crate::api::core::default_request_settings())?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__core__default_settings_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "default_settings",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Ok::<_, ()>(crate::api::core::default_settings())?;
                 std::result::Result::Ok(output_ok)
             })())
         },
@@ -1109,6 +1138,16 @@ const _: fn() = || {
         let _: crate::api::core::AppTheme = Settings.theme;
         let _: crate::api::core::HttpMode = Settings.http_mode;
         let _: u32 = Settings.timeout_secs;
+        let _: u32 = Settings.max_response_mb;
+        let _: bool = Settings.verify_ssl;
+        let _: bool = Settings.follow_redirects;
+        let _: bool = Settings.send_no_cache;
+        let _: bool = Settings.confirm_discard;
+        let _: crate::api::core::Layout = Settings.layout;
+        let _: u32 = Settings.font_size;
+        let _: crate::api::core::Indent = Settings.indent;
+        let _: crate::api::core::ProxyMode = Settings.proxy;
+        let _: String = Settings.proxy_url;
     }
     {
         let TestResult = None::<crate::api::core::TestResult>.unwrap();
@@ -1643,6 +1682,19 @@ impl SseDecode for crate::api::core::ImportResult {
     }
 }
 
+impl SseDecode for crate::api::core::Indent {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::core::Indent::TwoSpaces,
+            1 => crate::api::core::Indent::FourSpaces,
+            2 => crate::api::core::Indent::Tab,
+            _ => unreachable!("Invalid variant for Indent: {}", inner),
+        };
+    }
+}
+
 impl SseDecode for crate::api::core::Item {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1653,6 +1705,19 @@ impl SseDecode for crate::api::core::Item {
             name: var_name,
             request: var_request,
             items: var_items,
+        };
+    }
+}
+
+impl SseDecode for crate::api::core::Layout {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::core::Layout::Auto,
+            1 => crate::api::core::Layout::SideBySide,
+            2 => crate::api::core::Layout::Stacked,
+            _ => unreachable!("Invalid variant for Layout: {}", inner),
         };
     }
 }
@@ -1998,6 +2063,19 @@ impl SseDecode for Option<Vec<u8>> {
     }
 }
 
+impl SseDecode for crate::api::core::ProxyMode {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::core::ProxyMode::System,
+            1 => crate::api::core::ProxyMode::None,
+            2 => crate::api::core::ProxyMode::Custom,
+            _ => unreachable!("Invalid variant for ProxyMode: {}", inner),
+        };
+    }
+}
+
 impl SseDecode for crate::api::core::Request {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2113,10 +2191,30 @@ impl SseDecode for crate::api::core::Settings {
         let mut var_theme = <crate::api::core::AppTheme>::sse_decode(deserializer);
         let mut var_httpMode = <crate::api::core::HttpMode>::sse_decode(deserializer);
         let mut var_timeoutSecs = <u32>::sse_decode(deserializer);
+        let mut var_maxResponseMb = <u32>::sse_decode(deserializer);
+        let mut var_verifySsl = <bool>::sse_decode(deserializer);
+        let mut var_followRedirects = <bool>::sse_decode(deserializer);
+        let mut var_sendNoCache = <bool>::sse_decode(deserializer);
+        let mut var_confirmDiscard = <bool>::sse_decode(deserializer);
+        let mut var_layout = <crate::api::core::Layout>::sse_decode(deserializer);
+        let mut var_fontSize = <u32>::sse_decode(deserializer);
+        let mut var_indent = <crate::api::core::Indent>::sse_decode(deserializer);
+        let mut var_proxy = <crate::api::core::ProxyMode>::sse_decode(deserializer);
+        let mut var_proxyUrl = <String>::sse_decode(deserializer);
         return crate::api::core::Settings {
             theme: var_theme,
             http_mode: var_httpMode,
             timeout_secs: var_timeoutSecs,
+            max_response_mb: var_maxResponseMb,
+            verify_ssl: var_verifySsl,
+            follow_redirects: var_followRedirects,
+            send_no_cache: var_sendNoCache,
+            confirm_discard: var_confirmDiscard,
+            layout: var_layout,
+            font_size: var_fontSize,
+            indent: var_indent,
+            proxy: var_proxy,
+            proxy_url: var_proxyUrl,
         };
     }
 }
@@ -2249,19 +2347,19 @@ fn pde_ffi_dispatcher_primary_impl(
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
         1 => wire__crate__api__core__analyze_har_impl(port, ptr, rust_vec_len, data_len),
-        5 => wire__crate__api__core__export_collection_impl(port, ptr, rust_vec_len, data_len),
-        6 => wire__crate__api__core__export_environment_impl(port, ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__core__grpc_call_impl(port, ptr, rust_vec_len, data_len),
-        10 => wire__crate__api__core__grpc_load_proto_impl(port, ptr, rust_vec_len, data_len),
-        11 => wire__crate__api__core__grpc_reflect_impl(port, ptr, rust_vec_len, data_len),
-        12 => wire__crate__api__core__import_har_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__core__import_text_impl(port, ptr, rust_vec_len, data_len),
-        14 => wire__crate__api__core__import_url_impl(port, ptr, rust_vec_len, data_len),
-        15 => wire__crate__api__core__init_app_impl(port, ptr, rust_vec_len, data_len),
-        16 => wire__crate__api__core__load_workspace_impl(port, ptr, rust_vec_len, data_len),
-        21 => wire__crate__api__core__save_workspace_impl(port, ptr, rust_vec_len, data_len),
-        22 => wire__crate__api__core__send_request_impl(port, ptr, rust_vec_len, data_len),
-        24 => wire__crate__api__core__ws_open_impl(port, ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__core__export_collection_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__core__export_environment_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__core__grpc_call_impl(port, ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__core__grpc_load_proto_impl(port, ptr, rust_vec_len, data_len),
+        12 => wire__crate__api__core__grpc_reflect_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__core__import_har_impl(port, ptr, rust_vec_len, data_len),
+        14 => wire__crate__api__core__import_text_impl(port, ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__core__import_url_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__core__init_app_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__api__core__load_workspace_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__core__save_workspace_impl(port, ptr, rust_vec_len, data_len),
+        23 => wire__crate__api__core__send_request_impl(port, ptr, rust_vec_len, data_len),
+        25 => wire__crate__api__core__ws_open_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -2277,14 +2375,15 @@ fn pde_ffi_dispatcher_sync_impl(
         2 => wire__crate__api__core__auth_choices_impl(ptr, rust_vec_len, data_len),
         3 => wire__crate__api__core__auth_fields_impl(ptr, rust_vec_len, data_len),
         4 => wire__crate__api__core__default_request_settings_impl(ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__core__export_extension_impl(ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__core__export_har_impl(ptr, rust_vec_len, data_len),
-        17 => wire__crate__api__core__redact_collection_impl(ptr, rust_vec_len, data_len),
-        18 => wire__crate__api__core__redact_environment_impl(ptr, rust_vec_len, data_len),
-        19 => wire__crate__api__core__redact_exchanges_impl(ptr, rust_vec_len, data_len),
-        20 => wire__crate__api__core__redact_text_impl(ptr, rust_vec_len, data_len),
-        23 => wire__crate__api__core__ws_close_impl(ptr, rust_vec_len, data_len),
-        25 => wire__crate__api__core__ws_send_impl(ptr, rust_vec_len, data_len),
+        5 => wire__crate__api__core__default_settings_impl(ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__core__export_extension_impl(ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__core__export_har_impl(ptr, rust_vec_len, data_len),
+        18 => wire__crate__api__core__redact_collection_impl(ptr, rust_vec_len, data_len),
+        19 => wire__crate__api__core__redact_environment_impl(ptr, rust_vec_len, data_len),
+        20 => wire__crate__api__core__redact_exchanges_impl(ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__core__redact_text_impl(ptr, rust_vec_len, data_len),
+        24 => wire__crate__api__core__ws_close_impl(ptr, rust_vec_len, data_len),
+        26 => wire__crate__api__core__ws_send_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -2930,6 +3029,28 @@ impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::core::ImportResult
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::Indent> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self.0 {
+            crate::api::core::Indent::TwoSpaces => 0.into_dart(),
+            crate::api::core::Indent::FourSpaces => 1.into_dart(),
+            crate::api::core::Indent::Tab => 2.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for FrbWrapper<crate::api::core::Indent>
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::core::Indent>>
+    for crate::api::core::Indent
+{
+    fn into_into_dart(self) -> FrbWrapper<crate::api::core::Indent> {
+        self.into()
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::Item> {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -2948,6 +3069,50 @@ impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::core::Item>>
     for crate::api::core::Item
 {
     fn into_into_dart(self) -> FrbWrapper<crate::api::core::Item> {
+        self.into()
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::Layout> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self.0 {
+            crate::api::core::Layout::Auto => 0.into_dart(),
+            crate::api::core::Layout::SideBySide => 1.into_dart(),
+            crate::api::core::Layout::Stacked => 2.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for FrbWrapper<crate::api::core::Layout>
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::core::Layout>>
+    for crate::api::core::Layout
+{
+    fn into_into_dart(self) -> FrbWrapper<crate::api::core::Layout> {
+        self.into()
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::ProxyMode> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self.0 {
+            crate::api::core::ProxyMode::System => 0.into_dart(),
+            crate::api::core::ProxyMode::None => 1.into_dart(),
+            crate::api::core::ProxyMode::Custom => 2.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for FrbWrapper<crate::api::core::ProxyMode>
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::core::ProxyMode>>
+    for crate::api::core::ProxyMode
+{
+    fn into_into_dart(self) -> FrbWrapper<crate::api::core::ProxyMode> {
         self.into()
     }
 }
@@ -3072,6 +3237,16 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::Settings> {
             self.0.theme.into_into_dart().into_dart(),
             self.0.http_mode.into_into_dart().into_dart(),
             self.0.timeout_secs.into_into_dart().into_dart(),
+            self.0.max_response_mb.into_into_dart().into_dart(),
+            self.0.verify_ssl.into_into_dart().into_dart(),
+            self.0.follow_redirects.into_into_dart().into_dart(),
+            self.0.send_no_cache.into_into_dart().into_dart(),
+            self.0.confirm_discard.into_into_dart().into_dart(),
+            self.0.layout.into_into_dart().into_dart(),
+            self.0.font_size.into_into_dart().into_dart(),
+            self.0.indent.into_into_dart().into_dart(),
+            self.0.proxy.into_into_dart().into_dart(),
+            self.0.proxy_url.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -3598,12 +3773,46 @@ impl SseEncode for crate::api::core::ImportResult {
     }
 }
 
+impl SseEncode for crate::api::core::Indent {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::core::Indent::TwoSpaces => 0,
+                crate::api::core::Indent::FourSpaces => 1,
+                crate::api::core::Indent::Tab => 2,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
 impl SseEncode for crate::api::core::Item {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.name, serializer);
         <Option<crate::api::core::Request>>::sse_encode(self.request, serializer);
         <Vec<crate::api::core::Item>>::sse_encode(self.items, serializer);
+    }
+}
+
+impl SseEncode for crate::api::core::Layout {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::core::Layout::Auto => 0,
+                crate::api::core::Layout::SideBySide => 1,
+                crate::api::core::Layout::Stacked => 2,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
     }
 }
 
@@ -3897,6 +4106,23 @@ impl SseEncode for Option<Vec<u8>> {
     }
 }
 
+impl SseEncode for crate::api::core::ProxyMode {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::core::ProxyMode::System => 0,
+                crate::api::core::ProxyMode::None => 1,
+                crate::api::core::ProxyMode::Custom => 2,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
 impl SseEncode for crate::api::core::Request {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3965,6 +4191,16 @@ impl SseEncode for crate::api::core::Settings {
         <crate::api::core::AppTheme>::sse_encode(self.theme, serializer);
         <crate::api::core::HttpMode>::sse_encode(self.http_mode, serializer);
         <u32>::sse_encode(self.timeout_secs, serializer);
+        <u32>::sse_encode(self.max_response_mb, serializer);
+        <bool>::sse_encode(self.verify_ssl, serializer);
+        <bool>::sse_encode(self.follow_redirects, serializer);
+        <bool>::sse_encode(self.send_no_cache, serializer);
+        <bool>::sse_encode(self.confirm_discard, serializer);
+        <crate::api::core::Layout>::sse_encode(self.layout, serializer);
+        <u32>::sse_encode(self.font_size, serializer);
+        <crate::api::core::Indent>::sse_encode(self.indent, serializer);
+        <crate::api::core::ProxyMode>::sse_encode(self.proxy, serializer);
+        <String>::sse_encode(self.proxy_url, serializer);
     }
 }
 

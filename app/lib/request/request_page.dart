@@ -295,7 +295,9 @@ class _RequestPageState extends State<RequestPage> {
   Future<void> _leave(VoidCallback then) async {
     final origin = _origin;
     final name = _name;
-    if (!_dirty || origin == null) return then();
+    if (!_dirty || origin == null || !_store.settings.confirmDiscard) {
+      return then();
+    }
     final save = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -590,9 +592,14 @@ class _RequestPageState extends State<RequestPage> {
       ),
       cookies: CookiesTab(store: _store, currentUrl: () => _url.text),
       settings: RequestSettingsEditor(
-        key: ValueKey(_generation),
+        // Rebuilt when the app's defaults change, as it shows them.
+        key: ValueKey((
+          _generation,
+          _store.settings.verifySsl,
+          _store.settings.followRedirects,
+        )),
         settings: _settings,
-        appHttpMode: _store.settings.httpMode,
+        app: _store.settings,
         onChanged: (settings) {
           _settings = settings;
           _touch();
@@ -747,10 +754,7 @@ class _RequestPageState extends State<RequestPage> {
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) => SplitView(
-              // Side by side when wide, stacked otherwise.
-              axis: constraints.maxWidth >= 900
-                  ? Axis.horizontal
-                  : Axis.vertical,
+              axis: responseAxis(_store.settings.layout, constraints.maxWidth),
               fraction: _split,
               onChanged: (fraction) => setState(() => _split = fraction),
               first: request,

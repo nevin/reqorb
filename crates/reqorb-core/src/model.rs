@@ -319,17 +319,87 @@ pub enum HttpMode {
     Http2,
 }
 
+/// How the request and its response are arranged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Layout {
+    /// Side by side in a wide window, stacked in a narrow one.
+    #[default]
+    Auto,
+    SideBySide,
+    Stacked,
+}
+
+/// What formatted JSON is indented with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Indent {
+    #[default]
+    TwoSpaces,
+    FourSpaces,
+    Tab,
+}
+
+/// Which proxy requests go through.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProxyMode {
+    /// The one the operating system or the environment is set up with.
+    #[default]
+    System,
+    /// Straight to the server, whatever the system says.
+    None,
+    /// The address in the settings' `proxy_url`.
+    Custom,
+}
+
 /// Preferences that apply to the whole app rather than one request.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Settings {
-    #[serde(default)]
     pub theme: AppTheme,
-    #[serde(default)]
     pub http_mode: HttpMode,
     /// Timeout in seconds for requests that do not set their own; 0 leaves
     /// the default, which is to wait as long as the server takes.
-    #[serde(default)]
     pub timeout_secs: u32,
+    /// The largest response to download, in megabytes; 0 means any size.
+    pub max_response_mb: u32,
+    /// Whether requests refuse a server whose certificate cannot be
+    /// verified. A request's own settings take priority, as they do for
+    /// `follow_redirects`.
+    pub verify_ssl: bool,
+    pub follow_redirects: bool,
+    /// Adds `Cache-Control: no-cache` to requests that do not set it.
+    pub send_no_cache: bool,
+    /// Ask before unsaved edits to a request are thrown away.
+    pub confirm_discard: bool,
+    pub layout: Layout,
+    /// Size of the text in editors and responses, in logical pixels.
+    pub font_size: u32,
+    pub indent: Indent,
+    pub proxy: ProxyMode,
+    /// Used when `proxy` is `Custom`, such as `http://127.0.0.1:8080`.
+    pub proxy_url: String,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            theme: AppTheme::default(),
+            http_mode: HttpMode::default(),
+            timeout_secs: 0,
+            max_response_mb: 0,
+            verify_ssl: true,
+            follow_redirects: true,
+            send_no_cache: false,
+            confirm_discard: true,
+            layout: Layout::default(),
+            font_size: 13,
+            indent: Indent::default(),
+            proxy: ProxyMode::default(),
+            proxy_url: String::new(),
+        }
+    }
 }
 
 impl Settings {
@@ -337,16 +407,61 @@ impl Settings {
         SendOptions {
             http_mode: self.http_mode,
             timeout_ms: (self.timeout_secs > 0).then(|| u64::from(self.timeout_secs) * 1000),
+            verify_ssl: self.verify_ssl,
+            follow_redirects: self.follow_redirects,
+            no_cache: self.send_no_cache,
+            max_response_bytes: (self.max_response_mb > 0)
+                .then(|| u64::from(self.max_response_mb) * 1024 * 1024),
+            proxy: match self.proxy {
+                ProxyMode::System => Proxy::System,
+                ProxyMode::None => Proxy::None,
+                // An empty address is no address: fall back to the system's.
+                ProxyMode::Custom if self.proxy_url.trim().is_empty() => Proxy::System,
+                ProxyMode::Custom => Proxy::Custom(self.proxy_url.trim().to_string()),
+            },
         }
     }
 }
 
+/// The proxy a send goes through.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+pub enum Proxy {
+    #[default]
+    System,
+    None,
+    /// A proxy address, such as `http://127.0.0.1:8080`.
+    Custom(String),
+}
+
 /// How requests are sent, beyond what each request says itself.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SendOptions {
     pub http_mode: HttpMode,
     /// Used when the request has no timeout of its own.
     pub timeout_ms: Option<u64>,
+    /// Used, like `follow_redirects`, by requests with no settings of
+    /// their own.
+    pub verify_ssl: bool,
+    pub follow_redirects: bool,
+    /// Adds `Cache-Control: no-cache` to requests that do not set it.
+    pub no_cache: bool,
+    /// Responses larger than this are abandoned.
+    pub max_response_bytes: Option<u64>,
+    pub proxy: Proxy,
+}
+
+impl Default for SendOptions {
+    fn default() -> Self {
+        Self {
+            http_mode: HttpMode::default(),
+            timeout_ms: None,
+            verify_ssl: true,
+            follow_redirects: true,
+            no_cache: false,
+            max_response_bytes: None,
+            proxy: Proxy::default(),
+        }
+    }
 }
 
 /// Everything the app persists between launches.

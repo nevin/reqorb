@@ -36,7 +36,8 @@ pub use http::cookies::{Cookie, cookie_header, store_set_cookie};
 pub use http::{Sent, send, send_opts, send_with};
 pub use model::{
     AppTheme, BodyMode, Collection, DisabledTls, Environment, Exchange, FormField, Header,
-    HttpMode, Item, Request, RequestSettings, Response, SendOptions, Settings, Variable, Workspace,
+    HttpMode, Indent, Item, Layout, Proxy, ProxyMode, Request, RequestSettings, Response,
+    SendOptions, Settings, Variable, Workspace,
 };
 pub use redact::{REDACTED, redact_collection, redact_environment, redact_exchanges, redact_text};
 pub use vars::{Resolved, resolve};

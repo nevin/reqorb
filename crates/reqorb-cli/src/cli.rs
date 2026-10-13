@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::{Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use reqorb_core::{ExportFormat, HttpMode, Request, SendOptions};
+use reqorb_core::{ExportFormat, HttpMode, Proxy, Request, SendOptions};
 
 /// Send HTTP requests, run saved collections, and convert between formats.
 ///
@@ -206,6 +206,18 @@ pub(crate) struct HttpArgs {
     /// Give up after this many redirects
     #[arg(long, value_name = "N")]
     pub(crate) max_redirects: Option<u32>,
+
+    /// Send through this proxy, e.g. http://127.0.0.1:8080
+    #[arg(short = 'x', long, value_name = "URL")]
+    pub(crate) proxy: Option<String>,
+
+    /// Connect directly, ignoring the system's proxy settings
+    #[arg(long, conflicts_with = "proxy")]
+    pub(crate) no_proxy: bool,
+
+    /// Abandon a response larger than this many megabytes (0 for any size)
+    #[arg(long, value_name = "MB")]
+    pub(crate) max_size: Option<u64>,
 }
 
 impl HttpArgs {
@@ -231,9 +243,20 @@ impl HttpArgs {
             "2" | "http2" => HttpMode::Http2,
             other => bail!("unknown HTTP version `{other}`; use auto, 1 or 2"),
         };
+        let proxy = match (&self.proxy, self.no_proxy) {
+            (Some(address), _) => Proxy::Custom(address.clone()),
+            (None, true) => Proxy::None,
+            (None, false) => Proxy::System,
+        };
         Ok(SendOptions {
             http_mode,
-            timeout_ms: None,
+            proxy,
+            // As in the app, 0 means any size.
+            max_response_bytes: self
+                .max_size
+                .filter(|mb| *mb > 0)
+                .map(|mb| mb * 1024 * 1024),
+            ..SendOptions::default()
         })
     }
 }

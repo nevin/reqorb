@@ -8,6 +8,8 @@ import 'package:reqorb/src/rust/api/core.dart';
 import 'package:reqorb/request/tests_editor.dart';
 import 'package:reqorb/workspace/workspace_store.dart';
 
+import 'fake_engine.dart';
+
 void main() {
   test('reads key and value lines', () {
     expect(parseKeyValueLine('Accept: application/json'), (
@@ -59,7 +61,7 @@ void main() {
   });
 
   test('captured variables win and the newest replaces the oldest', () {
-    final store = WorkspaceStore('unused.json');
+    final store = WorkspaceStore('unused.json', engine: FakeEngine());
     var changes = 0;
     store.addListener(() => changes++);
     Variable variable(String key, String value) =>

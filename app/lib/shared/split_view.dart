@@ -2,6 +2,16 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:reqorb/src/rust/api/core.dart';
+
+/// Where the response goes for a [layout] setting in a pane [width] wide:
+/// beside the request ([Axis.horizontal]) or below it.
+Axis responseAxis(Layout layout, double width) => switch (layout) {
+  Layout.sideBySide => Axis.horizontal,
+  Layout.stacked => Axis.vertical,
+  // Side by side when there is room, stacked otherwise.
+  Layout.auto => width >= 900 ? Axis.horizontal : Axis.vertical,
+};
 
 /// Two panes with a divider between them that can be dragged to resize.
 class SplitView extends StatelessWidget {

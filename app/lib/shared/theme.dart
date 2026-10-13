@@ -1,12 +1,27 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+/// How code is shown, as chosen in Settings. Set once per build of the app,
+/// before anything that shows code is built.
+abstract final class CodeStyle {
+  /// Size of [mono] in logical pixels.
+  static double fontSize = 13;
+
+  /// What formatted JSON is indented with.
+  static String indent = '  ';
+}
+
 /// Text style for anything the user reads as code: URLs, headers, bodies.
 /// The fallbacks cover platforms that do not ship Menlo.
-const mono = TextStyle(
+TextStyle get mono => TextStyle(
   fontFamily: 'Menlo',
-  fontFamilyFallback: ['SF Mono', 'Consolas', 'DejaVu Sans Mono', 'monospace'],
-  fontSize: 13,
+  fontFamilyFallback: const [
+    'SF Mono',
+    'Consolas',
+    'DejaVu Sans Mono',
+    'monospace',
+  ],
+  fontSize: CodeStyle.fontSize,
   height: 1.4,
 );
 

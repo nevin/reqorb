@@ -21,6 +21,8 @@ pub(crate) struct Transport {
     jar: Option<Arc<Jar>>,
     /// Each exchange made through this transport, for the session log.
     log: Mutex<Vec<Exchange>>,
+    /// Responses larger than this are abandoned.
+    max_response_bytes: Option<u64>,
 }
 
 impl Transport {
@@ -28,12 +30,14 @@ impl Transport {
         client: reqwest::Client,
         settings: RequestSettings,
         jar: Option<Arc<Jar>>,
+        max_response_bytes: Option<u64>,
     ) -> Self {
         Self {
             client,
             settings,
             jar,
             log: Mutex::default(),
+            max_response_bytes,
         }
     }
 
@@ -242,7 +246,7 @@ async fn execute_once(
     }
 
     let started = Instant::now();
-    let resp = transport.client.execute(built).await?;
+    let mut resp = transport.client.execute(built).await?;
 
     let status = resp.status();
     let version = resp.version();
@@ -278,7 +282,28 @@ async fn execute_once(
         );
     }
 
-    let bytes = resp.bytes().await?;
+    // Read in pieces, so that a response over the limit is abandoned
+    // instead of being downloaded in full first.
+    let too_large = |limit: u64| {
+        Error::Http(format!(
+            "the response is larger than the limit of {} MB set in Settings",
+            limit.div_ceil(1024 * 1024)
+        ))
+    };
+    let mut bytes = Vec::new();
+    if let Some(limit) = transport.max_response_bytes {
+        if resp.content_length().is_some_and(|length| length > limit) {
+            return Err(too_large(limit));
+        }
+        while let Some(chunk) = resp.chunk().await? {
+            bytes.extend_from_slice(&chunk);
+            if bytes.len() as u64 > limit {
+                return Err(too_large(limit));
+            }
+        }
+    } else {
+        bytes = resp.bytes().await?.to_vec();
+    }
     let elapsed_ms = started.elapsed().as_millis() as u64;
     let content_type = headers
         .iter()
@@ -289,7 +314,7 @@ async fn execute_once(
     let (body, raw) = match std::str::from_utf8(&bytes) {
         Ok(text) => (text.to_string(), None),
         Err(_) if is_text(content_type) => (String::from_utf8_lossy(&bytes).into_owned(), None),
-        Err(_) => (String::new(), Some(bytes.to_vec())),
+        Err(_) => (String::new(), Some(bytes.clone())),
     };
 
     Ok((

@@ -18,7 +18,9 @@ pub(crate) use exchange::{Transport, execute};
 use crate::auth::{self, AuthKind};
 use crate::checks::{TestResult, capture, run_tests};
 use crate::vars::resolve;
-use crate::{Cookie, Error, Exchange, HttpMode, Request, Response, SendOptions, Variable};
+use crate::{
+    Cookie, Error, Exchange, HttpMode, Request, RequestSettings, Response, SendOptions, Variable,
+};
 
 /// A response plus the variables that were referenced but not defined.
 #[derive(Debug, Clone)]
@@ -98,15 +100,28 @@ pub(super) async fn send_logged(
     cookies: &mut Vec<Cookie>,
 ) -> Result<(Response, Vec<Exchange>), Error> {
     let auth = request.auth.take().unwrap_or_default();
-    let settings = request.settings.take().unwrap_or_default();
+    // A request with no settings of its own follows the app's.
+    let settings = request.settings.take().unwrap_or_else(|| RequestSettings {
+        verify_ssl: options.verify_ssl,
+        follow_redirects: options.follow_redirects,
+        ..RequestSettings::default()
+    });
     request.timeout_ms = request.timeout_ms.or(options.timeout_ms);
+    if options.no_cache && !request.has_header("cache-control") {
+        request.add_header("Cache-Control", "no-cache");
+    }
     request.materialize();
     let http_mode = settings.http_mode.unwrap_or(options.http_mode);
     let use_jar = !settings.disable_cookie_jar;
 
     let jar = use_jar.then(|| Arc::new(cookies::Jar::new(cookies)));
-    let client = client_for(&settings, http_mode, auth.kind == AuthKind::Ntlm)?;
-    let transport = Transport::new(client, settings, jar.clone());
+    let client = client_for(
+        &settings,
+        http_mode,
+        &options.proxy,
+        auth.kind == AuthKind::Ntlm,
+    )?;
+    let transport = Transport::new(client, settings, jar.clone(), options.max_response_bytes);
 
     let started = Instant::now();
     let result = if auth::sign(&mut request, &auth, &auth::Clock::now())? {

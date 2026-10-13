@@ -655,7 +655,7 @@ bool _isJson(Response response) => response.headers.any(
 String? _asJson(String body) {
   if (body.trim().isEmpty) return null;
   try {
-    return const JsonEncoder.withIndent('  ').convert(jsonDecode(body));
+    return JsonEncoder.withIndent(CodeStyle.indent).convert(jsonDecode(body));
   } catch (_) {
     return null;
   }
@@ -665,7 +665,7 @@ String? _asJson(String body) {
 String _prettyBody(Response response) {
   if (!_isJson(response)) return response.body;
   try {
-    return const JsonEncoder.withIndent('  ')
+    return JsonEncoder.withIndent(CodeStyle.indent)
         .convert(jsonDecode(response.body));
   } catch (_) {
     return response.body;

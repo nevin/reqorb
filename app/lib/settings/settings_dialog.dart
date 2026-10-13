@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
+import 'package:reqorb/shared/theme.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 import 'package:reqorb/workspace/workspace_store.dart';
 
-/// App-wide preferences, in a Themes section and a General section.
-/// Changes apply and are saved as they are made.
+/// Shown on the About tab. Kept in step with `pubspec.yaml`.
+const appVersion = '0.1.0';
+
+/// App-wide preferences. Changes apply and are saved as they are made.
 class SettingsDialog extends StatefulWidget {
   const SettingsDialog({super.key, required this.store});
 
@@ -23,36 +25,36 @@ class SettingsDialog extends StatefulWidget {
 }
 
 class _SettingsDialogState extends State<SettingsDialog> {
-  late final _timeout = TextEditingController(
-    text: widget.store.settings.timeoutSecs.toString(),
-  );
-
   WorkspaceStore get _store => widget.store;
+  Settings get _settings => _store.settings;
+
+  // Number and text fields keep their own text, so that typing is not
+  // disturbed by the setting being saved on every keystroke.
+  late final _timeout = TextEditingController(text: '${_settings.timeoutSecs}');
+  late final _maxSize = TextEditingController(
+    text: '${_settings.maxResponseMb}',
+  );
+  late final _fontSize = TextEditingController(text: '${_settings.fontSize}');
+  late final _proxyUrl = TextEditingController(text: _settings.proxyUrl);
 
   @override
   void dispose() {
-    _timeout.dispose();
+    for (final controller in [_timeout, _maxSize, _fontSize, _proxyUrl]) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
-  void _update({AppTheme? theme, HttpMode? httpMode, int? timeoutSecs}) {
-    final current = _store.settings;
-    _store.updateSettings(
-      Settings(
-        theme: theme ?? current.theme,
-        httpMode: httpMode ?? current.httpMode,
-        timeoutSecs: timeoutSecs ?? current.timeoutSecs,
-      ),
-    );
-  }
+  void _update(Settings Function(Settings current) change) =>
+      _store.updateSettings(change(_settings));
 
   @override
   Widget build(BuildContext context) {
     return Dialog(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520, maxHeight: 420),
+        constraints: const BoxConstraints(maxWidth: 860, maxHeight: 720),
         child: DefaultTabController(
-          length: 2,
+          length: 5,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -76,17 +78,29 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 ),
               ),
               const TabBar(
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
                 tabs: [
-                  Tab(key: Key('settings-themes'), text: 'Themes'),
                   Tab(key: Key('settings-general'), text: 'General'),
+                  Tab(key: Key('settings-themes'), text: 'Themes'),
+                  Tab(key: Key('settings-proxy'), text: 'Proxy'),
+                  Tab(key: Key('settings-shortcuts'), text: 'Shortcuts'),
+                  Tab(key: Key('settings-about'), text: 'About'),
                 ],
               ),
               Expanded(
                 // Rebuilt on every change so the selections stay current.
                 child: ListenableBuilder(
                   listenable: _store,
-                  builder: (context, _) =>
-                      TabBarView(children: [_themes(), _general(context)]),
+                  builder: (context, _) => TabBarView(
+                    children: [
+                      _general(context),
+                      _themes(),
+                      _proxy(context),
+                      _shortcuts(context),
+                      _about(context),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -95,6 +109,221 @@ class _SettingsDialogState extends State<SettingsDialog> {
       ),
     );
   }
+
+  // ---------------------------------------------------------------- general
+
+  Widget _general(BuildContext context) {
+    final s = _settings;
+    final request = _Section('Request', [
+      _Row(
+        label: 'HTTP version',
+        help: switch (s.httpMode) {
+          HttpMode.auto => 'Uses HTTP/2 when the server offers it.',
+          HttpMode.http1 => 'Every request uses HTTP/1.1.',
+          HttpMode.http2 =>
+            'Every request uses HTTP/2, and fails if the server only '
+                'supports HTTP/1.1.',
+        },
+        control: DropdownButton<HttpMode>(
+          key: const Key('settings-http'),
+          value: s.httpMode,
+          isDense: true,
+          items: const [
+            DropdownMenuItem(value: HttpMode.auto, child: Text('Auto')),
+            DropdownMenuItem(value: HttpMode.http1, child: Text('HTTP/1')),
+            DropdownMenuItem(value: HttpMode.http2, child: Text('HTTP/2')),
+          ],
+          onChanged: (mode) => _update((c) => c.copyWith(httpMode: mode)),
+        ),
+      ),
+      _Row(
+        label: 'Request timeout in seconds',
+        help: s.timeoutSecs == 0
+            ? 'How long to wait for a response. 0 waits as long as the '
+                  'server takes.'
+            : 'Requests are abandoned after ${s.timeoutSecs} seconds.',
+        control: _number(
+          const Key('settings-timeout'),
+          _timeout,
+          (value) => _update((c) => c.copyWith(timeoutSecs: value)),
+        ),
+      ),
+      _Row(
+        label: 'Max response size in MB',
+        help: s.maxResponseMb == 0
+            ? 'The largest response to download. 0 downloads a response of '
+                  'any size.'
+            : 'A response over ${s.maxResponseMb} MB is abandoned.',
+        control: _number(
+          const Key('settings-max-size'),
+          _maxSize,
+          (value) => _update((c) => c.copyWith(maxResponseMb: value)),
+        ),
+      ),
+      _Row(
+        label: 'SSL certificate verification',
+        help: 'Refuse a server whose certificate cannot be verified.',
+        control: _switch(
+          const Key('settings-verify-ssl'),
+          s.verifySsl,
+          (on) => _update((c) => c.copyWith(verifySsl: on)),
+        ),
+      ),
+      _Row(
+        label: 'Always ask before discarding unsaved changes',
+        help: 'When off, opening another request drops the edits to this one.',
+        control: _switch(
+          const Key('settings-confirm-discard'),
+          s.confirmDiscard,
+          (on) => _update((c) => c.copyWith(confirmDiscard: on)),
+        ),
+      ),
+    ]);
+    final headers = _Section('Headers', [
+      _Row(
+        label: 'Send no-cache header',
+        help: 'Adds Cache-Control: no-cache to requests that do not set it.',
+        control: _switch(
+          const Key('settings-no-cache'),
+          s.sendNoCache,
+          (on) => _update((c) => c.copyWith(sendNoCache: on)),
+        ),
+      ),
+      _Row(
+        label: 'Automatically follow redirects',
+        help: 'When off, a redirect is shown as the response.',
+        control: _switch(
+          const Key('settings-follow-redirects'),
+          s.followRedirects,
+          (on) => _update((c) => c.copyWith(followRedirects: on)),
+        ),
+      ),
+    ]);
+    final interface = _Section('User interface', [
+      _Row(
+        label: 'Layout',
+        help: switch (s.layout) {
+          Layout.auto =>
+            'The response is beside the request in a wide window and '
+                'below it in a narrow one.',
+          Layout.sideBySide => 'The response is always beside the request.',
+          Layout.stacked => 'The response is always below the request.',
+        },
+        control: DropdownButton<Layout>(
+          key: const Key('settings-layout'),
+          value: s.layout,
+          isDense: true,
+          items: const [
+            DropdownMenuItem(value: Layout.auto, child: Text('Auto')),
+            DropdownMenuItem(
+              value: Layout.sideBySide,
+              child: Text('Side by side'),
+            ),
+            DropdownMenuItem(value: Layout.stacked, child: Text('Stacked')),
+          ],
+          onChanged: (layout) => _update((c) => c.copyWith(layout: layout)),
+        ),
+      ),
+    ]);
+    final editor = _Section(
+      'Editor',
+      [
+        _Row(
+          label: 'Font size (px)',
+          help: 'For URLs, headers, bodies and responses. From 9 to 28.',
+          control: _number(
+            const Key('settings-font-size'),
+            _fontSize,
+            // Kept in range as it is typed, so a stray digit cannot make
+            // the app unreadable.
+            (value) => _update((c) => c.copyWith(fontSize: value.clamp(9, 28))),
+            digits: 2,
+          ),
+        ),
+        _Row(
+          label: 'Indentation',
+          help: 'What formatted JSON is indented with.',
+          control: DropdownButton<Indent>(
+            key: const Key('settings-indent'),
+            value: s.indent,
+            isDense: true,
+            items: const [
+              DropdownMenuItem(
+                value: Indent.twoSpaces,
+                child: Text('2 spaces'),
+              ),
+              DropdownMenuItem(
+                value: Indent.fourSpaces,
+                child: Text('4 spaces'),
+              ),
+              DropdownMenuItem(value: Indent.tab, child: Text('Tab')),
+            ],
+            onChanged: (indent) => _update((c) => c.copyWith(indent: indent)),
+          ),
+        ),
+      ],
+      action: TextButton(
+        key: const Key('settings-editor-reset'),
+        onPressed: () {
+          _fontSize.text = '13';
+          _update((c) => c.copyWith(fontSize: 13, indent: Indent.twoSpaces));
+        },
+        child: const Text('Reset'),
+      ),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Two columns when there is room, as there is on a desktop.
+        final wide = constraints.maxWidth >= 720;
+        final left = [request];
+        final right = [headers, interface, editor];
+        return SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+          child: wide
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: Column(children: left)),
+                    const SizedBox(width: 40),
+                    Expanded(child: Column(children: right)),
+                  ],
+                )
+              : Column(children: [...left, ...right]),
+        );
+      },
+    );
+  }
+
+  Widget _switch(Key key, bool value, ValueChanged<bool> onChanged) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Switch(key: key, value: value, onChanged: onChanged),
+      SizedBox(width: 32, child: Text(value ? 'ON' : 'OFF')),
+    ],
+  );
+
+  Widget _number(
+    Key key,
+    TextEditingController controller,
+    ValueChanged<int> onChanged, {
+    int digits = 5,
+  }) => SizedBox(
+    width: 84,
+    child: TextField(
+      key: key,
+      controller: controller,
+      keyboardType: TextInputType.number,
+      textAlign: TextAlign.end,
+      inputFormatters: [
+        FilteringTextInputFormatter.digitsOnly,
+        LengthLimitingTextInputFormatter(digits),
+      ],
+      onChanged: (text) => onChanged(int.tryParse(text) ?? 0),
+    ),
+  );
+
+  // ----------------------------------------------------------------- themes
 
   Widget _themes() {
     return SingleChildScrollView(
@@ -123,8 +352,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 label: Text('Light'),
               ),
             ],
-            selected: {_store.settings.theme},
-            onSelectionChanged: (choice) => _update(theme: choice.single),
+            selected: {_settings.theme},
+            onSelectionChanged: (choice) =>
+                _update((c) => c.copyWith(theme: choice.single)),
           ),
           const SizedBox(height: 12),
           const Text('System follows the light or dark mode of this device.'),
@@ -133,60 +363,233 @@ class _SettingsDialogState extends State<SettingsDialog> {
     );
   }
 
-  Widget _general(BuildContext context) {
+  // ------------------------------------------------------------------ proxy
+
+  Widget _proxy(BuildContext context) {
+    final s = _settings;
+    final scheme = Theme.of(context).colorScheme;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('HTTP version'),
+          const Text('HTTP requests are sent'),
           const SizedBox(height: 12),
-          SegmentedButton<HttpMode>(
-            key: const Key('settings-http'),
+          SegmentedButton<ProxyMode>(
+            key: const Key('settings-proxy-mode'),
             showSelectedIcon: false,
             segments: const [
-              ButtonSegment(value: HttpMode.auto, label: Text('Auto')),
-              ButtonSegment(value: HttpMode.http1, label: Text('HTTP/1')),
-              ButtonSegment(value: HttpMode.http2, label: Text('HTTP/2')),
+              ButtonSegment(
+                value: ProxyMode.system,
+                label: Text('Through the system proxy'),
+              ),
+              ButtonSegment(value: ProxyMode.none, label: Text('Directly')),
+              ButtonSegment(
+                value: ProxyMode.custom,
+                label: Text('Through this proxy'),
+              ),
             ],
-            selected: {_store.settings.httpMode},
-            onSelectionChanged: (choice) => _update(httpMode: choice.single),
+            selected: {s.proxy},
+            onSelectionChanged: (choice) =>
+                _update((c) => c.copyWith(proxy: choice.single)),
           ),
-          const SizedBox(height: 8),
-          Text(switch (_store.settings.httpMode) {
-            HttpMode.auto => 'Uses HTTP/2 when the server offers it.',
-            HttpMode.http1 => 'Every request uses HTTP/1.1.',
-            HttpMode.http2 =>
-              'Every request uses HTTP/2, and fails if the server '
-                  'only supports HTTP/1.1.',
-          }),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           SizedBox(
-            width: 260,
+            width: 420,
             child: TextField(
-              key: const Key('settings-timeout'),
-              controller: _timeout,
-              keyboardType: TextInputType.number,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(5),
-              ],
+              key: const Key('settings-proxy-url'),
+              controller: _proxyUrl,
+              enabled: s.proxy == ProxyMode.custom,
+              autocorrect: false,
+              keyboardType: TextInputType.url,
+              style: mono,
               decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                labelText: 'Request timeout',
-                suffixText: 'seconds',
+                labelText: 'Proxy address',
+                hintText: 'http://127.0.0.1:8080',
               ),
               onChanged: (text) =>
-                  _update(timeoutSecs: int.tryParse(text) ?? 0),
+                  _update((c) => c.copyWith(proxyUrl: text.trim())),
             ),
           ),
+          const SizedBox(height: 12),
+          Text(switch (s.proxy) {
+            ProxyMode.system =>
+              'Uses the proxy this device or the HTTP_PROXY and '
+                  'HTTPS_PROXY environment variables are set up with, if '
+                  'any.',
+            ProxyMode.none =>
+              'Connects straight to each server, whatever the system '
+                  'says.',
+            ProxyMode.custom when s.proxyUrl.isEmpty =>
+              'Enter an address; until then the system proxy is used.',
+            ProxyMode.custom =>
+              'An http://, https:// or socks5:// address. A user and '
+                  'password can go in it: http://user:pass@host:8080.',
+          }, style: TextStyle(color: scheme.onSurfaceVariant)),
           const SizedBox(height: 8),
           Text(
-            _store.settings.timeoutSecs == 0
-                ? '0 uses the default: wait as long as the server takes.'
-                : 'Requests are abandoned after '
-                      '${_store.settings.timeoutSecs} seconds.',
+            'WebSocket and gRPC connections do not use a proxy.',
+            style: TextStyle(color: scheme.onSurfaceVariant),
           ),
+        ],
+      ),
+    );
+  }
+
+  // -------------------------------------------------------------- shortcuts
+
+  Widget _shortcuts(BuildContext context) {
+    final theme = Theme.of(context);
+    final key = shortcutModifier;
+    final enter = key == '⌘' ? '↵' : 'Enter';
+    const actions = [
+      ('Send, connect or call', 'enter'),
+      ('Save the request', 'S'),
+      ('New request', 'N'),
+      ('Go to the address', 'L'),
+      ('Show or hide the sidebar', 'B'),
+    ];
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final (action, letter) in actions)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  SizedBox(width: 280, child: Text(action)),
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: theme.colorScheme.outlineVariant,
+                      ),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      child: Text(
+                        '$key${letter == 'enter' ? enter : letter}',
+                        style: mono.copyWith(fontSize: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 4),
+          Text(
+            'Double-click a request\'s name to rename it. Escape leaves it '
+            'as it was.',
+            style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ------------------------------------------------------------------ about
+
+  Widget _about(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = TextStyle(color: theme.colorScheme.onSurfaceVariant);
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('reqorb', style: theme.textTheme.headlineSmall),
+          const SizedBox(height: 4),
+          Text('Version $appVersion', key: const Key('settings-version')),
+          const SizedBox(height: 16),
+          const Text(
+            'A native API client for HTTP, WebSocket and gRPC, built on a '
+            'Rust engine.',
+          ),
+          const SizedBox(height: 16),
+          Text('Your workspace is kept in', style: muted),
+          const SizedBox(height: 4),
+          SelectableText(_store.path, style: mono.copyWith(fontSize: 12)),
+          const SizedBox(height: 16),
+          Text(
+            'reqorb sends nothing about how it is used. MIT licensed.',
+            style: muted,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A titled group of settings.
+class _Section extends StatelessWidget {
+  const _Section(this.title, this.rows, {this.action});
+
+  final String title;
+  final List<Widget> rows;
+
+  /// Sits beside the title, such as a Reset button.
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(title, style: Theme.of(context).textTheme.titleSmall),
+              if (action != null) ...[const SizedBox(width: 4), action!],
+            ],
+          ),
+          const SizedBox(height: 4),
+          ...rows,
+        ],
+      ),
+    );
+  }
+}
+
+/// One setting: what it is and what it does on the left, its control on the
+/// right.
+class _Row extends StatelessWidget {
+  const _Row({required this.label, required this.help, required this.control});
+
+  final String label;
+  final String help;
+  final Widget control;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label),
+                const SizedBox(height: 2),
+                Text(
+                  help,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          control,
         ],
       ),
     );

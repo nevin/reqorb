@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:reqorb/bridge/engine.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 
 /// The request's Settings tab: how this one request is carried out.
@@ -9,14 +10,14 @@ class RequestSettingsEditor extends StatefulWidget {
   const RequestSettingsEditor({
     super.key,
     required this.settings,
-    required this.appHttpMode,
+    required this.app,
     required this.onChanged,
   });
 
   final RequestSettings? settings;
 
-  /// The app-wide HTTP version, shown as what "Default" currently means.
-  final HttpMode appHttpMode;
+  /// The app-wide settings, which a request follows until it says otherwise.
+  final Settings app;
 
   /// Called with null when every option is back at its default.
   final ValueChanged<RequestSettings?> onChanged;
@@ -32,7 +33,22 @@ String _httpLabel(HttpMode mode) => switch (mode) {
 };
 
 class _RequestSettingsEditorState extends State<RequestSettingsEditor> {
-  static final _defaults = defaultRequestSettings();
+  /// What a request with no settings of its own is sent with.
+  late final RequestSettings _defaults = () {
+    final d = Engine.of(context).defaultRequestSettings();
+    return RequestSettings(
+      httpMode: d.httpMode,
+      verifySsl: widget.app.verifySsl,
+      followRedirects: widget.app.followRedirects,
+      followOriginalMethod: d.followOriginalMethod,
+      followAuthHeader: d.followAuthHeader,
+      removeReferer: d.removeReferer,
+      strictHttpParser: d.strictHttpParser,
+      disableCookieJar: d.disableCookieJar,
+      maxRedirects: d.maxRedirects,
+      disabledTls: d.disabledTls,
+    );
+  }();
 
   late RequestSettings _s = widget.settings ?? _defaults;
   late final _maxRedirects = TextEditingController(
@@ -89,7 +105,7 @@ class _RequestSettingsEditorState extends State<RequestSettingsEditor> {
               isDense: true,
               items: [
                 DropdownMenuItem(
-                  child: Text('Default (${_httpLabel(widget.appHttpMode)})'),
+                  child: Text('Default (${_httpLabel(widget.app.httpMode)})'),
                 ),
                 for (final mode in HttpMode.values)
                   DropdownMenuItem(value: mode, child: Text(_httpLabel(mode))),

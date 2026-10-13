@@ -103,6 +103,29 @@ environment, then the collection's own variables.
 | curl | one command | one command per request |
 | `.env` | environment | environment |
 
+## Settings
+
+The app's Settings (bottom of the sidebar) apply to every request and are saved with the
+workspace.
+
+| Setting | What it does |
+| --- | --- |
+| HTTP version | Auto, HTTP/1 or HTTP/2 |
+| Request timeout | Seconds to wait for a response; 0 waits as long as it takes |
+| Max response size | A larger response is abandoned part way; 0 means any size |
+| SSL certificate verification | Refuse servers whose certificate cannot be verified |
+| Automatically follow redirects | When off, a redirect is shown as the response |
+| Send no-cache header | Adds `Cache-Control: no-cache` unless the request sets its own |
+| Ask before discarding unsaved changes | When off, opening another request drops the edits |
+| Layout | Response beside the request, below it, or decided by the window's width |
+| Font size, indentation | For URLs, headers and bodies; and for formatted JSON |
+| Proxy | The system's, none, or an `http://`, `https://` or `socks5://` address |
+
+SSL verification and redirects are defaults: a request that changes anything on its own
+Settings tab keeps its own choices. The proxy applies to HTTP requests only. The CLI has
+the same controls as flags: `-k`, `--no-follow`, `--max-size MB`, `-x/--proxy URL` and
+`--no-proxy`.
+
 ## Tests and chaining
 
 A request can carry tests and captures, written one per line in the **Tests** tab or

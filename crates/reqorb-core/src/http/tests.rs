@@ -605,6 +605,7 @@ async fn request_settings_override_the_app_and_the_jar() {
     let forced_http2 = SendOptions {
         http_mode: HttpMode::Http2,
         timeout_ms: Some(5_000),
+        ..SendOptions::default()
     };
     let request = with_settings(&to(&url), |s| s.http_mode = Some(HttpMode::Http1));
     let response = send_opts(request, &forced_http2, &mut Vec::new())
@@ -766,18 +767,21 @@ async fn settings_choose_the_protocol_and_default_timeout() {
         theme: AppTheme::Dark,
         http_mode: HttpMode::Http2,
         timeout_secs: 5,
+        ..Settings::default()
     })
     .unwrap();
-    assert_eq!(
-        json,
-        r#"{"theme":"dark","http_mode":"http2","timeout_secs":5}"#
-    );
+    assert!(json.starts_with(r#"{"theme":"dark","http_mode":"http2","timeout_secs":5,"#));
+    // Settings saved before an option existed load with its default.
+    let old: Settings = serde_json::from_str(r#"{"theme":"dark","timeout_secs":5}"#).unwrap();
+    assert!(old.verify_ssl && old.follow_redirects && old.confirm_discard);
+    assert_eq!((old.font_size, old.max_response_mb), (13, 0));
 
     // HTTP/1.1 only still talks to an HTTP/1.1 server.
     let (url, server) = serve_once("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
     let http1 = SendOptions {
         http_mode: HttpMode::Http1,
         timeout_ms: None,
+        ..SendOptions::default()
     };
     let response = send_opts(Request::new("GET", url), &http1, &mut Vec::new())
         .await
@@ -790,6 +794,7 @@ async fn settings_choose_the_protocol_and_default_timeout() {
     let http2 = SendOptions {
         http_mode: HttpMode::Http2,
         timeout_ms: Some(5_000),
+        ..SendOptions::default()
     };
     let error = send_opts(Request::new("GET", url), &http2, &mut Vec::new())
         .await
@@ -845,10 +850,136 @@ fn workspace_round_trips_through_disk() {
             theme: AppTheme::Dark,
             http_mode: HttpMode::Http1,
             timeout_secs: 12,
+            ..Settings::default()
         },
         cookies: Vec::new(),
     };
     workspace.save(&path).unwrap();
     assert_eq!(Workspace::load(&path).unwrap(), workspace);
     assert_eq!(workspace.active_variables().len(), 1);
+}
+
+#[tokio::test]
+async fn app_settings_apply_to_requests_without_their_own() {
+    // Redirects are not followed when the app says so...
+    let redirect = "HTTP/1.1 302 Found\r\nLocation: /next\r\nContent-Length: 0\r\n\r\n";
+    let (url, server) = serve_once(redirect);
+    let options = SendOptions {
+        follow_redirects: false,
+        no_cache: true,
+        ..SendOptions::default()
+    };
+    let response = send_opts(Request::new("GET", &url), &options, &mut Vec::new())
+        .await
+        .unwrap();
+    assert_eq!(response.status, 302);
+    // ...and the no-cache header goes out with the request.
+    assert!(
+        server
+            .join()
+            .unwrap()
+            .to_lowercase()
+            .contains("cache-control: no-cache")
+    );
+
+    // A request's own header and settings win over the app's.
+    let (url, server) = serve_once(redirect);
+    let mut request = Request::new("GET", &url);
+    request.add_header("Cache-Control", "max-age=60");
+    request.settings = Some(RequestSettings {
+        follow_redirects: false,
+        ..RequestSettings::default()
+    });
+    let follow = SendOptions {
+        no_cache: true,
+        ..SendOptions::default()
+    };
+    let response = send_opts(request, &follow, &mut Vec::new()).await.unwrap();
+    assert_eq!(response.status, 302);
+    let raw = server.join().unwrap().to_lowercase();
+    assert!(raw.contains("cache-control: max-age=60") && !raw.contains("no-cache"));
+
+    let settings = Settings {
+        max_response_mb: 2,
+        verify_ssl: false,
+        follow_redirects: false,
+        send_no_cache: true,
+        proxy: ProxyMode::Custom,
+        proxy_url: " http://127.0.0.1:8080 ".into(),
+        ..Settings::default()
+    };
+    let options = settings.send_options();
+    assert_eq!(options.max_response_bytes, Some(2 * 1024 * 1024));
+    assert!(!options.verify_ssl && !options.follow_redirects && options.no_cache);
+    assert_eq!(options.proxy, Proxy::Custom("http://127.0.0.1:8080".into()));
+    // A custom proxy with no address is no proxy setting at all.
+    let unset = Settings {
+        proxy: ProxyMode::Custom,
+        ..Settings::default()
+    };
+    assert_eq!(unset.send_options().proxy, Proxy::System);
+}
+
+#[tokio::test]
+async fn abandons_responses_over_the_size_limit() {
+    const BODY: &str = "HTTP/1.1 200 OK\r\nContent-Length: 20\r\n\r\n01234567890123456789";
+    let limit = |bytes| SendOptions {
+        max_response_bytes: Some(bytes),
+        ..SendOptions::default()
+    };
+    let (url, _server) = serve_once(BODY);
+    let error = send_opts(Request::new("GET", url), &limit(10), &mut Vec::new())
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "the response is larger than the limit of 1 MB set in Settings"
+    );
+
+    let (url, _server) = serve_once(BODY);
+    let response = send_opts(Request::new("GET", url), &limit(20), &mut Vec::new())
+        .await
+        .unwrap();
+    assert_eq!(response.body.len(), 20);
+
+    // A server that does not say how much is coming is cut off part way.
+    let (url, _server) =
+        serve_once("HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n01234567890123456789");
+    let error = send_opts(Request::new("GET", url), &limit(10), &mut Vec::new())
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("larger than the limit"));
+}
+
+#[tokio::test]
+async fn sends_through_the_chosen_proxy() {
+    // The "proxy" is a server that sees the whole address it is asked for.
+    let (proxy_url, proxy) = serve_once("HTTP/1.1 200 OK\r\nContent-Length: 7\r\n\r\nproxied");
+    let address = proxy_url.trim_end_matches("/echo").to_string();
+    let options = SendOptions {
+        proxy: Proxy::Custom(address),
+        ..SendOptions::default()
+    };
+    let request = Request::new("GET", "http://far.away.test/items");
+    let response = send_opts(request, &options, &mut Vec::new()).await.unwrap();
+    assert_eq!(response.body, "proxied");
+    assert!(
+        proxy
+            .join()
+            .unwrap()
+            .starts_with("GET http://far.away.test/items HTTP/1.1")
+    );
+
+    let bad = SendOptions {
+        proxy: Proxy::Custom("not a proxy".into()),
+        ..SendOptions::default()
+    };
+    let error = send_opts(
+        Request::new("GET", "http://far.away.test"),
+        &bad,
+        &mut Vec::new(),
+    )
+    .await
+    .unwrap_err();
+    assert!(error.to_string().starts_with("invalid proxy address"));
 }

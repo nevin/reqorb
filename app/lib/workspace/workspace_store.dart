@@ -39,16 +39,12 @@ class WorkspaceStore extends ChangeNotifier {
   /// Location of `workspace.json`.
   final String path;
 
-  Workspace _workspace = const Workspace(
-    collections: [],
-    requests: [],
-    environments: [],
-    settings: Settings(
-      theme: AppTheme.system,
-      httpMode: HttpMode.auto,
-      timeoutSecs: 0,
-    ),
-    cookies: [],
+  late Workspace _workspace = Workspace(
+    collections: const [],
+    requests: const [],
+    environments: const [],
+    settings: engine.defaultSettings(),
+    cookies: const [],
   );
   Timer? _saveTimer;
 
@@ -476,4 +472,37 @@ class WorkspaceStore extends ChangeNotifier {
     _saveTimer?.cancel();
     super.dispose();
   }
+}
+
+/// Copies of the app settings with some of them changed.
+extension SettingsCopy on Settings {
+  Settings copyWith({
+    AppTheme? theme,
+    HttpMode? httpMode,
+    int? timeoutSecs,
+    int? maxResponseMb,
+    bool? verifySsl,
+    bool? followRedirects,
+    bool? sendNoCache,
+    bool? confirmDiscard,
+    Layout? layout,
+    int? fontSize,
+    Indent? indent,
+    ProxyMode? proxy,
+    String? proxyUrl,
+  }) => Settings(
+    theme: theme ?? this.theme,
+    httpMode: httpMode ?? this.httpMode,
+    timeoutSecs: timeoutSecs ?? this.timeoutSecs,
+    maxResponseMb: maxResponseMb ?? this.maxResponseMb,
+    verifySsl: verifySsl ?? this.verifySsl,
+    followRedirects: followRedirects ?? this.followRedirects,
+    sendNoCache: sendNoCache ?? this.sendNoCache,
+    confirmDiscard: confirmDiscard ?? this.confirmDiscard,
+    layout: layout ?? this.layout,
+    fontSize: fontSize ?? this.fontSize,
+    indent: indent ?? this.indent,
+    proxy: proxy ?? this.proxy,
+    proxyUrl: proxyUrl ?? this.proxyUrl,
+  );
 }

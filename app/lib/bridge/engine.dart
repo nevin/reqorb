@@ -60,6 +60,11 @@ abstract class Engine {
   // ------------------------------------------------------------ description
 
   List<AuthChoice> authChoices();
+
+  /// The settings a new workspace, and a request with none of its own,
+  /// start from.
+  Settings defaultSettings();
+  RequestSettings defaultRequestSettings();
   List<AuthField> authFields({required AuthKind kind});
 
   // -------------------------------------------------------------- workspace
@@ -168,6 +173,12 @@ class RustEngine extends Engine {
 
   @override
   List<AuthChoice> authChoices() => rust.authChoices();
+
+  @override
+  Settings defaultSettings() => rust.defaultSettings();
+
+  @override
+  RequestSettings defaultRequestSettings() => rust.defaultRequestSettings();
 
   @override
   List<AuthField> authFields({required AuthKind kind}) =>

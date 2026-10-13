@@ -12,8 +12,8 @@ pub use reqorb_core::{
     AppTheme, Auth, AuthField, AuthKind, AuthParam, BodyMode, Collection, Cookie, DisabledTls,
     Environment, Exchange, ExportFormat, FormField, GrpcCall, GrpcMethod, GrpcReply, GrpcSchema,
     HarCount, HarEntry, HarFinding, HarPhase, HarReport, HarSeverity, Header, HttpMode,
-    ImportResult, Item, Request, RequestSettings, Response, Sent, Settings, TestResult, Variable,
-    Workspace, WsEvent, WsEventKind,
+    ImportResult, Indent, Item, Layout, ProxyMode, Request, RequestSettings, Response, Sent,
+    Settings, TestResult, Variable, Workspace, WsEvent, WsEventKind,
 };
 
 #[frb(mirror(AppTheme))]
@@ -90,6 +90,43 @@ pub struct _Settings {
     pub theme: AppTheme,
     pub http_mode: HttpMode,
     pub timeout_secs: u32,
+    pub max_response_mb: u32,
+    pub verify_ssl: bool,
+    pub follow_redirects: bool,
+    pub send_no_cache: bool,
+    pub confirm_discard: bool,
+    pub layout: Layout,
+    pub font_size: u32,
+    pub indent: Indent,
+    pub proxy: ProxyMode,
+    pub proxy_url: String,
+}
+
+#[frb(mirror(Layout))]
+pub enum _Layout {
+    Auto,
+    SideBySide,
+    Stacked,
+}
+
+#[frb(mirror(Indent))]
+pub enum _Indent {
+    TwoSpaces,
+    FourSpaces,
+    Tab,
+}
+
+#[frb(mirror(ProxyMode))]
+pub enum _ProxyMode {
+    System,
+    None,
+    Custom,
+}
+
+/// The settings a new workspace starts with.
+#[frb(sync)]
+pub fn default_settings() -> Settings {
+    Settings::default()
 }
 
 #[frb(mirror(AuthKind))]

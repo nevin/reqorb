@@ -157,7 +157,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ImportResult dco_decode_import_result(dynamic raw);
 
   @protected
+  Indent dco_decode_indent(dynamic raw);
+
+  @protected
   Item dco_decode_item(dynamic raw);
+
+  @protected
+  Layout dco_decode_layout(dynamic raw);
 
   @protected
   List<String> dco_decode_list_String(dynamic raw);
@@ -248,6 +254,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   Uint8List? dco_decode_opt_list_prim_u_8_strict(dynamic raw);
+
+  @protected
+  ProxyMode dco_decode_proxy_mode(dynamic raw);
 
   @protected
   Request dco_decode_request(dynamic raw);
@@ -434,7 +443,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ImportResult sse_decode_import_result(SseDeserializer deserializer);
 
   @protected
+  Indent sse_decode_indent(SseDeserializer deserializer);
+
+  @protected
   Item sse_decode_item(SseDeserializer deserializer);
+
+  @protected
+  Layout sse_decode_layout(SseDeserializer deserializer);
 
   @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
@@ -527,6 +542,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   Uint8List? sse_decode_opt_list_prim_u_8_strict(SseDeserializer deserializer);
+
+  @protected
+  ProxyMode sse_decode_proxy_mode(SseDeserializer deserializer);
 
   @protected
   Request sse_decode_request(SseDeserializer deserializer);
@@ -736,7 +754,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_import_result(ImportResult self, SseSerializer serializer);
 
   @protected
+  void sse_encode_indent(Indent self, SseSerializer serializer);
+
+  @protected
   void sse_encode_item(Item self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_layout(Layout self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
@@ -878,6 +902,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     Uint8List? self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_proxy_mode(ProxyMode self, SseSerializer serializer);
 
   @protected
   void sse_encode_request(Request self, SseSerializer serializer);

@@ -45,6 +45,9 @@ class FakeEngine extends Engine {
   /// Every request sent, with the variables it was sent with.
   final sends = <(Request, List<Variable>)>[];
 
+  /// The app settings each send was made with.
+  final sentSettings = <Settings>[];
+
   /// Answers a send. Replace it to fail, or to answer later.
   Future<Sent> Function(Request request) onSend = (_) async =>
       sentWith(response());
@@ -57,6 +60,7 @@ class FakeEngine extends Engine {
     required List<Cookie> cookies,
   }) {
     sends.add((request, variables));
+    sentSettings.add(settings);
     return onSend(request);
   }
 
@@ -168,6 +172,36 @@ class FakeEngine extends Engine {
     AuthChoice(kind: AuthKind.none, label: 'No Auth'),
     AuthChoice(kind: AuthKind.bearer, label: 'Bearer Token'),
   ];
+
+  @override
+  Settings defaultSettings() => const Settings(
+    theme: AppTheme.system,
+    httpMode: HttpMode.auto,
+    timeoutSecs: 0,
+    maxResponseMb: 0,
+    verifySsl: true,
+    followRedirects: true,
+    sendNoCache: false,
+    confirmDiscard: true,
+    layout: Layout.auto,
+    fontSize: 13,
+    indent: Indent.twoSpaces,
+    proxy: ProxyMode.system,
+    proxyUrl: '',
+  );
+
+  @override
+  RequestSettings defaultRequestSettings() => const RequestSettings(
+    verifySsl: true,
+    followRedirects: true,
+    followOriginalMethod: false,
+    followAuthHeader: false,
+    removeReferer: false,
+    strictHttpParser: false,
+    disableCookieJar: false,
+    maxRedirects: 10,
+    disabledTls: DisabledTls.none,
+  );
 
   @override
   List<AuthField> authFields({required AuthKind kind}) => switch (kind) {

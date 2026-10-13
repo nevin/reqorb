@@ -675,7 +675,7 @@ class _EntryDialog extends StatelessWidget {
     final trimmed = body.trimLeft();
     if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return body;
     try {
-      return const JsonEncoder.withIndent('  ').convert(jsonDecode(body));
+      return JsonEncoder.withIndent(CodeStyle.indent).convert(jsonDecode(body));
     } on FormatException {
       return body;
     }

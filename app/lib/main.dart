@@ -28,18 +28,27 @@ class ReqorbApp extends StatelessWidget {
       engine: store.engine,
       child: ListenableBuilder(
         listenable: store,
-        builder: (context, _) => MaterialApp(
-          title: 'reqorb',
-          debugShowCheckedModeBanner: false,
-          theme: buildTheme(Brightness.light),
-          darkTheme: buildTheme(Brightness.dark),
-          themeMode: switch (store.settings.theme) {
-            AppTheme.system => ThemeMode.system,
-            AppTheme.light => ThemeMode.light,
-            AppTheme.dark => ThemeMode.dark,
-          },
-          home: RequestPage(store: store),
-        ),
+        builder: (context, _) {
+          final settings = store.settings;
+          CodeStyle.fontSize = settings.fontSize.clamp(9, 28).toDouble();
+          CodeStyle.indent = switch (settings.indent) {
+            Indent.twoSpaces => '  ',
+            Indent.fourSpaces => '    ',
+            Indent.tab => '\t',
+          };
+          return MaterialApp(
+            title: 'reqorb',
+            debugShowCheckedModeBanner: false,
+            theme: buildTheme(Brightness.light),
+            darkTheme: buildTheme(Brightness.dark),
+            themeMode: switch (store.settings.theme) {
+              AppTheme.system => ThemeMode.system,
+              AppTheme.light => ThemeMode.light,
+              AppTheme.dark => ThemeMode.dark,
+            },
+            home: RequestPage(store: store),
+          );
+        },
       ),
     );
   }

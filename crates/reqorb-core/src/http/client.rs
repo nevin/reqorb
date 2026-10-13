@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
-use crate::{DisabledTls, Error, HttpMode, RequestSettings};
+use crate::{DisabledTls, Error, HttpMode, Proxy, RequestSettings};
 
 /// What makes one HTTP client differ from another.
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -14,6 +14,7 @@ struct ClientKey {
     strict_http_parser: bool,
     disabled_tls: DisabledTls,
     http_mode: HttpMode,
+    proxy: Proxy,
 }
 
 /// Clients already built, so that sends with the same settings share
@@ -25,6 +26,7 @@ static CLIENTS: LazyLock<Mutex<HashMap<ClientKey, reqwest::Client>>> =
 pub(super) fn client_for(
     settings: &RequestSettings,
     http_mode: HttpMode,
+    proxy: &Proxy,
     own_connection: bool,
 ) -> Result<reqwest::Client, Error> {
     let key = ClientKey {
@@ -33,6 +35,7 @@ pub(super) fn client_for(
         strict_http_parser: settings.strict_http_parser,
         disabled_tls: settings.disabled_tls,
         http_mode,
+        proxy: proxy.clone(),
     };
     if !own_connection && let Some(client) = CLIENTS.lock().unwrap().get(&key) {
         return Ok(client.clone());
@@ -60,6 +63,15 @@ pub(super) fn client_for(
         HttpMode::Http1 => builder.http1_only(),
         // Speaks HTTP/2 from the first byte, with no fallback to HTTP/1.1.
         HttpMode::Http2 => builder.http2_prior_knowledge(),
+    };
+    builder = match proxy {
+        Proxy::System => builder,
+        Proxy::None => builder.no_proxy(),
+        Proxy::Custom(address) => {
+            let proxy = reqwest::Proxy::all(address)
+                .map_err(|e| Error::Http(format!("invalid proxy address `{address}`: {e}")))?;
+            builder.proxy(proxy)
+        }
     };
     if own_connection {
         // NTLM authenticates a connection, so every step must reuse the same
