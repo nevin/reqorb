@@ -4,7 +4,7 @@
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::import::str_field;
+use crate::formats::util::str_field;
 use crate::redact::is_sensitive;
 use crate::{Error, Header, REDACTED};
 

@@ -4,7 +4,8 @@
 use base64::Engine;
 use serde_json::{Value, json};
 
-use crate::import::{ImportResult, str_field};
+use super::ImportResult;
+use super::util::str_field;
 use crate::{BodyMode, Collection, Error, Exchange, FormField, Header, Item, REDACTED, Request};
 
 /// Renders `exchanges`, oldest first, as a HAR 1.2 document that browser
@@ -177,7 +178,7 @@ fn short_path(url: &str) -> String {
     }
 }
 
-fn entry(exchange: &Exchange) -> Value {
+pub(super) fn entry(exchange: &Exchange) -> Value {
     let request = &exchange.request;
     let response = &exchange.response;
     let url = reqwest::Url::parse(&request.url).ok();
@@ -258,7 +259,7 @@ fn entry(exchange: &Exchange) -> Value {
 }
 
 /// The response body: text as it is, anything else base64-encoded.
-fn content(response: &crate::Response) -> Value {
+pub(super) fn content(response: &crate::Response) -> Value {
     let mut content = json!({
         "size": response.size_bytes,
         "mimeType": header(&response.headers, "content-type").unwrap_or(""),
@@ -271,14 +272,14 @@ fn content(response: &crate::Response) -> Value {
     content
 }
 
-fn header<'a>(headers: &'a [Header], name: &str) -> Option<&'a str> {
+pub(super) fn header<'a>(headers: &'a [Header], name: &str) -> Option<&'a str> {
     headers
         .iter()
         .find(|h| h.name.eq_ignore_ascii_case(name))
         .map(|h| h.value.as_str())
 }
 
-fn headers(headers: &[Header]) -> Vec<Value> {
+pub(super) fn headers(headers: &[Header]) -> Vec<Value> {
     headers
         .iter()
         .map(|h| json!({ "name": h.name, "value": h.value }))

@@ -12,7 +12,7 @@ use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::{self, Message};
 use tokio_tungstenite::{Connector, connect_async_tls_with_config};
 
-use crate::{Error, Header, Request, Variable, auth, cookies, resolve};
+use crate::{Error, Header, Request, Variable, auth, resolve};
 
 /// How long to wait for the server to accept the connection.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
@@ -59,7 +59,7 @@ impl WsEvent {
             data: Vec::new(),
             code: 0,
             headers: Vec::new(),
-            at_ms: cookies::now_ms(),
+            at_ms: crate::time::now_ms(),
         }
     }
 

@@ -177,8 +177,8 @@ impl Request {
             .map(|f| {
                 format!(
                     "{}={}",
-                    crate::import::form_encode(&f.key),
-                    crate::import::form_encode(&f.value)
+                    crate::formats::util::form_encode(&f.key),
+                    crate::formats::util::form_encode(&f.value)
                 )
             })
             .collect();

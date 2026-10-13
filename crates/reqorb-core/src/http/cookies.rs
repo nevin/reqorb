@@ -1,10 +1,11 @@
 //! The cookie jar: what servers set, what goes back to them, and when.
 
 use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use url::Url;
+
+use crate::time::now;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Cookie {
@@ -41,19 +42,6 @@ impl Cookie {
                 && (self.path.ends_with('/') || path[self.path.len()..].starts_with('/')));
         host_ok && path_ok && (!self.secure || url.scheme() == "https") && !self.is_expired(now)
     }
-}
-
-pub(crate) fn now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs() as i64)
-}
-
-/// The current time in milliseconds since the Unix epoch.
-pub(crate) fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_millis() as u64)
 }
 
 /// Applies one `Set-Cookie` header received from `url`. Cookies for a

@@ -3,7 +3,7 @@
 use serde_json::{Map, Value, json};
 use url::Url;
 
-use crate::import::{append_query, form_encode, loose_string, str_field};
+use super::util::{append_query, form_encode, loose_string, str_field};
 use crate::{Collection, Item, Request, Variable};
 
 const METHODS: [&str; 8] = [
@@ -502,7 +502,7 @@ impl<'a> Ctx<'a> {
     }
 }
 
-fn pretty(value: &Value) -> String {
+pub(super) fn pretty(value: &Value) -> String {
     serde_json::to_string_pretty(value).expect("valid JSON")
 }
 
