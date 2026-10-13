@@ -1,0 +1,68 @@
+//! Sends one request written on the command line.
+
+use std::process::ExitCode;
+
+use anyhow::{Result, bail};
+use clap::CommandFactory;
+use reqorb_core::{BodyMode, FormField, Request};
+
+use crate::cli::{Cli, SendArgs};
+use crate::input::{load_variables, parse_auth, parse_header, read_body};
+use crate::output::{print_response, report_tests, succeeded, warn_unresolved, write_har};
+
+pub(crate) async fn send(args: SendArgs) -> Result<ExitCode> {
+    let auth = parse_auth(&args)?;
+    let (Some(method), Some(url)) = (args.method, args.url) else {
+        Cli::command().print_help()?;
+        return Ok(ExitCode::from(2));
+    };
+    let url = if url.contains("://") || url.starts_with("{{") {
+        url
+    } else {
+        format!("http://{url}")
+    };
+
+    let mut request = Request::new(method, url);
+    for raw in &args.headers {
+        request.headers.push(parse_header(raw)?);
+    }
+    if let Some(json) = &args.json {
+        request.body = Some(read_body(json)?);
+        if !request.has_header("content-type") {
+            request.add_header("Content-Type", "application/json");
+        }
+    } else if let Some(data) = &args.data {
+        request.body = Some(read_body(data)?);
+    } else if let Some(path) = &args.binary {
+        request.body_mode = Some(BodyMode::Binary);
+        request.body = Some(path.clone());
+    } else if !args.form.is_empty() {
+        request.body_mode = Some(BodyMode::FormData);
+        for raw in &args.form {
+            let Some((key, value)) = raw.split_once('=') else {
+                bail!("form field `{raw}` must look like `name=value` or `name=@file`");
+            };
+            request.form.push(match value.strip_prefix('@') {
+                Some(path) => FormField::file(key, path),
+                None => FormField::text(key, value),
+            });
+        }
+    }
+    request.timeout_ms = args.timeout.map(|s| (s * 1000.0) as u64);
+    request.auth = auth;
+    request.tests = args.tests.clone();
+    let request = args.http.apply(&request);
+
+    let variables = load_variables(&args.vars).await?;
+    let sent = reqorb_core::send_with(&request, &variables, &args.http.options()?, &[]).await?;
+    warn_unresolved(&sent.unresolved);
+    print_response(&sent.response, &args.output)?;
+    write_har(&args.output, &sent.exchanges)?;
+    report_tests(&sent, "");
+
+    Ok(if succeeded(&sent) {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
+    })
+}
