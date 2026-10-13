@@ -72,6 +72,19 @@ abstract class Engine {
     required List<Variable> variables,
   });
 
+  /// Like [grpcCall], reporting each response as it arrives and then the
+  /// whole reply, or the error that prevented the call. [id] names the
+  /// call, for [grpcCancel].
+  Stream<GrpcUpdate> grpcCallWatched({
+    required int id,
+    required GrpcCall call,
+    required List<Variable> variables,
+  });
+
+  /// Stops a watched call, which ends with the responses it had; false
+  /// when it has already ended.
+  bool grpcCancel({required int id});
+
   // ---------------------------------------------------------------- graphql
 
   /// Fetches the schema of the GraphQL server [request] points at.
@@ -301,6 +314,16 @@ class RustEngine extends Engine {
     required GrpcCall call,
     required List<Variable> variables,
   }) => rust.grpcCall(call: call, variables: variables);
+
+  @override
+  Stream<GrpcUpdate> grpcCallWatched({
+    required int id,
+    required GrpcCall call,
+    required List<Variable> variables,
+  }) => rust.grpcCallWatched(id: id, call: call, variables: variables);
+
+  @override
+  bool grpcCancel({required int id}) => rust.grpcCancel(id: id);
 
   @override
   List<AuthChoice> authChoices() => rust.authChoices();

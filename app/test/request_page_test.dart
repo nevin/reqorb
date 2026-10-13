@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reqorb/main.dart';
@@ -146,6 +148,60 @@ void main() {
     // The methods are kept, so the next call does not ask again.
     await tapSend(tester);
     expect((engine.reflections, engine.grpcCalls.length), (1, 2));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('follows a gRPC server stream and stops it', (tester) async {
+    await open(tester);
+    final updates = StreamController<GrpcUpdate>();
+    late int callId;
+    engine.onGrpcWatch = (id, _) {
+      callId = id;
+      return updates.stream;
+    };
+    await choose(tester, 'GRPC');
+    await enterUrl(tester, 'localhost:50051');
+    await tester.tap(find.byKey(const Key('send')));
+    // The spinner never settles, so the frames are counted out.
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(find.text('Stop'), findsOneWidget);
+    expect(find.text('Calling…'), findsOneWidget);
+
+    // Each response is on show as soon as it arrives.
+    updates.add(const GrpcUpdate(message: '{"n": 1}'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const Key('grpc-receiving')), findsOneWidget);
+    expect(find.text('Messages (1)'), findsOneWidget);
+    updates.add(const GrpcUpdate(message: '{"n": 2}'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Messages (2)'), findsOneWidget);
+
+    // Stopping ends the call, which keeps what it had.
+    await tester.tap(find.byKey(const Key('send')));
+    await tester.pump();
+    expect(engine.grpcStopped, [callId]);
+    updates.add(
+      const GrpcUpdate(
+        reply: GrpcReply(
+          code: 1,
+          status: 'CANCELLED',
+          message: 'stopped before the call ended',
+          messages: ['{"n": 1}', '{"n": 2}'],
+          headers: [],
+          trailers: [],
+          elapsedMs: 30,
+        ),
+      ),
+    );
+    await updates.close();
+    await tester.pumpAndSettle();
+    expect(find.text('1 CANCELLED'), findsOneWidget);
+    expect(find.text('Messages (2)'), findsOneWidget);
+    expect(find.text('Invoke'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

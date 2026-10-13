@@ -42,14 +42,28 @@ pub(crate) async fn grpc(args: GrpcArgs) -> Result<ExitCode> {
         descriptors: schema.descriptors,
         timeout_ms: args.timeout.map(|s| (s * 1000.0) as u64),
     };
-    let reply = reqorb_core::grpc_call(&call, &variables).await?;
+    // Each response is printed as it arrives, so a server stream can be
+    // followed, and Ctrl-C ends the call without losing the summary.
+    let cancel = reqorb_core::Cancel::default();
+    tokio::spawn({
+        let cancel = cancel.clone();
+        async move {
+            if tokio::signal::ctrl_c().await.is_ok() {
+                cancel.cancel();
+            }
+        }
+    });
+    let reply = reqorb_core::grpc_call_watched(
+        &call,
+        &variables,
+        &|message| println!("{message}"),
+        &cancel,
+    )
+    .await?;
     if args.include {
         for header in &reply.headers {
             eprintln!("{}: {}", header.name, header.value);
         }
-    }
-    for message in &reply.messages {
-        println!("{message}");
     }
     if args.include {
         for trailer in &reply.trailers {

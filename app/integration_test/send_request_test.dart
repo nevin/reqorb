@@ -167,6 +167,35 @@ void main() {
           socket.listen((message) => socket.add('$message'.toUpperCase()));
           return;
         }
+        // Subscriptions are served over a WebSocket at the GraphQL address:
+        // two results, then the subscription is complete.
+        if (request.uri.path == '/graphql' &&
+            WebSocketTransformer.isUpgradeRequest(request)) {
+          final socket = await WebSocketTransformer.upgrade(
+            request,
+            protocolSelector: (offered) => offered.first,
+          );
+          socket.listen((message) {
+            final type = (jsonDecode('$message') as Map)['type'];
+            if (type == 'connection_init') {
+              socket.add(jsonEncode({'type': 'connection_ack'}));
+            } else if (type == 'subscribe') {
+              for (final n in [1, 2]) {
+                socket.add(
+                  jsonEncode({
+                    'id': '1',
+                    'type': 'next',
+                    'payload': {
+                      'data': {'tick': n},
+                    },
+                  }),
+                );
+              }
+              socket.add(jsonEncode({'id': '1', 'type': 'complete'}));
+            }
+          });
+          return;
+        }
         // The server also publishes a Swagger document describing itself.
         final swagger = request.uri.path == '/docs/swagger.json';
         if (!swagger) {
@@ -1807,6 +1836,21 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('200 OK'), findsOneWidget);
     expect(find.text('It failed (at fail)'), findsOneWidget);
+
+    // A subscription is carried by a WebSocket at the same address, and
+    // each result it sends is listed as an event.
+    await type(
+      tester,
+      find.byKey(const Key('graphql-query')),
+      'subscription { tick }',
+    );
+    await tester.tap(find.byKey(const Key('send')));
+    await waitFor(tester, find.text('101 Switching Protocols'));
+    await waitFor(tester, find.byKey(const Key('status')));
+    await tester.pumpAndSettle();
+    expect(find.text('Events (2)'), findsOneWidget);
+    expect(find.text('{"data":{"tick":2}}'), findsOneWidget);
+    await type(tester, find.byKey(const Key('graphql-query')), '{ fail }');
 
     // Saved, it is still a GraphQL request.
     await tester.tap(find.byKey(const Key('save')));

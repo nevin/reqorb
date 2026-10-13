@@ -1076,6 +1076,7 @@ class _RequestPageState extends State<RequestPage> {
             reply: _grpcReply,
             error: _grpcError,
             calling: _grpcBusy && _grpcSchema != null,
+            receiving: _grpc.receiving,
           )
         : _isWs
         ? WsLogView(
@@ -1167,11 +1168,17 @@ class _RequestPageState extends State<RequestPage> {
                     child: const Text('Connect'),
                   )
                 else if (_isGrpc)
-                  FilledButton(
-                    key: const Key('send'),
-                    onPressed: _grpcBusy ? null : _grpcInvoke,
-                    child: const Text('Invoke'),
-                  )
+                  _grpc.calling
+                      ? FilledButton.tonal(
+                          key: const Key('send'),
+                          onPressed: _grpc.stop,
+                          child: const Text('Stop'),
+                        )
+                      : FilledButton(
+                          key: const Key('send'),
+                          onPressed: _grpcBusy ? null : _grpcInvoke,
+                          child: const Text('Invoke'),
+                        )
                 else if (_sending)
                   FilledButton.tonal(
                     key: const Key('send'),

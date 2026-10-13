@@ -12,6 +12,7 @@ use tonic::metadata::{KeyAndValueRef, MetadataKey, MetadataMap, MetadataValue};
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
 use tonic::{Code, Status};
 
+use crate::http::Cancel;
 use crate::{Auth, Error, Header, Request, Variable, auth, vars};
 
 /// A method a gRPC server offers.
@@ -101,6 +102,16 @@ fn code_name(code: Code) -> &'static str {
 }
 
 async fn connect(url: &str, timeout: Duration) -> Result<Channel, Error> {
+    connect_for(url, timeout, Some(timeout)).await
+}
+
+/// Connects within `timeout`. Each call on the channel is given `each` to
+/// finish in, or as long as it takes when that is `None`.
+async fn connect_for(
+    url: &str,
+    timeout: Duration,
+    each: Option<Duration>,
+) -> Result<Channel, Error> {
     let url = url.trim();
     let invalid = |reason: String| Error::InvalidUrl {
         url: url.to_string(),
@@ -115,8 +126,10 @@ async fn connect(url: &str, timeout: Duration) -> Result<Channel, Error> {
     };
     let mut endpoint = Endpoint::from_shared(address.clone())
         .map_err(|e| invalid(e.to_string()))?
-        .connect_timeout(timeout)
-        .timeout(timeout);
+        .connect_timeout(timeout);
+    if let Some(each) = each {
+        endpoint = endpoint.timeout(each);
+    }
     if address.starts_with("https://") {
         endpoint = endpoint
             .tls_config(ClientTlsConfig::new().with_native_roots())
@@ -387,6 +400,19 @@ impl Decoder for DynamicCodec {
 /// sent, then every response is collected, so all four kinds of method
 /// work: unary, and client, server or two-way streaming.
 pub async fn grpc_call(call: &GrpcCall, variables: &[Variable]) -> Result<GrpcReply, Error> {
+    grpc_call_watched(call, variables, &|_| {}, &Cancel::default()).await
+}
+
+/// Like [`grpc_call`], handing each response to `on_message` as it arrives
+/// and ending the call when `cancel` says so. A call that is stopped ends
+/// with the responses it had, under the status `CANCELLED`. A server
+/// stream is given as long as it takes unless the call sets a timeout.
+pub async fn grpc_call_watched(
+    call: &GrpcCall,
+    variables: &[Variable],
+    on_message: &(dyn Fn(&str) + Send + Sync),
+    cancel: &Cancel,
+) -> Result<GrpcReply, Error> {
     let url = vars::fill(&call.url, variables);
     let pool = DescriptorPool::decode(call.descriptors.as_slice())
         .map_err(|_| Error::Format("load the server's methods before making a call".into()))?;
@@ -443,7 +469,11 @@ pub async fn grpc_call(call: &GrpcCall, variables: &[Variable]) -> Result<GrpcRe
         .map_err(|_| Error::Format(format!("`{}` is not a valid method name", call.method)))?;
 
     let started = Instant::now();
-    let channel = connect(&url, timeout).await?;
+    let each = match call.timeout_ms {
+        None if method.is_server_streaming() => None,
+        _ => Some(timeout),
+    };
+    let channel = connect_for(&url, timeout, each).await?;
     let mut client = tonic::client::Grpc::new(channel);
     client
         .ready()
@@ -466,25 +496,32 @@ pub async fn grpc_call(call: &GrpcCall, variables: &[Variable]) -> Result<GrpcRe
         reply.message = status.message().to_string();
         reply.trailers = headers_of(status.metadata());
     };
-    match client
-        .streaming(request, path, DynamicCodec(method.output()))
-        .await
-    {
-        Err(status) => fail(&mut reply, &status),
-        Ok(response) => {
+    let stopped = Status::cancelled("stopped before the call ended");
+    let begun = tokio::select! {
+        begun = client.streaming(request, path, DynamicCodec(method.output())) => Some(begun),
+        _ = cancel.cancelled() => None,
+    };
+    match begun {
+        None => fail(&mut reply, &stopped),
+        Some(Err(status)) => fail(&mut reply, &status),
+        Some(Ok(response)) => {
             reply.headers = headers_of(response.metadata());
             let mut stream = response.into_inner();
             loop {
-                match stream.message().await {
+                let next = tokio::select! {
+                    next = stream.message() => next,
+                    _ = cancel.cancelled() => Err(stopped.clone()),
+                };
+                match next {
                     Ok(Some(message)) => {
                         let mut json = Vec::new();
                         let mut writer = serde_json::Serializer::pretty(&mut json);
                         message
                             .serialize_with_options(&mut writer, &options)
                             .map_err(|e| Error::Format(e.to_string()))?;
-                        reply
-                            .messages
-                            .push(String::from_utf8_lossy(&json).into_owned());
+                        let json = String::from_utf8_lossy(&json).into_owned();
+                        on_message(&json);
+                        reply.messages.push(json);
                     }
                     Ok(None) => {
                         if let Ok(Some(trailers)) = stream.trailers().await {
@@ -529,6 +566,35 @@ mod tests {
                 .serve_with_incoming(TcpListenerStream::new(listener)),
         );
         address
+    }
+
+    #[tokio::test]
+    async fn follows_a_server_stream_and_stops_it() {
+        let address = health_server().await;
+        let schema = grpc_reflect(&address, &[], None, &[]).await.unwrap();
+        let call = GrpcCall {
+            url: address,
+            method: "grpc.health.v1.Health/Watch".into(),
+            messages: vec![r#"{"service": "db"}"#.into()],
+            descriptors: schema.descriptors,
+            ..GrpcCall::default()
+        };
+        // The stream reports the status now, and then only when it changes.
+        let cancel = Cancel::default();
+        let stop = cancel.clone();
+        let reply = grpc_call_watched(
+            &call,
+            &[],
+            &move |message| {
+                assert!(message.contains("NOT_SERVING"));
+                stop.cancel();
+            },
+            &cancel,
+        )
+        .await
+        .unwrap();
+        assert_eq!((reply.code, reply.status.as_str()), (1, "CANCELLED"));
+        assert_eq!(reply.messages.len(), 1);
     }
 
     #[tokio::test]

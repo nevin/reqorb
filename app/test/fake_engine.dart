@@ -265,6 +265,39 @@ class FakeEngine extends Engine {
     return schema;
   }
 
+  /// Answers a watched call piece by piece, when a test wants to see
+  /// responses arrive. Left null, it is answered as [grpcCall] would.
+  Stream<GrpcUpdate> Function(int id, GrpcCall call)? onGrpcWatch;
+
+  /// The watched calls that were asked to stop.
+  final grpcStopped = <int>[];
+
+  @override
+  Stream<GrpcUpdate> grpcCallWatched({
+    required int id,
+    required GrpcCall call,
+    required List<Variable> variables,
+  }) async* {
+    if (onGrpcWatch case final watch?) {
+      grpcCalls.add(call);
+      yield* watch(id, call);
+      return;
+    }
+    try {
+      yield GrpcUpdate(
+        reply: await grpcCall(call: call, variables: variables),
+      );
+    } catch (e) {
+      yield GrpcUpdate(error: '$e');
+    }
+  }
+
+  @override
+  bool grpcCancel({required int id}) {
+    grpcStopped.add(id);
+    return true;
+  }
+
   @override
   Future<GrpcReply> grpcCall({
     required GrpcCall call,

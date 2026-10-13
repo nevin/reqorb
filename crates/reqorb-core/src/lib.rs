@@ -4,6 +4,7 @@
 //!   environments, the workspace.
 //! - `http`, `ws`, `grpc`: sending, one module per protocol.
 //! - `graphql`: queries carried over `http`, and the schema behind them.
+//! - `subscribe`: GraphQL subscriptions carried over `ws`.
 //! - `auth`: authorization, applied by all three.
 //! - `formats`: import and export, one module per format.
 //! - `vars`, `checks`, `redact`, `analyze`, `data`: work done on requests
@@ -25,6 +26,7 @@ mod history;
 mod http;
 mod model;
 mod redact;
+mod subscribe;
 mod time;
 mod vars;
 mod vault;
@@ -46,7 +48,8 @@ pub use graphql::{
     graphql_draft, graphql_errors, graphql_format, graphql_inspect, graphql_schema,
 };
 pub use grpc::{
-    GrpcCall, GrpcMethod, GrpcReply, GrpcSchema, grpc_call, grpc_load_proto, grpc_reflect,
+    GrpcCall, GrpcMethod, GrpcReply, GrpcSchema, grpc_call, grpc_call_watched, grpc_load_proto,
+    grpc_reflect,
 };
 pub use history::{History, HistoryEntry, append_history, clear_history, load_history};
 pub use http::cookies::{Cookie, cookie_header, store_set_cookie};

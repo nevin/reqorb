@@ -33,6 +33,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int dco_decode_CastedPrimitive_u_64(dynamic raw);
 
   @protected
+  RustStreamSink<GrpcUpdate> dco_decode_StreamSink_grpc_update_Sse(dynamic raw);
+
+  @protected
   RustStreamSink<SendUpdate> dco_decode_StreamSink_send_update_Sse(dynamic raw);
 
   @protected
@@ -85,6 +88,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   GrpcCall dco_decode_box_autoadd_grpc_call(dynamic raw);
+
+  @protected
+  GrpcReply dco_decode_box_autoadd_grpc_reply(dynamic raw);
 
   @protected
   HttpMode dco_decode_box_autoadd_http_mode(dynamic raw);
@@ -163,6 +169,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   GrpcSchema dco_decode_grpc_schema(dynamic raw);
+
+  @protected
+  GrpcUpdate dco_decode_grpc_update(dynamic raw);
 
   @protected
   HarCount dco_decode_har_count(dynamic raw);
@@ -315,6 +324,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   GraphQlDraft? dco_decode_opt_box_autoadd_graph_ql_draft(dynamic raw);
 
   @protected
+  GrpcReply? dco_decode_opt_box_autoadd_grpc_reply(dynamic raw);
+
+  @protected
   HttpMode? dco_decode_opt_box_autoadd_http_mode(dynamic raw);
 
   @protected
@@ -393,6 +405,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int sse_decode_CastedPrimitive_u_64(SseDeserializer deserializer);
 
   @protected
+  RustStreamSink<GrpcUpdate> sse_decode_StreamSink_grpc_update_Sse(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   RustStreamSink<SendUpdate> sse_decode_StreamSink_send_update_Sse(
     SseDeserializer deserializer,
   );
@@ -453,6 +470,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   GrpcCall sse_decode_box_autoadd_grpc_call(SseDeserializer deserializer);
+
+  @protected
+  GrpcReply sse_decode_box_autoadd_grpc_reply(SseDeserializer deserializer);
 
   @protected
   HttpMode sse_decode_box_autoadd_http_mode(SseDeserializer deserializer);
@@ -533,6 +553,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   GrpcSchema sse_decode_grpc_schema(SseDeserializer deserializer);
+
+  @protected
+  GrpcUpdate sse_decode_grpc_update(SseDeserializer deserializer);
 
   @protected
   HarCount sse_decode_har_count(SseDeserializer deserializer);
@@ -693,6 +716,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  GrpcReply? sse_decode_opt_box_autoadd_grpc_reply(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   HttpMode? sse_decode_opt_box_autoadd_http_mode(SseDeserializer deserializer);
 
   @protected
@@ -776,6 +804,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_CastedPrimitive_u_64(int self, SseSerializer serializer);
 
   @protected
+  void sse_encode_StreamSink_grpc_update_Sse(
+    RustStreamSink<GrpcUpdate> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_StreamSink_send_update_Sse(
     RustStreamSink<SendUpdate> self,
     SseSerializer serializer,
@@ -850,6 +884,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_grpc_call(
     GrpcCall self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_grpc_reply(
+    GrpcReply self,
     SseSerializer serializer,
   );
 
@@ -939,6 +979,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_grpc_schema(GrpcSchema self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_grpc_update(GrpcUpdate self, SseSerializer serializer);
 
   @protected
   void sse_encode_har_count(HarCount self, SseSerializer serializer);
@@ -1150,6 +1193,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_graph_ql_draft(
     GraphQlDraft? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_grpc_reply(
+    GrpcReply? self,
     SseSerializer serializer,
   );
 

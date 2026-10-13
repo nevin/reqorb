@@ -20,6 +20,7 @@ pub use watch::{Cancel, SendEvent, Watch};
 use crate::auth::{self, AuthKind};
 use crate::checks::{TestResult, capture, run_tests};
 use crate::graphql::{self, graphql_errors};
+use crate::subscribe;
 use crate::vars::resolve;
 use crate::vault::LOCKED;
 use crate::{
@@ -161,6 +162,23 @@ pub(super) async fn send_logged(
         request.add_header("Cache-Control", "no-cache");
     }
     graphql::check(&request)?;
+    if subscribe::is_subscription(&request) {
+        // A WebSocket is tried first, as most servers offer one; failing
+        // that the subscription is asked for as a stream of events.
+        let mut over_ws = request.clone();
+        over_ws.auth = Some(auth.clone());
+        over_ws.settings = Some(settings.clone());
+        match subscribe::over_websocket(&over_ws, watch).await {
+            Ok(Some(done)) => return Ok(done),
+            Ok(None) => {}
+            // Authorization that a handshake cannot carry.
+            Err(Error::Auth(_)) if !request.url.trim_start().starts_with("ws") => {}
+            Err(e) => return Err(e),
+        }
+        if !request.has_header("accept") {
+            request.add_header("Accept", "text/event-stream");
+        }
+    }
     request.materialize();
     let http_mode = settings.http_mode.unwrap_or(options.http_mode);
     let use_jar = !settings.disable_cookie_jar;

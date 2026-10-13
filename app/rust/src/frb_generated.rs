@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1975654428;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -381928490;
 
 // Section: executor
 
@@ -697,6 +697,86 @@ fn wire__crate__api__core__grpc_call_impl(
                     .await,
                 )
             }
+        },
+    )
+}
+fn wire__crate__api__core__grpc_call_watched_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "grpc_call_watched",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_id = <u32>::sse_decode(&mut deserializer);
+            let api_call = <crate::api::core::GrpcCall>::sse_decode(&mut deserializer);
+            let api_variables = <Vec<crate::api::core::Variable>>::sse_decode(&mut deserializer);
+            let api_sink = <StreamSink<
+                crate::api::core::GrpcUpdate,
+                flutter_rust_bridge::for_generated::SseCodec,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, ()>(
+                    (move || async move {
+                        let output_ok = Ok::<_, ()>({
+                            crate::api::core::grpc_call_watched(
+                                api_id,
+                                api_call,
+                                api_variables,
+                                api_sink,
+                            )
+                            .await;
+                        })?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__core__grpc_cancel_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "grpc_cancel",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_id = <u32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Ok::<_, ()>(crate::api::core::grpc_cancel(api_id))?;
+                std::result::Result::Ok(output_ok)
+            })())
         },
     )
 }
@@ -1772,6 +1852,16 @@ impl SseDecode for flutter_rust_bridge::for_generated::anyhow::Error {
 }
 
 impl SseDecode
+    for StreamSink<crate::api::core::GrpcUpdate, flutter_rust_bridge::for_generated::SseCodec>
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <String>::sse_decode(deserializer);
+        return StreamSink::deserialize(inner);
+    }
+}
+
+impl SseDecode
     for StreamSink<crate::api::core::SendUpdate, flutter_rust_bridge::for_generated::SseCodec>
 {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -2239,6 +2329,20 @@ impl SseDecode for crate::api::core::GrpcSchema {
         return crate::api::core::GrpcSchema {
             methods: var_methods,
             descriptors: var_descriptors,
+        };
+    }
+}
+
+impl SseDecode for crate::api::core::GrpcUpdate {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_message = <Option<String>>::sse_decode(deserializer);
+        let mut var_reply = <Option<crate::api::core::GrpcReply>>::sse_decode(deserializer);
+        let mut var_error = <Option<String>>::sse_decode(deserializer);
+        return crate::api::core::GrpcUpdate {
+            message: var_message,
+            reply: var_reply,
+            error: var_error,
         };
     }
 }
@@ -2885,6 +2989,17 @@ impl SseDecode for Option<crate::api::core::GraphQlDraft> {
     }
 }
 
+impl SseDecode for Option<crate::api::core::GrpcReply> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::core::GrpcReply>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<crate::api::core::HttpMode> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -3288,19 +3403,20 @@ fn pde_ffi_dispatcher_primary_impl(
         12 => wire__crate__api__core__export_environment_impl(port, ptr, rust_vec_len, data_len),
         19 => wire__crate__api__core__graphql_schema_impl(port, ptr, rust_vec_len, data_len),
         20 => wire__crate__api__core__grpc_call_impl(port, ptr, rust_vec_len, data_len),
-        21 => wire__crate__api__core__grpc_load_proto_impl(port, ptr, rust_vec_len, data_len),
-        22 => wire__crate__api__core__grpc_reflect_impl(port, ptr, rust_vec_len, data_len),
-        23 => wire__crate__api__core__import_har_impl(port, ptr, rust_vec_len, data_len),
-        24 => wire__crate__api__core__import_text_impl(port, ptr, rust_vec_len, data_len),
-        25 => wire__crate__api__core__import_url_impl(port, ptr, rust_vec_len, data_len),
-        26 => wire__crate__api__core__init_app_impl(port, ptr, rust_vec_len, data_len),
-        27 => wire__crate__api__core__keychain_problem_impl(port, ptr, rust_vec_len, data_len),
-        28 => wire__crate__api__core__load_history_impl(port, ptr, rust_vec_len, data_len),
-        29 => wire__crate__api__core__load_workspace_impl(port, ptr, rust_vec_len, data_len),
-        36 => wire__crate__api__core__save_workspace_impl(port, ptr, rust_vec_len, data_len),
-        37 => wire__crate__api__core__send_request_impl(port, ptr, rust_vec_len, data_len),
-        38 => wire__crate__api__core__send_request_watched_impl(port, ptr, rust_vec_len, data_len),
-        40 => wire__crate__api__core__ws_open_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__core__grpc_call_watched_impl(port, ptr, rust_vec_len, data_len),
+        23 => wire__crate__api__core__grpc_load_proto_impl(port, ptr, rust_vec_len, data_len),
+        24 => wire__crate__api__core__grpc_reflect_impl(port, ptr, rust_vec_len, data_len),
+        25 => wire__crate__api__core__import_har_impl(port, ptr, rust_vec_len, data_len),
+        26 => wire__crate__api__core__import_text_impl(port, ptr, rust_vec_len, data_len),
+        27 => wire__crate__api__core__import_url_impl(port, ptr, rust_vec_len, data_len),
+        28 => wire__crate__api__core__init_app_impl(port, ptr, rust_vec_len, data_len),
+        29 => wire__crate__api__core__keychain_problem_impl(port, ptr, rust_vec_len, data_len),
+        30 => wire__crate__api__core__load_history_impl(port, ptr, rust_vec_len, data_len),
+        31 => wire__crate__api__core__load_workspace_impl(port, ptr, rust_vec_len, data_len),
+        38 => wire__crate__api__core__save_workspace_impl(port, ptr, rust_vec_len, data_len),
+        39 => wire__crate__api__core__send_request_impl(port, ptr, rust_vec_len, data_len),
+        40 => wire__crate__api__core__send_request_watched_impl(port, ptr, rust_vec_len, data_len),
+        42 => wire__crate__api__core__ws_open_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -3326,14 +3442,15 @@ fn pde_ffi_dispatcher_sync_impl(
         16 => wire__crate__api__core__graphql_draft_impl(ptr, rust_vec_len, data_len),
         17 => wire__crate__api__core__graphql_format_impl(ptr, rust_vec_len, data_len),
         18 => wire__crate__api__core__graphql_inspect_impl(ptr, rust_vec_len, data_len),
-        30 => wire__crate__api__core__locked_secrets_impl(ptr, rust_vec_len, data_len),
-        31 => wire__crate__api__core__parse_run_data_impl(ptr, rust_vec_len, data_len),
-        32 => wire__crate__api__core__redact_collection_impl(ptr, rust_vec_len, data_len),
-        33 => wire__crate__api__core__redact_environment_impl(ptr, rust_vec_len, data_len),
-        34 => wire__crate__api__core__redact_exchanges_impl(ptr, rust_vec_len, data_len),
-        35 => wire__crate__api__core__redact_text_impl(ptr, rust_vec_len, data_len),
-        39 => wire__crate__api__core__ws_close_impl(ptr, rust_vec_len, data_len),
-        41 => wire__crate__api__core__ws_send_impl(ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__core__grpc_cancel_impl(ptr, rust_vec_len, data_len),
+        32 => wire__crate__api__core__locked_secrets_impl(ptr, rust_vec_len, data_len),
+        33 => wire__crate__api__core__parse_run_data_impl(ptr, rust_vec_len, data_len),
+        34 => wire__crate__api__core__redact_collection_impl(ptr, rust_vec_len, data_len),
+        35 => wire__crate__api__core__redact_environment_impl(ptr, rust_vec_len, data_len),
+        36 => wire__crate__api__core__redact_exchanges_impl(ptr, rust_vec_len, data_len),
+        37 => wire__crate__api__core__redact_text_impl(ptr, rust_vec_len, data_len),
+        41 => wire__crate__api__core__ws_close_impl(ptr, rust_vec_len, data_len),
+        43 => wire__crate__api__core__ws_send_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -3972,6 +4089,25 @@ impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::core::GrpcSchema>>
 {
     fn into_into_dart(self) -> FrbWrapper<crate::api::core::GrpcSchema> {
         self.into()
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::core::GrpcUpdate {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.message.into_into_dart().into_dart(),
+            self.reply.into_into_dart().into_dart(),
+            self.error.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::core::GrpcUpdate {}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::core::GrpcUpdate>
+    for crate::api::core::GrpcUpdate
+{
+    fn into_into_dart(self) -> crate::api::core::GrpcUpdate {
+        self
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -4682,6 +4818,15 @@ impl SseEncode for flutter_rust_bridge::for_generated::anyhow::Error {
 }
 
 impl SseEncode
+    for StreamSink<crate::api::core::GrpcUpdate, flutter_rust_bridge::for_generated::SseCodec>
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        unimplemented!("")
+    }
+}
+
+impl SseEncode
     for StreamSink<crate::api::core::SendUpdate, flutter_rust_bridge::for_generated::SseCodec>
 {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -5047,6 +5192,15 @@ impl SseEncode for crate::api::core::GrpcSchema {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <Vec<crate::api::core::GrpcMethod>>::sse_encode(self.methods, serializer);
         <Vec<u8>>::sse_encode(self.descriptors, serializer);
+    }
+}
+
+impl SseEncode for crate::api::core::GrpcUpdate {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Option<String>>::sse_encode(self.message, serializer);
+        <Option<crate::api::core::GrpcReply>>::sse_encode(self.reply, serializer);
+        <Option<String>>::sse_encode(self.error, serializer);
     }
 }
 
@@ -5569,6 +5723,16 @@ impl SseEncode for Option<crate::api::core::GraphQlDraft> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <crate::api::core::GraphQlDraft>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::api::core::GrpcReply> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::core::GrpcReply>::sse_encode(value, serializer);
         }
     }
 }

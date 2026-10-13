@@ -177,7 +177,11 @@ class GrpcReplyView extends StatelessWidget {
     required this.reply,
     required this.error,
     required this.calling,
+    this.receiving = false,
   });
+
+  /// Whether [reply] holds the responses of a call that is still going.
+  final bool receiving;
 
   final GrpcReply? reply;
   final String? error;
@@ -188,7 +192,7 @@ class GrpcReplyView extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final reply = this.reply;
-    if (calling) {
+    if (calling && !receiving) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -265,8 +269,11 @@ class GrpcReplyView extends StatelessWidget {
                       vertical: 3,
                     ),
                     child: Text(
-                      '${reply.code} ${reply.status}',
-                      key: const Key('grpc-status'),
+                      // The status comes only when the call ends.
+                      receiving
+                          ? 'Receiving…'
+                          : '${reply.code} ${reply.status}',
+                      key: Key(receiving ? 'grpc-receiving' : 'grpc-status'),
                       style: TextStyle(
                         color: color,
                         fontSize: 13,

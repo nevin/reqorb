@@ -147,6 +147,22 @@ Future<GrpcReply> grpcCall({
 }) =>
     RustLib.instance.api.crateApiCoreGrpcCall(call: call, variables: variables);
 
+/// Like [`grpc_call`], reporting each response as it arrives.
+Stream<GrpcUpdate> grpcCallWatched({
+  required int id,
+  required GrpcCall call,
+  required List<Variable> variables,
+}) => RustLib.instance.api.crateApiCoreGrpcCallWatched(
+  id: id,
+  call: call,
+  variables: variables,
+);
+
+/// Stops a watched gRPC call, which ends with the responses it had; false
+/// when it has already ended.
+bool grpcCancel({required int id}) =>
+    RustLib.instance.api.crateApiCoreGrpcCancel(id: id);
+
 /// Loads the workspace, decrypting its credentials with the key in the
 /// system keychain.
 Future<LoadedWorkspace> loadWorkspace({required String path}) =>
@@ -915,6 +931,29 @@ class GrpcSchema {
           runtimeType == other.runtimeType &&
           methods == other.methods &&
           descriptors == other.descriptors;
+}
+
+/// What a watched gRPC call reports: each response as it arrives in
+/// `message`, and last either the whole `reply` or the `error` that
+/// prevented the call.
+class GrpcUpdate {
+  final String? message;
+  final GrpcReply? reply;
+  final String? error;
+
+  const GrpcUpdate({this.message, this.reply, this.error});
+
+  @override
+  int get hashCode => message.hashCode ^ reply.hashCode ^ error.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GrpcUpdate &&
+          runtimeType == other.runtimeType &&
+          message == other.message &&
+          reply == other.reply &&
+          error == other.error;
 }
 
 class HarCount {

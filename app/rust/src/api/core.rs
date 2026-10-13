@@ -679,6 +679,69 @@ pub async fn grpc_call(call: GrpcCall, variables: Vec<Variable>) -> Result<GrpcR
         .map_err(|e| e.to_string())
 }
 
+/// What a watched gRPC call reports: each response as it arrives in
+/// `message`, and last either the whole `reply` or the `error` that
+/// prevented the call.
+pub struct GrpcUpdate {
+    pub message: Option<String>,
+    pub reply: Option<GrpcReply>,
+    pub error: Option<String>,
+}
+
+/// gRPC calls under way, by the id the app gave each one.
+static CALLS: LazyLock<Mutex<HashMap<u32, reqorb_core::Cancel>>> = LazyLock::new(Default::default);
+
+/// Like [`grpc_call`], reporting each response as it arrives.
+pub async fn grpc_call_watched(
+    id: u32,
+    call: GrpcCall,
+    variables: Vec<Variable>,
+    sink: StreamSink<GrpcUpdate>,
+) {
+    let cancel = reqorb_core::Cancel::default();
+    CALLS.lock().unwrap().insert(id, cancel.clone());
+    let sink = std::sync::Arc::new(sink);
+    let progress = sink.clone();
+    let result = reqorb_core::grpc_call_watched(
+        &call,
+        &variables,
+        &move |message| {
+            let _ = progress.add(GrpcUpdate {
+                message: Some(message.to_string()),
+                reply: None,
+                error: None,
+            });
+        },
+        &cancel,
+    )
+    .await;
+    CALLS.lock().unwrap().remove(&id);
+    let _ = sink.add(match result {
+        Ok(reply) => GrpcUpdate {
+            message: None,
+            reply: Some(reply),
+            error: None,
+        },
+        Err(e) => GrpcUpdate {
+            message: None,
+            reply: None,
+            error: Some(e.to_string()),
+        },
+    });
+}
+
+/// Stops a watched gRPC call, which ends with the responses it had; false
+/// when it has already ended.
+#[frb(sync)]
+pub fn grpc_cancel(id: u32) -> bool {
+    CALLS
+        .lock()
+        .unwrap()
+        .get(&id)
+        .map(|cancel| cancel.cancel())
+        .is_some()
+}
+
 /// A workspace read from disk, and what could not be read with it.
 pub struct LoadedWorkspace {
     pub workspace: Workspace,

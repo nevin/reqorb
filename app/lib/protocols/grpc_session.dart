@@ -16,6 +16,15 @@ class GrpcSession extends ChangeNotifier {
   GrpcReply? reply;
   String? error;
 
+  /// Whether a call is in flight, and whether any of its responses have
+  /// arrived, in which case [reply] holds them so far.
+  bool calling = false;
+  bool receiving = false;
+
+  /// Names each call to the engine, across every session.
+  static int _ids = 0;
+  int? _callId;
+
   /// Bumped by [reset], so that work started for one request does not
   /// report into the next.
   int _epoch = 0;
@@ -57,8 +66,9 @@ class GrpcSession extends ChangeNotifier {
     }
   }
 
-  /// Calls [method] with [messages] and waits for every response. The
-  /// methods must have been loaded.
+  /// Calls [method] with [messages]. Responses are shown as they arrive,
+  /// which is how a server stream is followed. The methods must have been
+  /// loaded.
   Future<void> call({
     required Request request,
     required String method,
@@ -68,11 +78,34 @@ class GrpcSession extends ChangeNotifier {
     final known = schema;
     if (busy || known == null) return;
     final epoch = _epoch;
+    final id = _callId = _ids++;
     busy = true;
+    calling = true;
+    receiving = false;
     error = null;
     _notify();
+    final clock = Stopwatch()..start();
+    final arrived = <String>[];
+
+    void end() {
+      if (epoch != _epoch) return;
+      busy = false;
+      calling = false;
+      receiving = false;
+      _callId = null;
+      _notify();
+    }
+
+    void failed(String message) {
+      if (epoch != _epoch) return;
+      reply = null;
+      error = message;
+      end();
+    }
+
     try {
-      final result = await _engine.grpcCall(
+      await for (final update in _engine.grpcCallWatched(
+        id: id,
         call: GrpcCall(
           url: request.url,
           method: method,
@@ -82,26 +115,51 @@ class GrpcSession extends ChangeNotifier {
           descriptors: known.descriptors,
         ),
         variables: variables,
-      );
-      if (epoch != _epoch) return;
-      reply = result;
-    } catch (e) {
-      if (epoch != _epoch) return;
-      reply = null;
-      error = e.toString();
-    } finally {
-      if (epoch == _epoch) {
-        busy = false;
-        _notify();
+      )) {
+        if (epoch != _epoch) continue;
+        if (update.message case final message?) {
+          arrived.add(message);
+          receiving = true;
+          // What has come so far, until the call ends and says how.
+          reply = GrpcReply(
+            code: 0,
+            status: 'OK',
+            message: '',
+            messages: [...arrived],
+            headers: const [],
+            trailers: const [],
+            elapsedMs: clock.elapsedMilliseconds,
+          );
+          _notify();
+        } else if (update.reply case final result?) {
+          reply = result;
+          end();
+        } else {
+          failed(update.error ?? 'The call ended unexpectedly');
+        }
       }
+    } catch (e) {
+      failed(e.toString());
     }
+    if (epoch == _epoch && calling && _callId == id) {
+      failed('The call ended unexpectedly');
+    }
+  }
+
+  /// Ends the call in flight, keeping the responses it had.
+  void stop() {
+    if (_callId case final id? when calling) _engine.grpcCancel(id: id);
   }
 
   /// Forgets the methods and the last call, as when another request is opened.
   void reset() {
+    stop();
     _epoch++;
     schema = null;
     busy = false;
+    calling = false;
+    receiving = false;
+    _callId = null;
     reply = null;
     error = null;
     _notify();
@@ -113,6 +171,7 @@ class GrpcSession extends ChangeNotifier {
 
   @override
   void dispose() {
+    stop();
     _disposed = true;
     super.dispose();
   }

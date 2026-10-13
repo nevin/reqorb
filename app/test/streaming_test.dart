@@ -130,6 +130,38 @@ void main() {
     expect(find.text('Events (2)'), findsOneWidget);
   });
 
+  testWidgets('the next send is followed just as the first was', (
+    tester,
+  ) async {
+    await open(tester);
+    // The first ends the moment after a piece of its body arrives.
+    updates.add(sendUpdate(SendUpdateKind.head, headers: events));
+    updates.add(
+      sendUpdate(SendUpdateKind.body, text: 'data: a\n\n', received: 9),
+    );
+    updates.add(sendUpdate(SendUpdateKind.done, sent: sentWith(response())));
+    await updates.close();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('status')), findsOneWidget);
+
+    updates = StreamController<SendUpdate>();
+    await tester.tap(find.byKey(const Key('send')));
+    await tester.pump();
+    await push(tester, sendUpdate(SendUpdateKind.head, headers: events));
+    await push(
+      tester,
+      sendUpdate(SendUpdateKind.body, text: 'data: b\n\n', received: 9),
+    );
+    expect(find.text('Events (1)'), findsOneWidget);
+    expect(find.text('b'), findsOneWidget);
+    await push(
+      tester,
+      sendUpdate(SendUpdateKind.done, sent: sentWith(response())),
+    );
+    await updates.close();
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('a large body is counted until it is whole', (tester) async {
     await open(tester);
     await push(tester, sendUpdate(SendUpdateKind.head, headers: json));

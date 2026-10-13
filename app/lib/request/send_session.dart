@@ -115,6 +115,7 @@ class SendSession extends ChangeNotifier {
     void end() {
       if (id != _current) return;
       _tick?.cancel();
+      _tick = null;
       _clock.stop();
       sending = false;
       receiving = false;

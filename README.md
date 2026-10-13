@@ -13,7 +13,8 @@ view. One Rust core does the networking and powers all three front ends.
 - **Streaming:** a response is shown as it arrives, Server-Sent Events are listed one
   by one, and a send can be stopped part way, keeping what came.
 - **GraphQL:** a query and variables editor, the server's schema to browse and write
-  queries from, and the errors a `200` response hides.
+  queries from, the errors a `200` response hides, and subscriptions over WebSocket
+  or Server-Sent Events.
 - **Tabs:** several requests open at once, each keeping its own edits and response.
 - **Find anything:** `⌘K` finds a saved request, an open tab, an environment or an
   action by a few letters of its name.
@@ -22,7 +23,7 @@ view. One Rust core does the networking and powers all three front ends.
   responses, and completion of `{{variables}}` and GraphQL fields.
 - **WebSocket:** connect, send messages and watch a timestamped log.
 - **gRPC:** load methods by server reflection or from a `.proto` file and call them with
-  JSON messages, including streaming methods.
+  JSON messages, including streaming methods, whose responses are shown as they arrive.
 - **Tests and chaining:** check each response with one-line tests, and capture values
   from it to use in later requests.
 - **Collections and environments:** `{{variables}}`, folders and standalone requests.
@@ -438,8 +439,32 @@ A new request moves to `POST`; set the method to `GET` to send the query in the 
 reqorb POST api.example.com/graphql --graphql @query.graphql --variables @vars.json --operation Users
 ```
 
-Not supported yet: subscriptions, persisted queries, file uploads, and completion
-while typing.
+### Subscriptions
+
+Sending a query whose operation is a `subscription` subscribes, at the same address as
+any other query. Each result the server sends is listed in the **Events** tab as it
+arrives, and **Stop** ends the subscription.
+
+- **WebSocket first:** reqorb opens a WebSocket at the address (`http(s)://` is read as
+  `ws(s)://`) and speaks `graphql-transport-ws`, or the older `graphql-ws` if that is
+  what the server chooses. The request's headers go with the handshake and again in
+  the opening message, where some servers look for the token.
+- **Server-Sent Events otherwise:** if the server will not open a WebSocket there, the
+  subscription is sent as a POST asking for `text/event-stream`. An address written
+  with `ws://` or `wss://` is only ever tried as a WebSocket.
+- **What comes back:** each result is an event named `next` holding the JSON the server
+  sent, and an `error` event if it ended badly. Over a WebSocket the status reads
+  `101 Switching Protocols`; tests and captures see the events as text, not as one
+  JSON body.
+- **CLI:** `reqorb POST <url> --graphql 'subscription { … }'` prints results as they
+  arrive until the server completes or you press Ctrl-C.
+
+Authorization that needs extra round trips (Digest, NTLM, OAuth 1.0 and the like)
+cannot go with a WebSocket handshake, so such a request falls back to Server-Sent
+Events. The errors of a subscription's results are not picked out under the status
+line as they are for a query.
+
+Not supported yet: persisted queries and file uploads.
 
 ## HAR, WebSocket and gRPC
 
@@ -451,9 +476,12 @@ while typing.
 - **WebSocket:** choose `WS` where the HTTP method goes. Headers and header-based
   authorization go with the handshake; `http(s)://` addresses are read as `ws(s)://`.
 - **gRPC:** choose `GRPC`. Methods come from server reflection or a `.proto` file, and
-  messages are written as JSON. A call sends all its messages and then collects every
-  response, which covers unary and all three streaming kinds; separate the messages of
-  a client stream with a line of `---`. An address without a scheme is not encrypted;
+  messages are written as JSON. A call sends all its messages first, which covers
+  unary and all three streaming kinds; separate the messages of a client stream with a
+  line of `---`. Responses are listed as they arrive, and **Stop** ends a server stream
+  that would otherwise go on, keeping what came (the status then reads `CANCELLED`). A
+  server stream has no time limit; other calls give up after 30 seconds. Messages cannot
+  be added to a client stream once the call has started. An address without a scheme is not encrypted;
   use `https://` or `grpcs://` for TLS.
 
 WebSocket and gRPC requests are saved in reqorb's own format only; Postman, Bruno and
@@ -506,6 +534,7 @@ crates/reqorb-core/src/     the request engine, used by everything else
                             following or stopping a send under way
   ws.rs  grpc.rs            the other two protocols
   graphql.rs                GraphQL over HTTP: the request, its errors, the schema
+  subscribe.rs              GraphQL subscriptions over a WebSocket
   auth/                     auth types, signing a request, negotiating with a server
   formats/                  one module per format, each with its import and export
   codegen/                  a request as code: one generator per language
