@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:reqorb/editor/code_controller.dart';
 import 'package:reqorb/editor/code_editor.dart';
 import 'package:reqorb/editor/code_formatter.dart';
+import 'package:reqorb/editor/folding.dart';
 import 'package:reqorb/editor/syntax.dart';
 import 'package:reqorb/graphql/graphql_complete.dart';
 import 'package:reqorb/main.dart';
@@ -499,11 +500,212 @@ void main() {
       expect(code.shownAs, CodeLanguage.json);
     });
 
+    Future<void> find_(WidgetTester tester, String query) async {
+      await tester.tap(find.byKey(const Key('code-find')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('code-find-field')), query);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('code-replace-toggle')));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('replaces matches one at a time', (tester) async {
+      await show(tester, text: 'cat Cat cat', language: CodeLanguage.plain);
+      await find_(tester, 'cat');
+      await tester.enterText(
+        find.byKey(const Key('code-replace-field')),
+        'concat',
+      );
+      await tester.tap(find.byKey(const Key('code-replace-one')));
+      await tester.pumpAndSettle();
+      // On to the next one, not the "cat" inside what was just put in.
+      expect(code.text, 'concat Cat cat');
+      expect(code.found[code.current].start, 7);
+      await tester.tap(find.byKey(const Key('code-replace-one')));
+      await tester.pumpAndSettle();
+      expect(code.text, 'concat concat cat');
+      await tester.tap(find.byKey(const Key('code-replace-one')));
+      await tester.pumpAndSettle();
+      expect(code.text, 'concat concat concat');
+    });
+
+    testWidgets('replaces every match at once', (tester) async {
+      await show(tester, text: 'a-b-a\n' * 3000, language: CodeLanguage.plain);
+      await find_(tester, 'A');
+      await tester.enterText(find.byKey(const Key('code-replace-field')), '');
+      await tester.tap(find.byKey(const Key('code-replace-all')));
+      await tester.pumpAndSettle();
+      // More than the search counts, and all of them gone.
+      expect(code.text, '-b-\n' * 3000);
+      expect(code.found, isEmpty);
+    });
+
+    testWidgets('code that is only shown offers no replace', (tester) async {
+      await show(tester, text: 'one two', readOnly: true);
+      await tester.tap(find.byKey(const Key('code-find')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('code-replace-toggle')), findsNothing);
+    });
+
+    testWidgets('tells whoever shows it of every change', (tester) async {
+      final heard = <String>[];
+      code = CodeController(text: 'a a');
+      addTearDown(code.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CodeEditor(
+              name: 'code',
+              controller: code,
+              language: CodeLanguage.pairs,
+              onChanged: heard.add,
+            ),
+          ),
+        ),
+      );
+      await tester.enterText(find.byKey(const Key('code')), 'k=(');
+      // Lines of names and values are not code: nothing is paired.
+      expect(heard, ['k=(']);
+    });
+
     testWidgets('code that is only shown cannot be changed', (tester) async {
       await show(tester, text: '{"a": 1}', readOnly: true);
       final field = tester.widget<TextField>(find.byKey(const Key('code')));
       expect(field.readOnly, isTrue);
       expect(find.byKey(const Key('code-gutter')), findsOneWidget);
+    });
+  });
+
+  group('folding', () {
+    const json =
+        '{\n  "a": {\n    "b": [\n      1,\n      "}"\n    ]\n  },\n  "c": 2\n}';
+
+    FoldedText fold(Set<int> lines) {
+      final regions = foldRegions(json, tokenize(json, CodeLanguage.json));
+      return foldText(json, regions, {
+        for (final region in regions)
+          if (lines.contains(region.line)) region.open,
+      });
+    }
+
+    test('finds the regions that span lines', () {
+      final regions = foldRegions(json, tokenize(json, CodeLanguage.json));
+      // The bracket in the string does not close anything.
+      expect([for (final r in regions) r.line], [1, 2, 3]);
+      expect(json[regions[2].close], ']');
+    });
+
+    test('nothing folded shows everything', () {
+      final shown = fold({});
+      expect(shown.text, json);
+      expect(shown.numbers, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      expect(shown.folds, [
+        false,
+        false,
+        false,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+      ]);
+    });
+
+    test('a folded region leaves a gap in the numbers', () {
+      final shown = fold({2});
+      expect(shown.text, '{\n  "a": {…},\n  "c": 2\n}');
+      expect(shown.numbers, [1, 2, 8, 9]);
+      expect(shown.folds, [false, true, null, null]);
+    });
+
+    test('a fold inside a folded one stays out of sight', () {
+      final shown = fold({1, 3});
+      expect(shown.text, '{…}');
+      expect(shown.numbers, [1]);
+    });
+
+    testWidgets('a response folds from its gutter, and a search unfolds it', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 500,
+              height: 400,
+              child: CodeView(name: 'view', text: json),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      String shown() => tester
+          .widget<TextField>(find.byKey(const Key('view')))
+          .controller!
+          .text;
+      final editable = tester
+          .state<EditableTextState>(find.byType(EditableText))
+          .renderEditable;
+      final gutter = tester.getRect(find.byKey(const Key('view-gutter')));
+      // The middle of the second line, in the gutter.
+      final line = editable.getLocalRectForCaret(
+        TextPosition(offset: json.indexOf('"a"')),
+      );
+      final at = Offset(
+        gutter.right - 9,
+        editable.localToGlobal(line.center).dy,
+      );
+      await tester.tapAt(at);
+      await tester.pumpAndSettle();
+      expect(shown(), '{\n  "a": {…},\n  "c": 2\n}');
+      await tester.tapAt(at);
+      await tester.pumpAndSettle();
+      expect(shown(), json);
+
+      await tester.tapAt(at);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('view-find')));
+      await tester.pumpAndSettle();
+      expect(shown(), json);
+    });
+  });
+
+  group('lines of names and values', () {
+    test('colours variables as they are written', () {
+      expect(
+        kinds(
+          '# off=1\nsecret token = abc\nbase_url=https://x',
+          CodeLanguage.pairs,
+        ),
+        [
+          ('# off=1', TokenKind.comment),
+          ('secret', TokenKind.keyword),
+          ('token', TokenKind.key),
+          ('base_url', TokenKind.key),
+        ],
+      );
+    });
+
+    test('colours a header up to its colon only', () {
+      expect(kinds('X-Id: a:b={{id}}', CodeLanguage.pairs), [
+        ('X-Id', TokenKind.key),
+        ('{{id}}', TokenKind.variable),
+      ]);
+    });
+
+    test('colours checks', () {
+      expect(
+        kinds('status == 200\nbody.name contains "x"', CodeLanguage.checks),
+        [
+          ('status', TokenKind.type),
+          ('==', TokenKind.keyword),
+          ('200', TokenKind.number),
+          ('body', TokenKind.type),
+          ('contains', TokenKind.keyword),
+          ('"x"', TokenKind.string),
+        ],
+      );
     });
   });
 

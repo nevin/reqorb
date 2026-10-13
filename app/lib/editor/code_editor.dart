@@ -3,6 +3,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:reqorb/editor/code_controller.dart';
 import 'package:reqorb/editor/code_formatter.dart';
+import 'package:reqorb/editor/folding.dart';
 import 'package:reqorb/editor/syntax.dart';
 import 'package:reqorb/shared/theme.dart';
 
@@ -22,13 +23,23 @@ typedef Completer = Suggestions? Function(
   required bool asked,
 });
 
+/// What the gutter needs to show code with parts folded away: the number
+/// of each shown line, whether it folds (null if not) and is folded, and
+/// what to call when the fold on a shown line is tapped.
+typedef Folds = ({
+  List<int> numbers,
+  List<bool?> state,
+  ValueChanged<int> toggle,
+});
+
 /// A field for code: coloured by language, with numbered lines, matching
-/// brackets, a search, and completion of `{{variables}}`.
+/// brackets, find and replace, and completion of `{{variables}}`.
 ///
 /// The text field inside carries [name] as its key; the parts around it
 /// are keyed `<name>-gutter`, `<name>-find`, `<name>-find-field`,
 /// `<name>-find-count`, `<name>-find-next`, `<name>-find-previous`,
-/// `<name>-find-close` and `<name>-suggestion-<n>`.
+/// `<name>-find-close`, `<name>-replace-toggle`, `<name>-replace-field`,
+/// `<name>-replace-one`, `<name>-replace-all` and `<name>-suggestion-<n>`.
 class CodeEditor extends StatefulWidget {
   const CodeEditor({
     super.key,
@@ -37,12 +48,25 @@ class CodeEditor extends StatefulWidget {
     this.language,
     this.readOnly = false,
     this.hint,
+    this.hintLines = 1,
     this.variables = const [],
     this.complete,
+    this.folds,
+    this.onFind,
+    this.onChanged,
   });
 
   final String name;
   final CodeController controller;
+
+  /// Set when the text shown has parts folded away.
+  final Folds? folds;
+
+  /// Called as a search opens.
+  final VoidCallback? onFind;
+
+  /// Called when the text changes, however it was changed.
+  final ValueChanged<String>? onChanged;
 
   /// What the code is written in; null to go by how it looks.
   final CodeLanguage? language;
@@ -52,6 +76,11 @@ class CodeEditor extends StatefulWidget {
   final bool readOnly;
 
   final String? hint;
+
+  /// How many lines of [hint] to show. One, unless the editor is sure of
+  /// its height: more could spill out of a pane cut short by the
+  /// on-screen keyboard.
+  final int hintLines;
 
   /// Names offered after `{{`.
   final List<String> variables;
@@ -70,13 +99,19 @@ class _CodeEditorState extends State<CodeEditor> {
   final _row = GlobalKey();
   late final _formatter = CodeFormatter(
     // Text nobody has labelled may yet turn out to be code.
-    pairs: () => widget.language != CodeLanguage.plain,
+    pairs: () => widget.language?.bracketed ?? true,
   );
 
   // Search.
   bool _finding = false;
   final _query = TextEditingController();
   final _queryFocus = FocusNode();
+  bool _replacing = false;
+  final _replacement = TextEditingController();
+  final _replaceFocus = FocusNode();
+
+  /// Where the gutter last drew each line, for finding the one tapped.
+  final _drawn = <(int, Rect)>[];
 
   // Completion.
   final _popup = OverlayPortalController();
@@ -119,6 +154,8 @@ class _CodeEditorState extends State<CodeEditor> {
     _focus.dispose();
     _query.dispose();
     _queryFocus.dispose();
+    _replacement.dispose();
+    _replaceFocus.dispose();
     super.dispose();
   }
 
@@ -155,13 +192,16 @@ class _CodeEditorState extends State<CodeEditor> {
       return;
     }
     _lastText = text;
+    widget.onChanged?.call(text);
     if (_finding) _search(keep: true);
     _suggest();
   }
 
   // --------------------------------------------------------------- search
 
-  void _openFind() {
+  void _openFind({bool replace = false}) {
+    widget.onFind?.call();
+    if (replace && !widget.readOnly) _replacing = true;
     final selection = _code.selection;
     // Start from what is selected, if it is something one would look for.
     if (selection.isValid && !selection.isCollapsed) {
@@ -178,7 +218,10 @@ class _CodeEditorState extends State<CodeEditor> {
   }
 
   void _closeFind() {
-    setState(() => _finding = false);
+    setState(() {
+      _finding = false;
+      _replacing = false;
+    });
     _code.mark(const [], -1);
     _focus.requestFocus();
   }
@@ -236,6 +279,50 @@ class _CodeEditorState extends State<CodeEditor> {
       if (!mounted) return;
       _editable()?.bringIntoView(TextPosition(offset: range.start));
     });
+  }
+
+  /// Puts the replacement where the match the search is on was, and moves
+  /// on to the next.
+  void _replaceOne() {
+    final current = _code.current;
+    if (widget.readOnly || current < 0) return;
+    final range = _code.found[current];
+    final with_ = _replacement.text;
+    final after = range.start + with_.length;
+    _edit(
+      _code.text.replaceRange(range.start, range.end, with_),
+      TextSelection.collapsed(offset: after),
+    );
+    // The search has followed the edit. On to the next match after what
+    // was put in, which may itself hold what is being looked for.
+    final found = _code.found;
+    if (found.isEmpty) return;
+    final next = found.indexWhere((match) => match.start >= after);
+    _code.mark(found, next < 0 ? 0 : next);
+    setState(() {});
+    _reveal();
+  }
+
+  /// Replaces every match, however many, as one edit.
+  void _replaceAll() {
+    final query = _query.text.toLowerCase();
+    if (widget.readOnly || query.isEmpty) return;
+    final text = _code.text;
+    final lower = text.toLowerCase();
+    final with_ = _replacement.text;
+    final next = StringBuffer();
+    var from = 0;
+    var at = lower.indexOf(query);
+    if (at < 0) return;
+    while (at >= 0) {
+      next
+        ..write(text.substring(from, at))
+        ..write(with_);
+      from = at + query.length;
+      at = lower.indexOf(query, from);
+    }
+    next.write(text.substring(from));
+    _edit(next.toString(), const TextSelection.collapsed(offset: 0));
   }
 
   // ----------------------------------------------------------- completion
@@ -330,6 +417,7 @@ class _CodeEditorState extends State<CodeEditor> {
     _dismiss();
     final next = text.replaceRange(start, caret, item.insert);
     _lastText = next;
+    widget.onChanged?.call(next);
     _code.value = TextEditingValue(
       text: next,
       selection: TextSelection.collapsed(offset: start + item.insert.length),
@@ -346,8 +434,15 @@ class _CodeEditorState extends State<CodeEditor> {
     final command = keyboard.isMetaPressed || keyboard.isControlPressed;
 
     if (command && key == LogicalKeyboardKey.keyF) {
-      _openFind();
+      _openFind(replace: keyboard.isAltPressed);
       return KeyEventResult.handled;
+    }
+    if (_replaceFocus.hasFocus) {
+      if (key == LogicalKeyboardKey.escape) {
+        _closeFind();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
     }
     if (_queryFocus.hasFocus) {
       if (key == LogicalKeyboardKey.escape) {
@@ -490,9 +585,7 @@ class _CodeEditorState extends State<CodeEditor> {
         focusedBorder: InputBorder.none,
         contentPadding: const EdgeInsets.fromLTRB(8, 12, 12, 12),
         hintText: widget.hint,
-        // One line, so it cannot spill out of a pane cut short by the
-        // on-screen keyboard.
-        hintMaxLines: 1,
+        hintMaxLines: widget.hintLines,
       ),
     );
 
@@ -521,24 +614,37 @@ class _CodeEditorState extends State<CodeEditor> {
                 listenable: _code,
                 builder: (context, _) {
                   final lines = '\n'.allMatches(_code.text).length + 1;
-                  final digits = lines.toString().length.clamp(2, 9);
+                  final folds = widget.folds;
+                  final last = folds == null || folds.numbers.isEmpty
+                      ? lines
+                      : folds.numbers.last;
+                  final digits = last.toString().length.clamp(2, 9);
                   return Row(
                     key: _row,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      SizedBox(
+                      GestureDetector(
                         key: Key('$name-gutter'),
-                        width: digit * digits + 14,
-                        child: CustomPaint(
-                          painter: _Gutter(
-                            code: _code,
-                            scroll: _scroll,
-                            editable: () => _editable()?.renderEditable,
-                            row: () => _row.currentContext?.findRenderObject(),
-                            style: gutterStyle,
-                            currentColor: scheme.onSurface,
-                            textScaler: MediaQuery.textScalerOf(context),
-                            width: constraints.maxWidth,
+                        behavior: HitTestBehavior.opaque,
+                        onTapUp: folds == null
+                            ? null
+                            : (tap) => _tapGutter(tap.localPosition.dy),
+                        child: SizedBox(
+                          width: digit * digits + (folds == null ? 14 : 28),
+                          child: CustomPaint(
+                            painter: _Gutter(
+                              folds: folds,
+                              drawn: _drawn,
+                              code: _code,
+                              scroll: _scroll,
+                              editable: () => _editable()?.renderEditable,
+                              row: () =>
+                                  _row.currentContext?.findRenderObject(),
+                              style: gutterStyle,
+                              currentColor: scheme.onSurface,
+                              textScaler: MediaQuery.textScalerOf(context),
+                              width: constraints.maxWidth,
+                            ),
                           ),
                         ),
                       ),
@@ -559,6 +665,18 @@ class _CodeEditorState extends State<CodeEditor> {
         ),
       ),
     );
+  }
+
+  void _tapGutter(double y) {
+    final folds = widget.folds;
+    if (folds == null) return;
+    for (final (line, rect) in _drawn) {
+      if (y < rect.top || y >= rect.bottom) continue;
+      if (line < folds.state.length && folds.state[line] != null) {
+        folds.toggle(line);
+      }
+      return;
+    }
   }
 
   Widget _findButton(ColorScheme scheme) => Opacity(
@@ -585,74 +703,141 @@ class _CodeEditorState extends State<CodeEditor> {
     final name = widget.name;
     final found = _code.found;
     final none = _query.text.isNotEmpty && found.isEmpty;
-    Widget button(String key, String tip, IconData icon, VoidCallback? onTap) =>
-        IconButton(
-          key: Key('$name-find-$key'),
-          tooltip: tip,
-          iconSize: 16,
-          visualDensity: VisualDensity.compact,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-          icon: Icon(icon),
-          onPressed: onTap,
-        );
+    final compact = TextButton.styleFrom(
+      visualDensity: VisualDensity.compact,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      minimumSize: const Size(0, 28),
+      textStyle: theme.textTheme.labelMedium,
+    );
+    Widget button(
+      String key,
+      String tip,
+      IconData icon,
+      VoidCallback? onTap, {
+      String? at,
+    }) => IconButton(
+      key: Key(at ?? '$name-find-$key'),
+      tooltip: tip,
+      iconSize: 16,
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+      icon: Icon(icon),
+      onPressed: onTap,
+    );
     return Material(
       elevation: 3,
       color: scheme.surfaceContainerHigh,
       borderRadius: BorderRadius.circular(8),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(8, 2, 2, 2),
-        child: Row(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              width: 150,
-              child: TextField(
-                key: Key('$name-find-field'),
-                controller: _query,
-                focusNode: _queryFocus,
-                autocorrect: false,
-                enableSuggestions: false,
-                style: theme.textTheme.bodyMedium?.copyWith(fontSize: 13),
-                decoration: const InputDecoration(
-                  isDense: true,
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(vertical: 6),
-                  hintText: 'Find',
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!widget.readOnly)
+                  button(
+                    'toggle',
+                    _replacing
+                        ? 'Hide replace'
+                        : 'Replace ($shortcutModifier⌥F)',
+                    _replacing ? Icons.expand_more : Icons.chevron_right,
+                    () => setState(() => _replacing = !_replacing),
+                    at: '$name-replace-toggle',
+                  ),
+                SizedBox(
+                  width: 150,
+                  child: TextField(
+                    key: Key('$name-find-field'),
+                    controller: _query,
+                    focusNode: _queryFocus,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    style: theme.textTheme.bodyMedium?.copyWith(fontSize: 13),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      contentPadding: EdgeInsets.symmetric(vertical: 6),
+                      hintText: 'Find',
+                    ),
+                    onChanged: (_) => _search(),
+                    // Stays in the field, ready for the next one.
+                    onEditingComplete: () => _step(1),
+                  ),
                 ),
-                onChanged: (_) => _search(),
-                // Stays in the field, ready for the next one.
-                onEditingComplete: () => _step(1),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              child: Text(
-                found.isEmpty
-                    ? (none ? 'None' : '')
-                    : '${_code.current + 1} of ${found.length}'
-                          '${found.length >= _mostMatches ? '+' : ''}',
-                key: Key('$name-find-count'),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: none ? scheme.error : scheme.onSurfaceVariant,
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Text(
+                    found.isEmpty
+                        ? (none ? 'None' : '')
+                        : '${_code.current + 1} of ${found.length}'
+                              '${found.length >= _mostMatches ? '+' : ''}',
+                    key: Key('$name-find-count'),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: none ? scheme.error : scheme.onSurfaceVariant,
+                    ),
+                  ),
                 ),
+                button(
+                  'previous',
+                  'Previous (⇧Enter)',
+                  Icons.keyboard_arrow_up,
+                  found.isEmpty ? null : () => _step(-1),
+                ),
+                button(
+                  'next',
+                  'Next (Enter)',
+                  Icons.keyboard_arrow_down,
+                  found.isEmpty ? null : () => _step(1),
+                ),
+                button('close', 'Close (Esc)', Icons.close, _closeFind),
+              ],
+            ),
+            if (_replacing && !widget.readOnly)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(width: 28),
+                  SizedBox(
+                    width: 150,
+                    child: TextField(
+                      key: Key('$name-replace-field'),
+                      controller: _replacement,
+                      focusNode: _replaceFocus,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      style: theme.textTheme.bodyMedium?.copyWith(fontSize: 13),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(vertical: 6),
+                        hintText: 'Replace with',
+                      ),
+                      onEditingComplete: _replaceOne,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  TextButton(
+                    key: Key('$name-replace-one'),
+                    style: compact,
+                    onPressed: found.isEmpty ? null : _replaceOne,
+                    child: const Text('Replace'),
+                  ),
+                  TextButton(
+                    key: Key('$name-replace-all'),
+                    style: compact,
+                    onPressed: found.isEmpty ? null : _replaceAll,
+                    child: const Text('All'),
+                  ),
+                ],
               ),
-            ),
-            button(
-              'previous',
-              'Previous (⇧Enter)',
-              Icons.keyboard_arrow_up,
-              found.isEmpty ? null : () => _step(-1),
-            ),
-            button(
-              'next',
-              'Next (Enter)',
-              Icons.keyboard_arrow_down,
-              found.isEmpty ? null : () => _step(1),
-            ),
-            button('close', 'Close (Esc)', Icons.close, _closeFind),
           ],
         ),
       ),
@@ -799,6 +984,8 @@ class _SuggestionListState extends State<_SuggestionList> {
 /// is, so the numbers stay with their lines however those wrap.
 class _Gutter extends CustomPainter {
   _Gutter({
+    required this.folds,
+    required this.drawn,
     required this.code,
     required this.scroll,
     required this.editable,
@@ -809,6 +996,10 @@ class _Gutter extends CustomPainter {
     required this.width,
   }) : super(repaint: Listenable.merge([code, scroll]));
 
+  final Folds? folds;
+
+  /// Filled with each line drawn and where, for whoever handles taps.
+  final List<(int, Rect)> drawn;
   final CodeController code;
   final ScrollController scroll;
   final RenderEditable? Function() editable;
@@ -824,6 +1015,8 @@ class _Gutter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    drawn.clear();
+    final folds = this.folds;
     final editable = this.editable();
     if (editable == null || !editable.attached || !editable.hasSize) return;
     final text = code.text;
@@ -867,9 +1060,36 @@ class _Gutter extends CustomPainter {
       if (rect.top > size.height) break;
       final end = line + 1 < starts.length ? starts[line + 1] : text.length + 1;
       final current = caret >= starts[line] && caret < end;
+      drawn.add((line, rect));
+      final shown = folds != null && line < folds.numbers.length
+          ? folds.numbers[line]
+          : line + 1;
+      final folded = folds != null && line < folds.state.length
+          ? folds.state[line]
+          : null;
+      if (folded != null) {
+        // A small arrow: down over what is open, sideways at what is shut.
+        final centre = Offset(size.width - 9, rect.center.dy);
+        final arrow = Path();
+        if (folded) {
+          arrow
+            ..moveTo(centre.dx - 2, centre.dy - 4)
+            ..lineTo(centre.dx + 3, centre.dy)
+            ..lineTo(centre.dx - 2, centre.dy + 4);
+        } else {
+          arrow
+            ..moveTo(centre.dx - 4, centre.dy - 2)
+            ..lineTo(centre.dx, centre.dy + 3)
+            ..lineTo(centre.dx + 4, centre.dy - 2);
+        }
+        canvas.drawPath(
+          arrow..close(),
+          Paint()..color = folded ? currentColor : style.color!,
+        );
+      }
       final number = TextPainter(
         text: TextSpan(
-          text: '${line + 1}',
+          text: '$shown',
           style: current ? style.copyWith(color: currentColor) : style,
         ),
         textDirection: TextDirection.ltr,
@@ -878,7 +1098,7 @@ class _Gutter extends CustomPainter {
       number.paint(
         canvas,
         Offset(
-          size.width - number.width - 6,
+          size.width - number.width - (folds == null ? 6 : 20),
           rect.top + (rect.height - number.height) / 2,
         ),
       );
@@ -890,6 +1110,7 @@ class _Gutter extends CustomPainter {
   @override
   bool shouldRepaint(_Gutter old) =>
       old.code != code ||
+      old.folds != folds ||
       old.style != style ||
       old.currentColor != currentColor ||
       old.width != width ||
@@ -915,11 +1136,24 @@ class CodeView extends StatefulWidget {
 
 class _CodeViewState extends State<CodeView> {
   late final _code = CodeController(text: widget.text);
+  List<FoldRegion> _regions = const [];
+  final _folded = <int>{};
+  FoldedText? _shown;
+
+  @override
+  void initState() {
+    super.initState();
+    _measure();
+  }
 
   @override
   void didUpdateWidget(CodeView old) {
     super.didUpdateWidget(old);
-    if (old.text != widget.text) _code.text = widget.text;
+    if (old.text != widget.text || old.language != widget.language) {
+      _folded.clear();
+      _measure();
+      _code.text = widget.text;
+    }
   }
 
   @override
@@ -928,11 +1162,66 @@ class _CodeViewState extends State<CodeView> {
     super.dispose();
   }
 
+  /// Finds what can be folded in the text.
+  void _measure() {
+    final text = widget.text;
+    final language = widget.language ?? CodeLanguage.sniff(text);
+    _regions = text.length > highlightLimit || !folds(language)
+        ? const []
+        : foldRegions(text, tokenize(text, language));
+    _shown = _regions.isEmpty ? null : foldText(text, _regions, _folded);
+  }
+
+  void _toggle(int line) {
+    final open = _shown!.opens[line];
+    if (open < 0) return;
+    if (!_folded.remove(open)) _folded.add(open);
+    _show();
+  }
+
+  void _show() {
+    setState(() => _shown = foldText(widget.text, _regions, _folded));
+    _code.text = _shown!.text;
+  }
+
+  /// A search looks through everything, folded or not.
+  void _unfold() {
+    if (_folded.isEmpty) return;
+    _folded.clear();
+    _show();
+  }
+
   @override
-  Widget build(BuildContext context) => CodeEditor(
-    name: widget.name,
-    controller: _code,
-    language: widget.language,
-    readOnly: true,
+  Widget build(BuildContext context) {
+    final shown = _shown;
+    return CodeEditor(
+      name: widget.name,
+      controller: _code,
+      language: widget.language,
+      readOnly: true,
+      folds: shown == null
+          ? null
+          : (numbers: shown.numbers, state: shown.folds, toggle: _toggle),
+      onFind: _unfold,
+    );
+  }
+}
+
+/// A [CodeEditor] of a fixed height with a border round it, for a form.
+class CodeBox extends StatelessWidget {
+  const CodeBox({super.key, required this.height, required this.child});
+
+  final double height;
+  final CodeEditor child;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: height,
+    clipBehavior: Clip.antiAlias,
+    decoration: BoxDecoration(
+      border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+      borderRadius: BorderRadius.circular(6),
+    ),
+    child: child,
   );
 }

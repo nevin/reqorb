@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:reqorb/editor/syntax.dart';
+import 'package:reqorb/editor/code_editor.dart';
+import 'package:reqorb/editor/code_controller.dart';
 
 import 'package:reqorb/response/response_view.dart';
 import 'package:reqorb/src/rust/api/core.dart';
@@ -45,9 +48,13 @@ class GrpcComposer extends StatelessWidget {
     required this.onMethod,
     required this.onReflect,
     required this.onChooseProto,
+    this.variables = const [],
   });
 
-  final TextEditingController controller;
+  /// Names of the variables in reach, offered after `{{`.
+  final List<String> variables;
+
+  final CodeController controller;
 
   /// The server's methods, once loaded.
   final GrpcSchema? schema;
@@ -149,24 +156,12 @@ class GrpcComposer extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: TextField(
-            key: const Key('grpc-message'),
+          child: CodeEditor(
+            name: 'grpc-message',
             controller: controller,
-            maxLines: null,
-            expands: true,
-            autocorrect: false,
-            enableSuggestions: false,
-            smartQuotesType: SmartQuotesType.disabled,
-            smartDashesType: SmartDashesType.disabled,
-            textAlignVertical: TextAlignVertical.top,
-            style: mono,
-            decoration: const InputDecoration(
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              contentPadding: EdgeInsets.all(12),
-              hintText: 'The request message as JSON, such as {"name": "x"}',
-            ),
+            language: CodeLanguage.json,
+            hint: 'The request message as JSON, such as {"name": "x"}',
+            variables: variables,
           ),
         ),
       ],

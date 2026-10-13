@@ -62,13 +62,13 @@ class _RequestPageState extends State<RequestPage> {
   RequestDraft get _draft => _tab.draft;
 
   TextEditingController get _url => _draft.url;
-  TextEditingController get _headers => _draft.headers;
-  TextEditingController get _tests => _draft.tests;
-  TextEditingController get _captures => _draft.captures;
+  CodeController get _headers => _draft.headers;
+  CodeController get _tests => _draft.tests;
+  CodeController get _captures => _draft.captures;
   CodeController get _body => _draft.body;
-  TextEditingController get _urlEncoded => _draft.urlEncoded;
+  CodeController get _urlEncoded => _draft.urlEncoded;
   TextEditingController get _binary => _draft.binary;
-  TextEditingController get _params => _draft.params;
+  CodeController get _params => _draft.params;
 
   String get _method => _draft.method;
   set _method(String value) => _draft.method = value;
@@ -774,7 +774,12 @@ class _RequestPageState extends State<RequestPage> {
     final request = RequestEditor(
       params: _params,
       headers: _headers,
-      tests: TestsEditor(tests: _tests, captures: _captures),
+      variables: _variableNames,
+      tests: TestsEditor(
+        tests: _tests,
+        captures: _captures,
+        variables: _variableNames,
+      ),
       edits: _edits,
       badges: _badges,
       message: _isGrpc
@@ -787,10 +792,16 @@ class _RequestPageState extends State<RequestPage> {
               onMethod: _grpcSelect,
               onReflect: _grpcLoad,
               onChooseProto: _grpcChooseProto,
+              variables: _variableNames,
             )
           : !_isWs
           ? null
-          : WsComposer(controller: _body, connected: _wsOpen, onSend: _wsSend),
+          : WsComposer(
+              controller: _body,
+              connected: _wsOpen,
+              onSend: _wsSend,
+              variables: _variableNames,
+            ),
       body: BodyEditor(
         mode: _bodyMode,
         onModeChanged: _setBodyMode,

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:reqorb/editor/code_editor.dart';
+import 'package:reqorb/editor/code_controller.dart';
 
 import 'package:reqorb/src/rust/api/core.dart';
 import 'package:reqorb/shared/theme.dart';
@@ -225,9 +227,13 @@ class WsComposer extends StatelessWidget {
     required this.controller,
     required this.connected,
     required this.onSend,
+    this.variables = const [],
   });
 
-  final TextEditingController controller;
+  final CodeController controller;
+
+  /// Names of the variables in reach, offered after `{{`.
+  final List<String> variables;
   final bool connected;
   final VoidCallback onSend;
 
@@ -238,24 +244,12 @@ class WsComposer extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          child: TextField(
-            key: const Key('ws-message'),
+          // A message is often JSON, but need not be: coloured as it looks.
+          child: CodeEditor(
+            name: 'ws-message',
             controller: controller,
-            maxLines: null,
-            expands: true,
-            autocorrect: false,
-            enableSuggestions: false,
-            smartQuotesType: SmartQuotesType.disabled,
-            smartDashesType: SmartDashesType.disabled,
-            textAlignVertical: TextAlignVertical.top,
-            style: mono,
-            decoration: const InputDecoration(
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              contentPadding: EdgeInsets.all(12),
-              hintText: 'Message to send, such as {"type": "ping"}',
-            ),
+            hint: 'Message to send, such as {"type": "ping"}',
+            variables: variables,
           ),
         ),
         Padding(

@@ -27,16 +27,16 @@ class RequestDraft extends ChangeNotifier {
   final url = TextEditingController();
 
   /// Headers as `Name: value` lines.
-  final headers = TextEditingController();
+  final headers = CodeController();
 
   /// The URL's query string as `key:value` lines, for the Params tab.
-  final params = TextEditingController();
+  final params = CodeController();
 
   /// The raw body, or the message of a WebSocket or gRPC request.
   final body = CodeController();
 
   /// Url-encoded fields as `key: value` lines.
-  final urlEncoded = TextEditingController();
+  final urlEncoded = CodeController();
 
   /// A GraphQL query and its variables, the latter as JSON.
   final graphqlQuery = CodeController();
@@ -49,8 +49,8 @@ class RequestDraft extends ChangeNotifier {
   final binary = TextEditingController();
 
   /// Tests and captures, one per line.
-  final tests = TextEditingController();
-  final captures = TextEditingController();
+  final tests = CodeController();
+  final captures = CodeController();
 
   /// An HTTP method, or `WS` or `GRPC`.
   String method = 'GET';

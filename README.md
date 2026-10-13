@@ -13,9 +13,9 @@ view. One Rust core does the networking and powers all three front ends.
 - **GraphQL:** a query and variables editor, the server's schema to browse and write
   queries from, and the errors a `200` response hides.
 - **Tabs:** several requests open at once, each keeping its own edits and response.
-- **Code editor:** bodies, GraphQL queries and responses are coloured by language, with
-  line numbers, matching brackets, search, and completion of `{{variables}}` and of
-  GraphQL fields from the server's schema.
+- **Code editor:** bodies, GraphQL queries, messages, tests, variables and responses are
+  coloured by language, with line numbers, bracket matching, find and replace, folding of
+  responses, and completion of `{{variables}}` and GraphQL fields.
 - **WebSocket:** connect, send messages and watch a timestamped log.
 - **gRPC:** load methods by server reflection or from a `.proto` file and call them with
   JSON messages, including streaming methods.
@@ -271,19 +271,30 @@ whether to save them. `⌘N` opens a tab and `⌘W` closes one (`Ctrl` elsewhere
 
 ## The code editor
 
-Raw bodies, GraphQL queries and variables, and response bodies share one editor.
+Raw bodies, GraphQL queries and variables, WebSocket and gRPC messages, tests and
+captures, bulk-edited params and headers, environment variables, and response bodies
+share one editor.
 
 - **Colouring** for JSON, GraphQL, XML and HTML, and JavaScript. A raw body is coloured
   as its **Type**, or by how it starts when none is chosen; a response by its
-  `Content-Type`. `{{variables}}` stand out in any of them. Text over 200 KB is shown
+  `Content-Type`. `{{variables}}` stand out in any of them. Lines of `name=value` or
+  `name: value` show the name, a `#` line that is switched off and the word `secret`
+  apart; tests show what they read and how they compare. Text over 200 KB is shown
   plain, so that scrolling stays quick.
 - **Line numbers** that stay with their lines when long ones wrap.
 - **Brackets:** the partner of the bracket beside the caret is marked. Typing `{`, `[`,
   `(` or `"` adds the closing one, a new line keeps the indentation and goes a level
   deeper after an opening bracket, and `Tab` / `Shift+Tab` indent and outdent the
   selected lines by the indent chosen in Settings.
-- **Search:** `⌘F`, or the magnifier in the corner, finds text without regard to case;
-  `Enter` and `Shift+Enter` step through the matches. It works in responses too.
+- **Find and replace:** `⌘F`, or the magnifier in the corner, finds text without regard
+  to case; `Enter` and `Shift+Enter` step through the matches. It works in responses
+  too. Where the text can be edited, the arrow beside the search (or `⌘⌥F`) adds a
+  **Replace with** field: **Replace** changes the match the search is on and moves to
+  the next, **All** changes every one as a single edit.
+- **Folding:** in a JSON, GraphQL or JavaScript response, an arrow in the gutter beside
+  a line that opens a `{`, `[` or `(` folds everything up to its partner into `…`. The
+  line numbers keep their places, so a gap shows what is folded. Searching unfolds
+  everything. Folding is for responses only, not for text being edited.
 - **Completion:** typing `{{` lists the variables in reach: the active environment's,
   the collection's, and those captured this session. In a GraphQL query, once the
   schema has been fetched, the fields of the type being selected from and the
@@ -403,7 +414,8 @@ app/lib/                    the Flutter UI, one folder per feature
   bridge/                   Engine: the one interface to the Rust library
   request/                  the main page, the request model, the send session and the editors
   response/  protocols/     the response pane; WebSocket and gRPC sessions and views
-  editor/                   the code editor: colouring, typing aids, search, completion
+  editor/                   the code editor: colouring, typing aids, find and replace,
+                            folding, completion
   graphql/                  the GraphQL editor, schema browser and schema session
   sidebar/  environments/  settings/  har/  history/
   transfer/                 import and export actions

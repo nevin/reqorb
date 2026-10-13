@@ -71,7 +71,7 @@ class BodyEditor extends StatelessWidget {
   final ValueChanged<String> onRawLanguageChanged;
 
   /// Url-encoded fields as `key: value` lines.
-  final TextEditingController urlEncoded;
+  final CodeController urlEncoded;
   final bool urlEncodedBulk;
   final ValueChanged<bool> onUrlEncodedBulkChanged;
 
@@ -160,6 +160,7 @@ class BodyEditor extends StatelessWidget {
               bulk: urlEncodedBulk,
               onBulkChanged: onUrlEncodedBulkChanged,
               bulkHint: 'username: alice\ngrant_type: password',
+              variables: variables,
             ),
             BodyMode.formData => formData,
             BodyMode.graphQl => graphql,

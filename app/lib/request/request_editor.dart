@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:reqorb/editor/code_controller.dart';
 import 'package:reqorb/request/key_value_editor.dart';
 
 typedef RequestBadges = ({
@@ -29,10 +30,14 @@ class RequestEditor extends StatelessWidget {
     required this.edits,
     required this.badges,
     this.message,
+    this.variables = const [],
   });
 
-  final TextEditingController params;
-  final TextEditingController headers;
+  /// Names of the variables in reach, offered after `{{`.
+  final List<String> variables;
+
+  final CodeController params;
+  final CodeController headers;
   final Widget body;
   final Widget auth;
   final Widget cookies;
@@ -127,6 +132,7 @@ class RequestEditor extends StatelessWidget {
                   onBulkChanged: (value) => onBulkChanged('params', value),
                   separator: ':',
                   bulkHint: 'page:1\nlimit:{{pageSize}}',
+                  variables: variables,
                 ),
                 KeyValueEditor(
                   controller: headers,
@@ -134,6 +140,7 @@ class RequestEditor extends StatelessWidget {
                   bulk: bulk.contains('headers'),
                   onBulkChanged: (value) => onBulkChanged('headers', value),
                   bulkHint: 'Accept: application/json\nX-Request-Id: {{id}}',
+                  variables: variables,
                 ),
                 message ?? body,
                 _form(auth),

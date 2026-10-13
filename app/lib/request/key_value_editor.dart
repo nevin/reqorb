@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:reqorb/editor/syntax.dart';
+import 'package:reqorb/editor/code_editor.dart';
+import 'package:reqorb/editor/code_controller.dart';
 
 import 'package:reqorb/shared/theme.dart';
 
@@ -57,12 +60,16 @@ class KeyValueEditor extends StatefulWidget {
     required this.bulk,
     required this.onBulkChanged,
     required this.bulkHint,
+    this.variables = const [],
     this.keyLabel = 'Key',
     this.valueLabel = 'Value',
     this.separator = ': ',
   });
 
-  final TextEditingController controller;
+  final CodeController controller;
+
+  /// Names of the variables in reach, offered after `{{`.
+  final List<String> variables;
 
   /// Prefix for widget keys; the bulk text field's key is exactly this.
   final String name;
@@ -227,24 +234,13 @@ class _KeyValueEditorState extends State<KeyValueEditor> {
   }
 
   Widget _bulk() {
-    return TextField(
-      key: Key(widget.name),
+    return CodeEditor(
+      name: widget.name,
       controller: widget.controller,
-      maxLines: null,
-      expands: true,
-      autocorrect: false,
-      enableSuggestions: false,
-      smartQuotesType: SmartQuotesType.disabled,
-      smartDashesType: SmartDashesType.disabled,
-      textAlignVertical: TextAlignVertical.top,
-      style: mono,
-      decoration: InputDecoration(
-        border: InputBorder.none,
-        enabledBorder: InputBorder.none,
-        focusedBorder: InputBorder.none,
-        contentPadding: const EdgeInsets.all(12),
-        hintText: widget.bulkHint,
-      ),
+      language: CodeLanguage.pairs,
+      hint: widget.bulkHint,
+      hintLines: 2,
+      variables: widget.variables,
     );
   }
 

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:reqorb/editor/syntax.dart';
+import 'package:reqorb/editor/code_editor.dart';
+import 'package:reqorb/editor/code_controller.dart';
 
 import 'package:reqorb/shared/messages.dart';
 import 'package:reqorb/transfer/import_actions.dart';
 import 'package:reqorb/transfer/export_actions.dart';
 import 'package:reqorb/src/rust/api/core.dart';
-import 'package:reqorb/shared/theme.dart';
 import 'package:reqorb/workspace/workspace_store.dart';
 
 /// `KEY=value` per line. A leading `#` marks a disabled variable, and the
@@ -48,7 +50,11 @@ class EnvironmentsPage extends StatefulWidget {
 
 class _EnvironmentsPageState extends State<EnvironmentsPage> {
   final _name = TextEditingController();
-  final _variables = TextEditingController();
+  final _variables = CodeController();
+
+  /// Set while an environment is being put into the fields, which is not
+  /// an edit of it.
+  bool _showing = false;
   int _index = 0;
   bool _nameTaken = false;
 
@@ -76,12 +82,15 @@ class _EnvironmentsPageState extends State<EnvironmentsPage> {
     _nameTaken = false;
     if (index < _store.environments.length) {
       final environment = _store.environments[index];
+      _showing = true;
       _name.text = environment.name;
       _variables.text = variablesToText(environment.variables);
+      _showing = false;
     }
   }
 
   void _edited() {
+    if (_showing) return;
     final name = _name.text.trim();
     final current = _store.environments[_index];
     final nameOk = _store.canRename(_index, name);
@@ -302,31 +311,42 @@ class _EnvironmentsPageState extends State<EnvironmentsPage> {
               ),
               const SizedBox(height: 12),
               Expanded(
-                child: TextField(
-                  key: const Key('env-variables'),
-                  smartQuotesType: SmartQuotesType.disabled,
-                  smartDashesType: SmartDashesType.disabled,
-                  controller: _variables,
-                  maxLines: null,
-                  expands: true,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  textAlignVertical: TextAlignVertical.top,
-                  style: mono,
-                  decoration: const InputDecoration(
-                    labelText: 'Variables',
-                    alignLabelWithHint: true,
-                    hintText:
-                        'base_url=https://api.example.com\n'
-                        'secret session=abc123',
-                    helperText:
-                        'One KEY=value per line. Start a line with # to '
-                        'disable it, or with the word secret to keep its '
-                        'value encrypted on disk and out of redacted '
-                        'exports. Use {{KEY}} in a request.',
-                    helperMaxLines: 3,
-                  ),
-                  onChanged: (_) => _edited(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Variables',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: 6),
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, box) => CodeBox(
+                          height: box.maxHeight,
+                          child: CodeEditor(
+                            name: 'env-variables',
+                            controller: _variables,
+                            language: CodeLanguage.pairs,
+                            hint:
+                                'base_url=https://api.example.com\n'
+                                'secret session=abc123',
+                            hintLines: 2,
+                            onChanged: (_) => _edited(),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'One KEY=value per line. Start a line with # to '
+                      'disable it, or with the word secret to keep its '
+                      'value encrypted on disk and out of redacted '
+                      'exports. Use {{KEY}} in a request.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

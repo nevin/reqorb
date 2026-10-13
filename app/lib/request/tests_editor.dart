@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-
-import 'package:reqorb/shared/theme.dart';
+import 'package:reqorb/editor/syntax.dart';
+import 'package:reqorb/editor/code_editor.dart';
+import 'package:reqorb/editor/code_controller.dart';
 
 /// The lines of [text] that hold something.
 List<String> linesOf(String text) => [
@@ -11,10 +12,18 @@ List<String> linesOf(String text) => [
 /// The Tests tab: checks the response must pass, and values to keep from it
 /// for later requests. Both are written one per line.
 class TestsEditor extends StatelessWidget {
-  const TestsEditor({super.key, required this.tests, required this.captures});
+  const TestsEditor({
+    super.key,
+    required this.tests,
+    required this.captures,
+    this.variables = const [],
+  });
 
-  final TextEditingController tests;
-  final TextEditingController captures;
+  final CodeController tests;
+  final CodeController captures;
+
+  /// Names of the variables in reach, offered after `{{`.
+  final List<String> variables;
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +48,7 @@ class TestsEditor extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           _field(
-            const Key('tests'),
+            'tests',
             tests,
             'status == 200\nbody.items[0].id exists\ntime < 500',
           ),
@@ -53,7 +62,7 @@ class TestsEditor extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           _field(
-            const Key('captures'),
+            'captures',
             captures,
             'token = body.access_token\nrequestId = header x-request-id',
           ),
@@ -62,17 +71,15 @@ class TestsEditor extends StatelessWidget {
     );
   }
 
-  Widget _field(Key key, TextEditingController controller, String hint) =>
-      TextField(
-        key: key,
-        controller: controller,
-        minLines: 3,
-        maxLines: 12,
-        autocorrect: false,
-        enableSuggestions: false,
-        smartQuotesType: SmartQuotesType.disabled,
-        smartDashesType: SmartDashesType.disabled,
-        style: mono,
-        decoration: InputDecoration(hintText: hint),
-      );
+  Widget _field(String name, CodeController controller, String hint) => CodeBox(
+    height: 150,
+    child: CodeEditor(
+      name: name,
+      controller: controller,
+      language: CodeLanguage.checks,
+      hint: hint,
+      hintLines: 3,
+      variables: variables,
+    ),
+  );
 }

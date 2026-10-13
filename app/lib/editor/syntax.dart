@@ -6,7 +6,18 @@ enum CodeLanguage {
   json,
   graphql,
   xml,
-  javascript;
+  javascript,
+
+  /// One `key=value` or `key: value` to a line, as variables and bulk
+  /// edited headers are written.
+  pairs,
+
+  /// The checks and captures of the Tests tab, one to a line.
+  checks;
+
+  /// Whether this is code with brackets and quotes that come in pairs,
+  /// rather than lines of plain words.
+  bool get bracketed => this != plain && this != pairs && this != checks;
 
   /// The language a body of the given content type is written in.
   static CodeLanguage ofContentType(String type) {
@@ -150,6 +161,8 @@ List<Token> tokenize(String text, CodeLanguage language) {
     CodeLanguage.graphql => _tokenizeGraphql(text),
     CodeLanguage.xml => _tokenizeXml(text),
     CodeLanguage.javascript => _tokenizeJavascript(text),
+    CodeLanguage.pairs => _tokenizePairs(text),
+    CodeLanguage.checks => _tokenizeChecks(text),
   };
   return _withVariables(text, tokens);
 }
@@ -245,6 +258,50 @@ List<Token> _tokenizeJavascript(String text) {
         : m[3] != null
         ? TokenKind.number
         : TokenKind.keyword;
+    tokens.add(Token(m.start, m.end, kind));
+  }
+  return tokens;
+}
+
+final _pairLine = RegExp(
+  r'^[ \t]*(?:(#.*)|(?:(secret)[ \t]+)?([^\s=:#][^=:\n]*?)(?=[ \t]*[=:]))',
+  multiLine: true,
+);
+
+List<Token> _tokenizePairs(String text) {
+  final tokens = <Token>[];
+  for (final m in _pairLine.allMatches(text)) {
+    if (m[1] case final comment?) {
+      tokens.add(Token(m.end - comment.length, m.end, TokenKind.comment));
+      continue;
+    }
+    final key = m[3]!;
+    if (m[2] != null) {
+      final at = m.start + m[0]!.indexOf('secret');
+      tokens.add(Token(at, at + 6, TokenKind.keyword));
+    }
+    tokens.add(Token(m.end - key.length, m.end, TokenKind.key));
+  }
+  return tokens;
+}
+
+final _checks = RegExp(
+  r'("(?:[^"\\\n]|\\.)*"?)'
+  '|($_number)'
+  r'|(==|!=|<=|>=|<|>|\b(?:contains|exists|missing)\b)'
+  r'|\b(status|time|size|header|body)\b',
+);
+
+List<Token> _tokenizeChecks(String text) {
+  final tokens = <Token>[];
+  for (final m in _checks.allMatches(text)) {
+    final kind = m[1] != null
+        ? TokenKind.string
+        : m[2] != null
+        ? TokenKind.number
+        : m[3] != null
+        ? TokenKind.keyword
+        : TokenKind.type;
     tokens.add(Token(m.start, m.end, kind));
   }
   return tokens;
