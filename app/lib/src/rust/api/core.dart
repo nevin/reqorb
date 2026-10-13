@@ -11,6 +11,11 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 RequestSettings defaultRequestSettings() =>
     RustLib.instance.api.crateApiCoreDefaultRequestSettings();
 
+/// Tries a folder out as the working directory: whether it is there, can
+/// be listed, and can be written to.
+DirAccess checkDirectory({required String path}) =>
+    RustLib.instance.api.crateApiCoreCheckDirectory(path: path);
+
 /// The settings a new workspace starts with.
 Settings defaultSettings() =>
     RustLib.instance.api.crateApiCoreDefaultSettings();
@@ -346,6 +351,30 @@ class Cookie {
           secure == other.secure &&
           httpOnly == other.httpOnly &&
           hostOnly == other.hostOnly;
+}
+
+class DirAccess {
+  final bool exists;
+  final bool readable;
+  final bool writable;
+
+  const DirAccess({
+    required this.exists,
+    required this.readable,
+    required this.writable,
+  });
+
+  @override
+  int get hashCode => exists.hashCode ^ readable.hashCode ^ writable.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DirAccess &&
+          runtimeType == other.runtimeType &&
+          exists == other.exists &&
+          readable == other.readable &&
+          writable == other.writable;
 }
 
 enum DisabledTls { none, tls12, tls13 }
@@ -1062,6 +1091,9 @@ class Settings {
   final Indent indent;
   final ProxyMode proxy;
   final String proxyUrl;
+  final String workingDir;
+  final String workingDirGrant;
+  final bool allowOutsideWorkingDir;
 
   const Settings({
     required this.theme,
@@ -1077,6 +1109,9 @@ class Settings {
     required this.indent,
     required this.proxy,
     required this.proxyUrl,
+    required this.workingDir,
+    required this.workingDirGrant,
+    required this.allowOutsideWorkingDir,
   });
 
   @override
@@ -1093,7 +1128,10 @@ class Settings {
       fontSize.hashCode ^
       indent.hashCode ^
       proxy.hashCode ^
-      proxyUrl.hashCode;
+      proxyUrl.hashCode ^
+      workingDir.hashCode ^
+      workingDirGrant.hashCode ^
+      allowOutsideWorkingDir.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1112,7 +1150,10 @@ class Settings {
           fontSize == other.fontSize &&
           indent == other.indent &&
           proxy == other.proxy &&
-          proxyUrl == other.proxyUrl;
+          proxyUrl == other.proxyUrl &&
+          workingDir == other.workingDir &&
+          workingDirGrant == other.workingDirGrant &&
+          allowOutsideWorkingDir == other.allowOutsideWorkingDir;
 }
 
 class TestResult {

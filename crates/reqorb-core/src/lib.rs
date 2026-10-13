@@ -12,6 +12,7 @@ mod analyze;
 mod auth;
 mod checks;
 mod error;
+mod files;
 mod formats;
 mod grpc;
 mod http;
@@ -25,6 +26,7 @@ pub use analyze::{HarCount, HarEntry, HarFinding, HarPhase, HarReport, HarSeveri
 pub use auth::{Auth, AuthField, AuthKind, AuthParam, auth_fields};
 pub use checks::{TestResult, capture, run_tests};
 pub use error::Error;
+pub use files::{DirAccess, FileAccess, check_directory};
 pub use formats::{
     ExportFormat, ImportResult, export_collection, export_environment, export_native, import,
     import_har, import_url, to_curl, to_har,

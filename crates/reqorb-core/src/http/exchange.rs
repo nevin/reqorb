@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use super::cookies::Jar;
 use crate::time::now_ms;
-use crate::{BodyMode, Error, Exchange, Header, Request, RequestSettings, Response};
+use crate::{BodyMode, Error, Exchange, FileAccess, Header, Request, RequestSettings, Response};
 
 pub(super) const USER_AGENT: &str = concat!("reqorb/", env!("CARGO_PKG_VERSION"));
 
@@ -23,6 +23,8 @@ pub(crate) struct Transport {
     log: Mutex<Vec<Exchange>>,
     /// Responses larger than this are abandoned.
     max_response_bytes: Option<u64>,
+    /// Which files a request may send.
+    files: FileAccess,
 }
 
 impl Transport {
@@ -31,6 +33,7 @@ impl Transport {
         settings: RequestSettings,
         jar: Option<Arc<Jar>>,
         max_response_bytes: Option<u64>,
+        files: FileAccess,
     ) -> Self {
         Self {
             client,
@@ -38,6 +41,7 @@ impl Transport {
             jar,
             log: Mutex::default(),
             max_response_bytes,
+            files,
         }
     }
 
@@ -153,9 +157,6 @@ async fn execute_once(
     })?;
 
     let mode = request.effective_body_mode();
-    let unreadable = |path: &str, e: std::io::Error| {
-        Error::Io(format!("cannot read `{path}`: {e}; choose the file again"))
-    };
     let mut builder = transport.client.request(method, url.clone());
     for h in &request.headers {
         // A multipart body brings its own Content-Type, with the boundary in
@@ -189,7 +190,7 @@ async fn execute_once(
         (BodyMode::Raw | BodyMode::UrlEncoded, Some(body)) => builder = builder.body(body.clone()),
         (BodyMode::Binary, Some(path)) if !path.trim().is_empty() => {
             let path = path.trim();
-            let bytes = std::fs::read(path).map_err(|e| unreadable(path, e))?;
+            let bytes = transport.files.read(path)?;
             if !request.has_header("content-type") {
                 builder = builder.header("Content-Type", "application/octet-stream");
             }
@@ -200,7 +201,7 @@ async fn execute_once(
             for field in &request.form {
                 if field.file {
                     let path = field.value.trim();
-                    let bytes = std::fs::read(path).map_err(|e| unreadable(path, e))?;
+                    let bytes = transport.files.read(path)?;
                     let name = std::path::Path::new(path)
                         .file_name()
                         .map(|n| n.to_string_lossy().into_owned())

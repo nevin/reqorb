@@ -2,7 +2,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Auth, Cookie, Error};
+use crate::{Auth, Cookie, Error, FileAccess};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Header {
@@ -380,6 +380,14 @@ pub struct Settings {
     pub proxy: ProxyMode,
     /// Used when `proxy` is `Custom`, such as `http://127.0.0.1:8080`.
     pub proxy_url: String,
+    /// The folder holding the files requests send; empty when none is set.
+    /// Relative file paths are looked up in it.
+    pub working_dir: String,
+    /// What the platform handed over when the folder was chosen, which lets
+    /// a sandboxed app open it again after a restart. Opaque to the core.
+    pub working_dir_grant: String,
+    /// Whether requests may read files outside the working directory.
+    pub allow_outside_working_dir: bool,
 }
 
 impl Default for Settings {
@@ -398,6 +406,9 @@ impl Default for Settings {
             indent: Indent::default(),
             proxy: ProxyMode::default(),
             proxy_url: String::new(),
+            working_dir: String::new(),
+            working_dir_grant: String::new(),
+            allow_outside_working_dir: false,
         }
     }
 }
@@ -418,6 +429,10 @@ impl Settings {
                 // An empty address is no address: fall back to the system's.
                 ProxyMode::Custom if self.proxy_url.trim().is_empty() => Proxy::System,
                 ProxyMode::Custom => Proxy::Custom(self.proxy_url.trim().to_string()),
+            },
+            files: FileAccess {
+                root: (!self.working_dir.trim().is_empty()).then(|| self.working_dir.trim().into()),
+                allow_outside: self.allow_outside_working_dir,
             },
         }
     }
@@ -448,6 +463,8 @@ pub struct SendOptions {
     /// Responses larger than this are abandoned.
     pub max_response_bytes: Option<u64>,
     pub proxy: Proxy,
+    /// Which files requests may send.
+    pub files: FileAccess,
 }
 
 impl Default for SendOptions {
@@ -460,6 +477,7 @@ impl Default for SendOptions {
             no_cache: false,
             max_response_bytes: None,
             proxy: Proxy::default(),
+            files: FileAccess::default(),
         }
     }
 }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'package:reqorb/bridge/engine.dart';
+import 'package:reqorb/shared/folders.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 
 /// Where a saved request lives: a collection and the item indices leading to it.
@@ -60,6 +61,17 @@ class WorkspaceStore extends ChangeNotifier {
   Settings get settings => _workspace.settings;
 
   void updateSettings(Settings settings) => _set(settings: settings);
+
+  /// Takes up the permission to use the working directory again, as a
+  /// sandboxed app must after every start. Follows the folder if it moved.
+  Future<void> restoreWorkingDir(Folders folders) async {
+    final grant = settings.workingDirGrant;
+    if (grant.isEmpty) return;
+    final path = await folders.restore(grant);
+    if (path != null && path != settings.workingDir) {
+      updateSettings(settings.copyWith(workingDir: path));
+    }
+  }
 
   // -------------------------------------------------------------- cookies
 
@@ -490,6 +502,9 @@ extension SettingsCopy on Settings {
     Indent? indent,
     ProxyMode? proxy,
     String? proxyUrl,
+    String? workingDir,
+    String? workingDirGrant,
+    bool? allowOutsideWorkingDir,
   }) => Settings(
     theme: theme ?? this.theme,
     httpMode: httpMode ?? this.httpMode,
@@ -504,5 +519,9 @@ extension SettingsCopy on Settings {
     indent: indent ?? this.indent,
     proxy: proxy ?? this.proxy,
     proxyUrl: proxyUrl ?? this.proxyUrl,
+    workingDir: workingDir ?? this.workingDir,
+    workingDirGrant: workingDirGrant ?? this.workingDirGrant,
+    allowOutsideWorkingDir:
+        allowOutsideWorkingDir ?? this.allowOutsideWorkingDir,
   );
 }

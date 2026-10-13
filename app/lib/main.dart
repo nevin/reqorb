@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:reqorb/bridge/engine.dart';
 import 'package:reqorb/request/request_page.dart';
+import 'package:reqorb/shared/folders.dart';
 import 'package:reqorb/shared/theme.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 import 'package:reqorb/src/rust/frb_generated.dart';
@@ -13,6 +14,7 @@ Future<void> main() async {
   final directory = await getApplicationSupportDirectory();
   final store = WorkspaceStore('${directory.path}/workspace.json');
   await store.load();
+  await store.restoreWorkingDir(folders);
   runApp(ReqorbApp(store: store));
 }
 
@@ -30,6 +32,7 @@ class ReqorbApp extends StatelessWidget {
         listenable: store,
         builder: (context, _) {
           final settings = store.settings;
+          WorkingDir.path = settings.workingDir;
           CodeStyle.fontSize = settings.fontSize.clamp(9, 28).toDouble();
           CodeStyle.indent = switch (settings.indent) {
             Indent.twoSpaces => '  ',

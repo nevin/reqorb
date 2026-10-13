@@ -9,9 +9,9 @@ use flutter_rust_bridge::frb;
 
 use crate::frb_generated::StreamSink;
 pub use reqorb_core::{
-    AppTheme, Auth, AuthField, AuthKind, AuthParam, BodyMode, Collection, Cookie, DisabledTls,
-    Environment, Exchange, ExportFormat, FormField, GrpcCall, GrpcMethod, GrpcReply, GrpcSchema,
-    HarCount, HarEntry, HarFinding, HarPhase, HarReport, HarSeverity, Header, HttpMode,
+    AppTheme, Auth, AuthField, AuthKind, AuthParam, BodyMode, Collection, Cookie, DirAccess,
+    DisabledTls, Environment, Exchange, ExportFormat, FormField, GrpcCall, GrpcMethod, GrpcReply,
+    GrpcSchema, HarCount, HarEntry, HarFinding, HarPhase, HarReport, HarSeverity, Header, HttpMode,
     ImportResult, Indent, Item, Layout, ProxyMode, Request, RequestSettings, Response, Sent,
     Settings, TestResult, Variable, Workspace, WsEvent, WsEventKind,
 };
@@ -100,6 +100,23 @@ pub struct _Settings {
     pub indent: Indent,
     pub proxy: ProxyMode,
     pub proxy_url: String,
+    pub working_dir: String,
+    pub working_dir_grant: String,
+    pub allow_outside_working_dir: bool,
+}
+
+#[frb(mirror(DirAccess))]
+pub struct _DirAccess {
+    pub exists: bool,
+    pub readable: bool,
+    pub writable: bool,
+}
+
+/// Tries a folder out as the working directory: whether it is there, can
+/// be listed, and can be written to.
+#[frb(sync)]
+pub fn check_directory(path: String) -> DirAccess {
+    reqorb_core::check_directory(&path)
 }
 
 #[frb(mirror(Layout))]

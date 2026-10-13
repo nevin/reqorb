@@ -110,6 +110,7 @@ workspace.
 
 | Setting | What it does |
 | --- | --- |
+| Working directory | The folder holding the files requests send; see below |
 | HTTP version | Auto, HTTP/1 or HTTP/2 |
 | Request timeout | Seconds to wait for a response; 0 waits as long as it takes |
 | Max response size | A larger response is abandoned part way; 0 means any size |
@@ -123,8 +124,26 @@ workspace.
 
 SSL verification and redirects are defaults: a request that changes anything on its own
 Settings tab keeps its own choices. The proxy applies to HTTP requests only. The CLI has
-the same controls as flags: `-k`, `--no-follow`, `--max-size MB`, `-x/--proxy URL` and
-`--no-proxy`.
+the same controls as flags: `-k`, `--no-follow`, `--max-size MB`, `-x/--proxy URL`,
+`--no-proxy`, `--working-dir DIR` and `--allow-outside`.
+
+### Working directory
+
+Requests can send files: a binary body, or a file field in a form. Choose a working
+directory (first in Settings › General) to keep those files in one folder:
+
+- File paths are looked up in it, and a file picked from inside it is saved as a
+  relative path, so a shared collection works on any machine that has the folder.
+- Requests may read files only from that folder. A path that leads out of it, by an
+  absolute path, `..` or a link, stops the request before it is sent. This matters
+  for collections from someone else, which could otherwise send any file reqorb can
+  read. **Allow reading files outside working directory** turns the limit off.
+- Choosing the folder is how the system is asked for permission to use it. On macOS,
+  where the app is sandboxed, that permission is kept for the next launch. Settings
+  shows whether reqorb can read and write the folder, and offers **Give access** when
+  it cannot.
+
+Without a working directory, requests read files from wherever their paths point.
 
 ## Tests and chaining
 

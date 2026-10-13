@@ -188,6 +188,9 @@ class FakeEngine extends Engine {
     indent: Indent.twoSpaces,
     proxy: ProxyMode.system,
     proxyUrl: '',
+    workingDir: '',
+    workingDirGrant: '',
+    allowOutsideWorkingDir: false,
   );
 
   @override
@@ -220,6 +223,14 @@ class FakeEngine extends Engine {
   };
 
   // ------------------------------------------------------------- workspace
+
+  /// What a folder allows, by path; one not listed does not exist.
+  final directories = <String, DirAccess>{};
+
+  @override
+  DirAccess checkDirectory({required String path}) =>
+      directories[path] ??
+      const DirAccess(exists: false, readable: false, writable: false);
 
   /// What was last written, as the app would find it on the next launch.
   Workspace? saved;

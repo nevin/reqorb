@@ -1,6 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart' hide FormField;
 
+import 'package:reqorb/shared/folders.dart';
 import 'package:reqorb/request/key_value_editor.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 import 'package:reqorb/shared/theme.dart';
@@ -22,8 +23,17 @@ const _modeLabels = {
   BodyMode.binary: 'binary',
 };
 
-/// Asks for a file and returns its path, or null when cancelled.
-Future<String?> pickFilePath() async => (await FilePicker.pickFile())?.path;
+/// Asks for a file, starting in the working directory, and returns its
+/// path, or null when cancelled. A file inside the working directory comes
+/// back relative to it.
+Future<String?> pickFilePath() async {
+  final start = WorkingDir.path;
+  final file = await FilePicker.pickFile(
+    initialDirectory: start.isEmpty ? null : start,
+  );
+  final path = file?.path;
+  return path == null ? null : WorkingDir.relative(path);
+}
 
 /// The Body tab: a body type picker and the editor for that type.
 /// The page owns all the state, so switching type loses nothing.

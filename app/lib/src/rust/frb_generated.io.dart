@@ -97,6 +97,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Cookie dco_decode_cookie(dynamic raw);
 
   @protected
+  DirAccess dco_decode_dir_access(dynamic raw);
+
+  @protected
   DisabledTls dco_decode_disabled_tls(dynamic raw);
 
   @protected
@@ -381,6 +384,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   Cookie sse_decode_cookie(SseDeserializer deserializer);
+
+  @protected
+  DirAccess sse_decode_dir_access(SseDeserializer deserializer);
 
   @protected
   DisabledTls sse_decode_disabled_tls(SseDeserializer deserializer);
@@ -692,6 +698,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_cookie(Cookie self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_dir_access(DirAccess self, SseSerializer serializer);
 
   @protected
   void sse_encode_disabled_tls(DisabledTls self, SseSerializer serializer);

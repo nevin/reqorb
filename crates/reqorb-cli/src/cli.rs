@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::{Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use reqorb_core::{ExportFormat, HttpMode, Proxy, Request, SendOptions};
+use reqorb_core::{ExportFormat, FileAccess, HttpMode, Proxy, Request, SendOptions};
 
 /// Send HTTP requests, run saved collections, and convert between formats.
 ///
@@ -215,6 +215,14 @@ pub(crate) struct HttpArgs {
     #[arg(long, conflicts_with = "proxy")]
     pub(crate) no_proxy: bool,
 
+    /// Look up relative file paths in this folder, and read no file outside it
+    #[arg(long, value_name = "DIR")]
+    pub(crate) working_dir: Option<PathBuf>,
+
+    /// With --working-dir, also allow reading files outside it
+    #[arg(long, requires = "working_dir")]
+    pub(crate) allow_outside: bool,
+
     /// Abandon a response larger than this many megabytes (0 for any size)
     #[arg(long, value_name = "MB")]
     pub(crate) max_size: Option<u64>,
@@ -251,6 +259,10 @@ impl HttpArgs {
         Ok(SendOptions {
             http_mode,
             proxy,
+            files: FileAccess {
+                root: self.working_dir.clone(),
+                allow_outside: self.allow_outside,
+            },
             // As in the app, 0 means any size.
             max_response_bytes: self
                 .max_size

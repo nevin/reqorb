@@ -225,3 +225,34 @@ fn records_redacts_analyses_and_imports_a_har_file() {
 
     assert!(!reqorb(&["analyze", "Cargo.toml"]).status.success());
 }
+
+#[test]
+fn keeps_file_bodies_inside_the_working_directory() {
+    let base = serve();
+    let work = tempfile::tempdir().unwrap();
+    let elsewhere = tempfile::tempdir().unwrap();
+    std::fs::write(work.path().join("body.bin"), "inside").unwrap();
+    let secret = elsewhere.path().join("secret.txt");
+    std::fs::write(&secret, "outside").unwrap();
+    let (url, dir) = (format!("{base}/login"), work.path().to_str().unwrap());
+
+    // A relative path is looked up in the working directory.
+    let inside = reqorb(&["POST", &url, "--binary", "body.bin", "--working-dir", dir]);
+    assert!(inside.status.success(), "{}", stderr(&inside));
+
+    // A file outside it is not sent, unless that is asked for.
+    let secret = secret.to_str().unwrap();
+    let refused = reqorb(&["POST", &url, "--binary", secret, "--working-dir", dir]);
+    assert!(!refused.status.success());
+    assert!(stderr(&refused).contains("is outside the working directory"));
+    let allowed = reqorb(&[
+        "POST",
+        &url,
+        "--binary",
+        secret,
+        "--working-dir",
+        dir,
+        "--allow-outside",
+    ]);
+    assert!(allowed.status.success(), "{}", stderr(&allowed));
+}

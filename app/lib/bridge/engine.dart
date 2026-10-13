@@ -69,6 +69,9 @@ abstract class Engine {
 
   // -------------------------------------------------------------- workspace
 
+  /// Tries a folder out: whether it is there, can be listed and written to.
+  DirAccess checkDirectory({required String path});
+
   Future<Workspace> loadWorkspace({required String path});
   Future<void> saveWorkspace({
     required String path,
@@ -183,6 +186,10 @@ class RustEngine extends Engine {
   @override
   List<AuthField> authFields({required AuthKind kind}) =>
       rust.authFields(kind: kind);
+
+  @override
+  DirAccess checkDirectory({required String path}) =>
+      rust.checkDirectory(path: path);
 
   @override
   Future<Workspace> loadWorkspace({required String path}) =>

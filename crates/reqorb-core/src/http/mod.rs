@@ -121,7 +121,13 @@ pub(super) async fn send_logged(
         &options.proxy,
         auth.kind == AuthKind::Ntlm,
     )?;
-    let transport = Transport::new(client, settings, jar.clone(), options.max_response_bytes);
+    let transport = Transport::new(
+        client,
+        settings,
+        jar.clone(),
+        options.max_response_bytes,
+        options.files.clone(),
+    );
 
     let started = Instant::now();
     let result = if auth::sign(&mut request, &auth, &auth::Clock::now())? {

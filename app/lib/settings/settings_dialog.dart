@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:reqorb/bridge/engine.dart';
+import 'package:reqorb/shared/folders.dart';
 import 'package:reqorb/shared/theme.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 import 'package:reqorb/workspace/workspace_store.dart';
@@ -114,6 +116,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
   Widget _general(BuildContext context) {
     final s = _settings;
+    final directory = _workingDirectory(context);
     final request = _Section('Request', [
       _Row(
         label: 'HTTP version',
@@ -280,8 +283,14 @@ class _SettingsDialogState extends State<SettingsDialog> {
         final right = [headers, interface, editor];
         return SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-          child: wide
-              ? Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              directory,
+              const Divider(height: 24),
+              const SizedBox(height: 8),
+              if (wide)
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(child: Column(children: left)),
@@ -289,13 +298,192 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     Expanded(child: Column(children: right)),
                   ],
                 )
-              : Column(children: [...left, ...right]),
+              else ...[
+                ...left,
+                ...right,
+              ],
+            ],
+          ),
         );
       },
     );
   }
 
-  Widget _switch(Key key, bool value, ValueChanged<bool> onChanged) => Row(
+  // ------------------------------------------------------ working directory
+
+  /// The folder [_access] was worked out for; null to work it out again.
+  String? _checkedDir;
+  DirAccess? _access;
+
+  /// Asks for a folder, which is also how the system is asked for permission
+  /// to use it, and keeps that permission for the next launch.
+  Future<void> _chooseWorkingDir() async {
+    final current = _settings.workingDir;
+    final path = await folders.choose(initial: current);
+    if (path == null) return;
+    final grant = await folders.grant(path);
+    // Checked afresh even if it is the same folder: access may be new.
+    _checkedDir = null;
+    _update((c) => c.copyWith(workingDir: path, workingDirGrant: grant));
+  }
+
+  Widget _workingDirectory(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final s = _settings;
+    final path = s.workingDir;
+    final chosen = path.isNotEmpty;
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
+    final warning = methodColor('POST', scheme.brightness);
+    // Trying a folder out writes to it, so it is done once per folder and
+    // not on every rebuild.
+    if (path != _checkedDir) {
+      _checkedDir = path;
+      _access = chosen ? Engine.of(context).checkDirectory(path: path) : null;
+    }
+    final access = _access;
+
+    // What the folder allows, and what to do when that is not enough.
+    final (
+      IconData icon,
+      Color color,
+      String status,
+      String? fix,
+    ) = switch (access) {
+      null => (
+        Icons.folder_off_outlined,
+        scheme.onSurfaceVariant,
+        'No folder chosen: requests read files from wherever their '
+            'paths point.',
+        null,
+      ),
+      DirAccess(exists: true, readable: true, writable: true) => (
+        Icons.check_circle_outline,
+        statusColor(200, scheme),
+        'reqorb can read and write this folder.',
+        null,
+      ),
+      DirAccess(exists: true, readable: true) => (
+        Icons.info_outline,
+        warning,
+        'reqorb can read this folder but not write to it. That is '
+            'enough to send files from it.',
+        null,
+      ),
+      // A sandboxed app cannot tell a folder it may not open from one
+      // that is gone; choosing it again settles both.
+      _ => (
+        Icons.warning_amber_outlined,
+        scheme.error,
+        'reqorb cannot open this folder: it was moved or deleted, or '
+            'permission to use it has lapsed.',
+        'Give access',
+      ),
+    };
+
+    return _Section('Working directory', [
+      Padding(
+        padding: const EdgeInsets.only(top: 2, bottom: 10),
+        child: Text(
+          'Keep the files your requests send in one folder. File paths are '
+          'looked up in it, so a shared collection works on any machine '
+          'that has the folder.',
+          style: muted,
+        ),
+      ),
+      Row(
+        children: [
+          Expanded(
+            child: InputDecorator(
+              decoration: const InputDecoration(labelText: 'Location'),
+              child: Text(
+                chosen ? path : 'No folder chosen',
+                key: const Key('settings-working-dir'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: chosen
+                    ? mono
+                    : mono.copyWith(color: scheme.onSurfaceVariant),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          FilledButton.tonal(
+            key: const Key('settings-working-dir-choose'),
+            onPressed: _chooseWorkingDir,
+            child: const Text('Choose'),
+          ),
+          if (chosen)
+            IconButton(
+              key: const Key('settings-working-dir-clear'),
+              tooltip: 'Stop using a working directory',
+              icon: const Icon(Icons.close),
+              onPressed: () => _update(
+                (c) => c.copyWith(workingDir: '', workingDirGrant: ''),
+              ),
+            ),
+        ],
+      ),
+      Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                status,
+                key: const Key('settings-working-dir-status'),
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+            if (fix != null)
+              TextButton(
+                key: const Key('settings-working-dir-grant'),
+                onPressed: _chooseWorkingDir,
+                child: Text(fix),
+              ),
+          ],
+        ),
+      ),
+      _Row(
+        label: 'Allow reading files outside working directory',
+        help: chosen
+            ? 'When off, a request that names a file outside the folder is '
+                  'not sent.'
+            : 'Choose a working directory to limit which files requests '
+                  'can read.',
+        control: _switch(
+          const Key('settings-allow-outside'),
+          // Without a working directory there is nothing to be outside of.
+          !chosen || s.allowOutsideWorkingDir,
+          chosen
+              ? (on) => _update((c) => c.copyWith(allowOutsideWorkingDir: on))
+              : null,
+        ),
+      ),
+      if (chosen && s.allowOutsideWorkingDir)
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.warning_amber_outlined, size: 16, color: warning),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'With this on, a collection imported from someone else can '
+                'send any file on this device that reqorb can read.',
+                key: const Key('settings-allow-outside-warning'),
+                style: muted,
+              ),
+            ),
+          ],
+        ),
+    ]);
+  }
+
+  Widget _switch(Key key, bool value, ValueChanged<bool>? onChanged) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
       Switch(key: key, value: value, onChanged: onChanged),

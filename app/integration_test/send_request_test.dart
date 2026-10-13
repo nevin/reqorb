@@ -554,6 +554,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('0 waits as long as'), findsOneWidget);
     await type(tester, find.byKey(const Key('settings-timeout')), '7');
+    // Typing scrolled the list; bring the row above back before tapping it.
+    await tester.ensureVisible(find.byKey(const Key('settings-http')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('settings-http')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('HTTP/2').last);
