@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'package:reqorb/editor/code_editor.dart';
 import 'package:reqorb/editor/syntax.dart';
+import 'package:reqorb/response/sse.dart';
 import 'package:reqorb/shared/messages.dart';
 import 'package:reqorb/transfer/export_actions.dart';
 import 'package:reqorb/src/rust/api/core.dart';
@@ -20,7 +21,15 @@ class ResponseView extends StatelessWidget {
     required this.sending,
     required this.sessionSize,
     required this.onExportSession,
+    this.receiving = false,
+    this.stopped = false,
   });
+
+  /// Whether [sent] is a response still arriving, shown as far as it has.
+  final bool receiving;
+
+  /// Whether [sent] was cut short by stopping the send.
+  final bool stopped;
 
   /// How many exchanges the session holds, and how to export them all.
   final int sessionSize;
@@ -114,7 +123,7 @@ class ResponseView extends StatelessWidget {
     return Stack(
       children: [
         AnimatedOpacity(
-          opacity: sending ? 0.45 : 1,
+          opacity: sending && !receiving ? 0.45 : 1,
           duration: const Duration(milliseconds: 150),
           child: _Loaded(
             response: response,
@@ -124,6 +133,8 @@ class ResponseView extends StatelessWidget {
             captureProblems: sent?.captureProblems ?? const [],
             graphqlErrors: sent?.graphqlErrors ?? const [],
             current: !sending,
+            receiving: sending && receiving,
+            stopped: stopped && !sending,
             sessionSize: sessionSize,
             onExportSession: onExportSession,
           ),
@@ -151,7 +162,15 @@ class _Loaded extends StatelessWidget {
     required this.captured,
     required this.captureProblems,
     required this.graphqlErrors,
+    required this.receiving,
+    required this.stopped,
   });
+
+  /// Whether the response is still arriving.
+  final bool receiving;
+
+  /// Whether the response was cut short by stopping the send.
+  final bool stopped;
 
   /// How the request's tests came out, and what it captured.
   final List<TestResult> tests;
@@ -188,10 +207,16 @@ class _Loaded extends StatelessWidget {
         tests.isNotEmpty || captured.isNotEmpty || captureProblems.isNotEmpty;
     final testsFailed = passed < tests.length || captureProblems.isNotEmpty;
 
+    // An event stream is read as its events first, and as text second.
+    final hasEvents =
+        _contentType(response).split(';').first.trim().toLowerCase() ==
+        'text/event-stream';
+    final events = hasEvents ? parseSse(response.body) : const <SseEvent>[];
+
     return DefaultTabController(
-      // Keyed, so the tabs are rebuilt when the Tests tab comes or goes.
-      key: ValueKey(hasTests),
-      length: hasTests ? 3 : 2,
+      // Keyed, so the tabs are rebuilt when one of them comes or goes.
+      key: ValueKey((hasTests, hasEvents)),
+      length: 2 + (hasTests ? 1 : 0) + (hasEvents ? 1 : 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -227,6 +252,28 @@ class _Loaded extends StatelessWidget {
                 _Fact(Icons.schedule, '${response.elapsedMs} ms', 'Time'),
                 _Fact(Icons.data_usage, formatSize(response.sizeBytes), 'Size'),
                 Text(response.httpVersion, style: muted),
+                if (receiving)
+                  Row(
+                    key: const Key('receiving'),
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox.square(
+                        dimension: 11,
+                        child: CircularProgressIndicator(strokeWidth: 1.6),
+                      ),
+                      const SizedBox(width: 6),
+                      Text('Receiving…', style: muted),
+                    ],
+                  )
+                else if (stopped)
+                  Tooltip(
+                    message: 'The send was stopped before the response ended',
+                    child: Text(
+                      'Stopped',
+                      key: const Key('stopped'),
+                      style: muted?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                  ),
                 if (unresolved.isNotEmpty)
                   Tooltip(
                     message:
@@ -298,6 +345,12 @@ class _Loaded extends StatelessWidget {
                     tabAlignment: TabAlignment.start,
                     dividerColor: Colors.transparent,
                     tabs: [
+                      if (hasEvents)
+                        Tab(
+                          key: const Key('events-tab'),
+                          height: 38,
+                          text: 'Events (${events.length})',
+                        ),
                       const Tab(height: 38, text: 'Body'),
                       Tab(
                         height: 38,
@@ -403,6 +456,7 @@ class _Loaded extends StatelessWidget {
           Expanded(
             child: TabBarView(
               children: [
+                if (hasEvents) EventsView(events: events, live: receiving),
                 if (response.bytes case final bytes?)
                   _Binary(
                     bytes: bytes,
@@ -417,7 +471,10 @@ class _Loaded extends StatelessWidget {
                   body.isEmpty
                       ? Center(
                           child: Text(
-                            'The response has no body',
+                            receiving
+                                ? 'Receiving the response… '
+                                      '${formatSize(response.sizeBytes)} so far'
+                                : 'The response has no body',
                             style: TextStyle(color: scheme.onSurfaceVariant),
                           ),
                         )

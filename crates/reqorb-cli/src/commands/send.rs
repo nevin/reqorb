@@ -1,14 +1,17 @@
 //! Sends one request written on the command line.
 
+use std::io::Write;
 use std::process::ExitCode;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Result, bail};
 use clap::CommandFactory;
-use reqorb_core::{BodyMode, FormField, Request};
+use reqorb_core::{BodyMode, Cancel, FormField, Request, SendEvent, Watch};
 
 use crate::cli::{Cli, SendArgs};
 use crate::input::{load_variables, parse_auth, parse_header, read_body};
-use crate::output::{print_response, report_tests, succeeded, warn_unresolved, write_har};
+use crate::output::{print_response_parts, report_tests, succeeded, warn_unresolved, write_har};
 
 pub(crate) async fn send(args: SendArgs) -> Result<ExitCode> {
     let auth = parse_auth(&args)?;
@@ -72,9 +75,42 @@ pub(crate) async fn send(args: SendArgs) -> Result<ExitCode> {
         print!("{}", schema.to_sdl());
         return Ok(ExitCode::SUCCESS);
     }
-    let sent = reqorb_core::send_with(&request, &variables, &args.http.options()?, &[]).await?;
+    // A stream is printed as it arrives, since it may never end. Ctrl-C
+    // stops it and keeps what came, for the summary and the HAR file.
+    let streamed = Arc::new(AtomicBool::new(false));
+    let cancel = Cancel::default();
+    let watch = Watch::new(
+        {
+            let streamed = streamed.clone();
+            move |event| match event {
+                SendEvent::Head { headers, .. } => streamed.store(
+                    headers.iter().any(|h| {
+                        h.name.eq_ignore_ascii_case("content-type") && is_stream(&h.value)
+                    }),
+                    Ordering::SeqCst,
+                ),
+                SendEvent::Body { text, .. } if streamed.load(Ordering::SeqCst) => {
+                    let mut out = std::io::stdout().lock();
+                    let _ = out.write_all(text.as_bytes()).and_then(|()| out.flush());
+                }
+                SendEvent::Body { .. } => {}
+            }
+        },
+        cancel.clone(),
+    );
+    tokio::spawn(async move {
+        if tokio::signal::ctrl_c().await.is_ok() {
+            cancel.cancel();
+        }
+    });
+    let sent =
+        reqorb_core::send_watched(&request, &variables, &args.http.options()?, &[], &watch).await?;
     warn_unresolved(&sent.unresolved);
-    print_response(&sent.response, &args.output)?;
+    print_response_parts(
+        &sent.response,
+        &args.output,
+        !streamed.load(Ordering::SeqCst),
+    )?;
     write_har(&args.output, &sent.exchanges)?;
     report_tests(&sent, "");
 
@@ -83,4 +119,18 @@ pub(crate) async fn send(args: SendArgs) -> Result<ExitCode> {
     } else {
         ExitCode::from(1)
     })
+}
+
+/// Whether a response of this type is read as it arrives.
+fn is_stream(content_type: &str) -> bool {
+    let mime = content_type.split(';').next().unwrap_or("").trim();
+    [
+        "text/event-stream",
+        "application/x-ndjson",
+        "application/ndjson",
+        "application/jsonl",
+        "application/stream+json",
+    ]
+    .iter()
+    .any(|kind| mime.eq_ignore_ascii_case(kind))
 }

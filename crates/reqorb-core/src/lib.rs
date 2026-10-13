@@ -50,7 +50,7 @@ pub use grpc::{
 };
 pub use history::{History, HistoryEntry, append_history, clear_history, load_history};
 pub use http::cookies::{Cookie, cookie_header, store_set_cookie};
-pub use http::{Sent, send, send_opts, send_with};
+pub use http::{Cancel, SendEvent, Sent, Watch, send, send_opts, send_watched, send_with};
 pub use model::{
     AppTheme, BodyMode, Collection, DisabledTls, Environment, Exchange, FormField, Header,
     HttpMode, Indent, Item, Layout, Proxy, ProxyMode, Request, RequestSettings, Response,

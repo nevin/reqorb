@@ -75,9 +75,14 @@ async fn records_the_headers_that_were_sent() {
         host_only: true,
     }];
 
-    let (_, exchanges) = send_logged(request, &SendOptions::default(), &mut jar)
-        .await
-        .unwrap();
+    let (_, exchanges) = send_logged(
+        request,
+        &SendOptions::default(),
+        &mut jar,
+        &Watch::default(),
+    )
+    .await
+    .unwrap();
     let mut recorded: Vec<String> = exchanges[0]
         .request
         .headers
@@ -1009,4 +1014,128 @@ async fn refuses_to_send_a_credential_that_is_still_locked() {
             "{error}"
         );
     }
+}
+
+/// Serves an event stream: two events at once, then one more whenever
+/// `more` is sent to, until it is dropped.
+fn serve_events() -> (String, std::sync::mpsc::Sender<&'static str>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/events", listener.local_addr().unwrap());
+    let (more, next) = std::sync::mpsc::channel::<&'static str>();
+    std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut buf = [0u8; 4096];
+        let _ = stream.read(&mut buf).unwrap();
+        stream
+            .write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\
+                  Transfer-Encoding: chunked\r\n\r\n",
+            )
+            .unwrap();
+        let mut chunk = |text: &str| {
+            write!(stream, "{:x}\r\n{text}\r\n", text.len()).unwrap();
+            stream.flush().unwrap();
+        };
+        chunk("data: one\n\n");
+        chunk("data: two\n\n");
+        while let Ok(text) = next.recv() {
+            chunk(text);
+        }
+        chunk("");
+    });
+    (url, more)
+}
+
+#[tokio::test]
+async fn reports_a_response_as_it_arrives() {
+    let (url, more) = serve_events();
+    let (events, mut seen) = tokio::sync::mpsc::unbounded_channel();
+    let watch = Watch::new(
+        move |event| {
+            let _ = events.send(event);
+        },
+        Cancel::default(),
+    );
+    let request = Request::new("GET", &url);
+    let send = tokio::spawn(async move {
+        send_watched(&request, &[], &SendOptions::default(), &[], &watch).await
+    });
+
+    let SendEvent::Head {
+        status, headers, ..
+    } = seen.recv().await.unwrap()
+    else {
+        panic!("the head comes first");
+    };
+    assert_eq!(status, 200);
+    assert!(headers.iter().any(|h| h.value == "text/event-stream"));
+    // The first events are in hand while the response is still open.
+    let mut text = String::new();
+    while !text.ends_with("two\n\n") {
+        let SendEvent::Body { text: part, .. } = seen.recv().await.unwrap() else {
+            panic!("only the body follows the head");
+        };
+        text.push_str(&part);
+    }
+    assert_eq!(text, "data: one\n\ndata: two\n\n");
+    assert!(!send.is_finished());
+
+    more.send("data: three\n\n").unwrap();
+    assert_eq!(
+        seen.recv().await.unwrap(),
+        SendEvent::Body {
+            text: "data: three\n\n".into(),
+            received: 35,
+        }
+    );
+    drop(more);
+    let sent = send.await.unwrap().unwrap();
+    assert_eq!(
+        sent.response.body,
+        "data: one\n\ndata: two\n\ndata: three\n\n"
+    );
+}
+
+#[tokio::test]
+async fn a_send_stopped_part_way_keeps_what_had_arrived() {
+    let (url, _more) = serve_events();
+    let (events, mut seen) = tokio::sync::mpsc::unbounded_channel();
+    let cancel = Cancel::default();
+    let watch = Watch::new(
+        move |event| {
+            let _ = events.send(event);
+        },
+        cancel.clone(),
+    );
+    let request = Request::new("GET", &url);
+    let send = tokio::spawn(async move {
+        send_watched(&request, &[], &SendOptions::default(), &[], &watch).await
+    });
+    let mut received = 0;
+    while received < 22 {
+        if let SendEvent::Body { received: n, .. } = seen.recv().await.unwrap() {
+            received = n;
+        }
+    }
+    cancel.cancel();
+    let sent = send.await.unwrap().unwrap();
+    assert_eq!(sent.response.body, "data: one\n\ndata: two\n\n");
+    assert_eq!(sent.exchanges.len(), 1);
+}
+
+#[tokio::test]
+async fn a_send_stopped_before_any_answer_is_cancelled() {
+    // A server that accepts the connection and never answers.
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/", listener.local_addr().unwrap());
+    let cancel = Cancel::default();
+    let watch = Watch::new(|_| {}, cancel.clone());
+    let request = Request::new("GET", &url);
+    let send = tokio::spawn(async move {
+        send_watched(&request, &[], &SendOptions::default(), &[], &watch).await
+    });
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    cancel.cancel();
+    assert!(matches!(send.await.unwrap(), Err(Error::Cancelled)));
+    drop(listener);
 }

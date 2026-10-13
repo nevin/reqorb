@@ -31,6 +31,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int dco_decode_CastedPrimitive_u_64(dynamic raw);
 
   @protected
+  RustStreamSink<SendUpdate> dco_decode_StreamSink_send_update_Sse(dynamic raw);
+
+  @protected
   RustStreamSink<WsEvent> dco_decode_StreamSink_ws_event_Sse(dynamic raw);
 
   @protected
@@ -89,6 +92,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RequestSettings dco_decode_box_autoadd_request_settings(dynamic raw);
+
+  @protected
+  Sent dco_decode_box_autoadd_sent(dynamic raw);
 
   @protected
   Settings dco_decode_box_autoadd_settings(dynamic raw);
@@ -316,6 +322,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RequestSettings? dco_decode_opt_box_autoadd_request_settings(dynamic raw);
 
   @protected
+  Sent? dco_decode_opt_box_autoadd_sent(dynamic raw);
+
+  @protected
   Uint8List? dco_decode_opt_list_prim_u_8_strict(dynamic raw);
 
   @protected
@@ -329,6 +338,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   Response dco_decode_response(dynamic raw);
+
+  @protected
+  SendUpdate dco_decode_send_update(dynamic raw);
+
+  @protected
+  SendUpdateKind dco_decode_send_update_kind(dynamic raw);
 
   @protected
   Sent dco_decode_sent(dynamic raw);
@@ -374,6 +389,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   int sse_decode_CastedPrimitive_u_64(SseDeserializer deserializer);
+
+  @protected
+  RustStreamSink<SendUpdate> sse_decode_StreamSink_send_update_Sse(
+    SseDeserializer deserializer,
+  );
 
   @protected
   RustStreamSink<WsEvent> sse_decode_StreamSink_ws_event_Sse(
@@ -442,6 +462,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RequestSettings sse_decode_box_autoadd_request_settings(
     SseDeserializer deserializer,
   );
+
+  @protected
+  Sent sse_decode_box_autoadd_sent(SseDeserializer deserializer);
 
   @protected
   Settings sse_decode_box_autoadd_settings(SseDeserializer deserializer);
@@ -679,6 +702,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  Sent? sse_decode_opt_box_autoadd_sent(SseDeserializer deserializer);
+
+  @protected
   Uint8List? sse_decode_opt_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
@@ -692,6 +718,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   Response sse_decode_response(SseDeserializer deserializer);
+
+  @protected
+  SendUpdate sse_decode_send_update(SseDeserializer deserializer);
+
+  @protected
+  SendUpdateKind sse_decode_send_update_kind(SseDeserializer deserializer);
 
   @protected
   Sent sse_decode_sent(SseDeserializer deserializer);
@@ -740,6 +772,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_CastedPrimitive_u_64(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_StreamSink_send_update_Sse(
+    RustStreamSink<SendUpdate> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_StreamSink_ws_event_Sse(
@@ -827,6 +865,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     RequestSettings self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_box_autoadd_sent(Sent self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_settings(Settings self, SseSerializer serializer);
@@ -1129,6 +1170,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_opt_box_autoadd_sent(Sent? self, SseSerializer serializer);
+
+  @protected
   void sse_encode_opt_list_prim_u_8_strict(
     Uint8List? self,
     SseSerializer serializer,
@@ -1148,6 +1192,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_response(Response self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_send_update(SendUpdate self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_send_update_kind(
+    SendUpdateKind self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_sent(Sent self, SseSerializer serializer);

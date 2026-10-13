@@ -4,6 +4,7 @@
 mod client;
 pub(crate) mod cookies;
 mod exchange;
+mod watch;
 
 #[cfg(test)]
 mod tests;
@@ -14,6 +15,7 @@ use std::time::Instant;
 use self::client::client_for;
 
 pub(crate) use exchange::{Transport, execute};
+pub use watch::{Cancel, SendEvent, Watch};
 
 use crate::auth::{self, AuthKind};
 use crate::checks::{TestResult, capture, run_tests};
@@ -55,6 +57,18 @@ pub async fn send_with(
     options: &SendOptions,
     cookies: &[Cookie],
 ) -> Result<Sent, Error> {
+    send_watched(request, variables, options, cookies, &Watch::default()).await
+}
+
+/// Like [`send_with`], reporting the response to `watch` as it arrives and
+/// stopping when it says so.
+pub async fn send_watched(
+    request: &Request,
+    variables: &[Variable],
+    options: &SendOptions,
+    cookies: &[Cookie],
+    watch: &Watch,
+) -> Result<Sent, Error> {
     let resolved = resolve(request, variables);
     let unusable = match reqwest::Url::parse(&resolved.request.url) {
         Ok(url) => url
@@ -87,7 +101,7 @@ pub async fn send_with(
         .filter(|c| !c.value.starts_with(LOCKED))
         .cloned()
         .collect();
-    let (response, exchanges) = send_logged(resolved.request, options, &mut jar).await?;
+    let (response, exchanges) = send_logged(resolved.request, options, &mut jar, watch).await?;
     let tests = run_tests(&request.tests, &response, variables);
     let (captured, capture_problems) = capture(&request.captures, &response);
     let graphql_errors = if request.effective_body_mode() == BodyMode::GraphQl {
@@ -123,7 +137,9 @@ pub async fn send_opts(
     options: &SendOptions,
     cookies: &mut Vec<Cookie>,
 ) -> Result<Response, Error> {
-    Ok(send_logged(request, options, cookies).await?.0)
+    Ok(send_logged(request, options, cookies, &Watch::default())
+        .await?
+        .0)
 }
 
 /// Like [`send_opts`], also returning each exchange that took place.
@@ -131,6 +147,7 @@ pub(super) async fn send_logged(
     mut request: Request,
     options: &SendOptions,
     cookies: &mut Vec<Cookie>,
+    watch: &Watch,
 ) -> Result<(Response, Vec<Exchange>), Error> {
     let auth = request.auth.take().unwrap_or_default();
     // A request with no settings of its own follows the app's.
@@ -161,6 +178,7 @@ pub(super) async fn send_logged(
         jar.clone(),
         options.max_response_bytes,
         options.files.clone(),
+        watch.clone(),
     );
 
     let started = Instant::now();

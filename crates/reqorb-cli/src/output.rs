@@ -38,6 +38,16 @@ pub(crate) fn write_output(path: Option<&Path>, text: &str) -> Result<()> {
 /// Prints a response the way `curl -i` would, with metadata on stderr so
 /// stdout stays pipeable.
 pub(crate) fn print_response(response: &Response, output: &OutputArgs) -> Result<()> {
+    print_response_parts(response, output, true)
+}
+
+/// Prints the response, leaving out the body when `body` is false because
+/// it was already printed as it arrived.
+pub(crate) fn print_response_parts(
+    response: &Response,
+    output: &OutputArgs,
+    body: bool,
+) -> Result<()> {
     let mut err = std::io::stderr().lock();
     if output.include {
         writeln!(
@@ -53,6 +63,7 @@ pub(crate) fn print_response(response: &Response, output: &OutputArgs) -> Result
 
     let mut out = std::io::stdout().lock();
     match &response.bytes {
+        _ if !body => {}
         // Binary is written as it is when piped or redirected, but would
         // only garble a terminal.
         Some(bytes) if out.is_terminal() => writeln!(

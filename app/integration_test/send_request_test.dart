@@ -176,6 +176,25 @@ void main() {
             ..headers = request.headers
             ..body = await utf8.decodeStream(request);
         }
+        // A stream of events that never ends: two at once, then one more
+        // every so often for as long as anyone is listening.
+        if (request.uri.path == '/events') {
+          final response = request.response
+            ..bufferOutput = false
+            ..headers.contentType = ContentType('text', 'event-stream');
+          response.write('data: one\n\nevent: tick\nid: 2\ndata: two\n\n');
+          await response.flush();
+          try {
+            for (var n = 3; n < 200; n++) {
+              await Future<void>.delayed(const Duration(seconds: 2));
+              response.write('data: $n\n\n');
+              await response.flush();
+            }
+          } catch (_) {
+            // The listener has gone.
+          }
+          return;
+        }
         // An endpoint that has moved.
         if (request.uri.path == '/old') {
           request.response
@@ -1638,6 +1657,34 @@ void main() {
     await tester.pumpAndSettle();
     expect(seen.path, '/ping?ok=true');
     expect(find.byKey(const Key('test-results-tab')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('shows a stream of events as it arrives, and stops it', (
+    tester,
+  ) async {
+    await start(tester);
+    await launch(tester);
+    final base = 'http://127.0.0.1:${server.port}';
+    await type(tester, find.byKey(const Key('url')), '$base/events');
+    await tester.tap(find.byKey(const Key('send')));
+
+    // The first two events are on show while the response is still open.
+    await waitFor(tester, find.text('Events (2)'));
+    expect(find.byKey(const Key('receiving')), findsOneWidget);
+    expect(find.byKey(const Key('status')), findsNothing);
+    expect(find.text('tick'), findsOneWidget);
+    expect(find.text('two'), findsOneWidget);
+    expect(find.text('Stop'), findsOneWidget);
+
+    // Stopping ends the send and keeps what had arrived.
+    await tester.tap(find.byKey(const Key('send')));
+    await waitFor(tester, find.byKey(const Key('stopped')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('status')), findsOneWidget);
+    expect(find.byKey(const Key('receiving')), findsNothing);
+    expect(find.text('Send'), findsOneWidget);
+    expect(find.text('one'), findsOneWidget);
+    expect(store.session.single.response.body, startsWith('data: one\n\n'));
     expect(tester.takeException(), isNull);
   });
   testWidgets('runs a collection, passing captured values on', (tester) async {

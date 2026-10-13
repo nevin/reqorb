@@ -347,6 +347,122 @@ pub async fn send_request(
         .map_err(|e| e.to_string())
 }
 
+pub enum SendUpdateKind {
+    /// A response has begun: `status`, `status_text`, `http_version` and
+    /// `headers` are set. Redirects and authorization round trips each
+    /// begin one, so the last is the one the body belongs to.
+    Head,
+    /// More of the body: `text` is the new part, empty when the body is
+    /// not text, and `received` counts every byte so far.
+    Body,
+    /// The send is over, and `sent` is what it came to.
+    Done,
+    /// The send failed, for the reason in `text`.
+    Failed,
+}
+
+/// What a watched send reports: the response as it arrives, then how the
+/// send ended. Only the fields its kind names are set.
+pub struct SendUpdate {
+    pub kind: SendUpdateKind,
+    pub status: u16,
+    pub status_text: String,
+    pub http_version: String,
+    pub headers: Vec<Header>,
+    pub text: String,
+    pub received: u64,
+    pub sent: Option<Sent>,
+}
+
+impl SendUpdate {
+    fn of(kind: SendUpdateKind) -> Self {
+        Self {
+            kind,
+            status: 0,
+            status_text: String::new(),
+            http_version: String::new(),
+            headers: Vec::new(),
+            text: String::new(),
+            received: 0,
+            sent: None,
+        }
+    }
+}
+
+/// Sends under way, by the id the app gave each one, so they can be stopped.
+static SENDS: LazyLock<Mutex<HashMap<u32, reqorb_core::Cancel>>> = LazyLock::new(Default::default);
+
+/// Like [`send_request`], reporting the response while it arrives. The
+/// stream ends with `Done` or `Failed`.
+pub async fn send_request_watched(
+    id: u32,
+    request: Request,
+    variables: Vec<Variable>,
+    settings: Settings,
+    cookies: Vec<Cookie>,
+    sink: StreamSink<SendUpdate>,
+) {
+    let cancel = reqorb_core::Cancel::default();
+    SENDS.lock().unwrap().insert(id, cancel.clone());
+    let sink = std::sync::Arc::new(sink);
+    let progress = sink.clone();
+    let watch = reqorb_core::Watch::new(
+        move |event| {
+            let _ = progress.add(match event {
+                reqorb_core::SendEvent::Head {
+                    status,
+                    status_text,
+                    http_version,
+                    headers,
+                } => SendUpdate {
+                    status,
+                    status_text,
+                    http_version,
+                    headers,
+                    ..SendUpdate::of(SendUpdateKind::Head)
+                },
+                reqorb_core::SendEvent::Body { text, received } => SendUpdate {
+                    text,
+                    received,
+                    ..SendUpdate::of(SendUpdateKind::Body)
+                },
+            });
+        },
+        cancel,
+    );
+    let result = reqorb_core::send_watched(
+        &request,
+        &variables,
+        &settings.send_options(),
+        &cookies,
+        &watch,
+    )
+    .await;
+    SENDS.lock().unwrap().remove(&id);
+    let _ = sink.add(match result {
+        Ok(sent) => SendUpdate {
+            sent: Some(sent),
+            ..SendUpdate::of(SendUpdateKind::Done)
+        },
+        Err(e) => SendUpdate {
+            text: e.to_string(),
+            ..SendUpdate::of(SendUpdateKind::Failed)
+        },
+    });
+}
+
+/// Stops a watched send; false when it has already ended. One whose body
+/// was arriving ends with what had arrived.
+#[frb(sync)]
+pub fn cancel_send(id: u32) -> bool {
+    SENDS
+        .lock()
+        .unwrap()
+        .get(&id)
+        .map(|cancel| cancel.cancel())
+        .is_some()
+}
+
 #[frb(mirror(GraphQlQuery))]
 pub struct _GraphQlQuery {
     pub operations: Vec<String>,

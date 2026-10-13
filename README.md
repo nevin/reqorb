@@ -10,6 +10,8 @@ view. One Rust core does the networking and powers all three front ends.
 
 - **HTTP:** six body types (form-data, url-encoded, raw, binary, GraphQL, none), 12
   authorization types, cookies, redirects and per-request settings.
+- **Streaming:** a response is shown as it arrives, Server-Sent Events are listed one
+  by one, and a send can be stopped part way, keeping what came.
 - **GraphQL:** a query and variables editor, the server's schema to browse and write
   queries from, and the errors a `200` response hides.
 - **Tabs:** several requests open at once, each keeping its own edits and response.
@@ -297,6 +299,28 @@ reqorb POST https://httpbin.org/post -F title=Hi -F doc=@notes.txt
 reqorb POST https://httpbin.org/post --binary photo.png
 ```
 
+## Streaming responses
+
+A response is shown from the moment its status and headers are in, and its body as it
+arrives, so a slow or endless one does not leave the pane blank.
+
+- **Server-Sent Events:** a `text/event-stream` response gets an **Events** tab that
+  lists each event with its type, id and data as it comes, and follows the newest
+  unless you scroll up to read. The **Body** tab has the same stream as text.
+- **Stop:** while a response is arriving the Send button reads **Stop**. It ends the
+  send and keeps what had arrived, marked **Stopped**; tests and captures run on that
+  part. Before any answer the button reads **Cancel**, and nothing is kept.
+- **Large bodies:** event streams and newline-delimited JSON are always shown as they
+  arrive. Any other body is shown live up to 256 KB; past that its size is counted and
+  the body appears once it is whole.
+- **Timeouts:** a request's timeout covers the whole response, so a stream needs it
+  left at none, which is the default.
+- **CLI:** `reqorb GET <url>` prints an event stream or newline-delimited JSON line by
+  line as it arrives, and Ctrl-C ends it cleanly.
+
+A response that fails part way is reported as an error and what had arrived is not
+kept. The runner waits for each response to end, so it is not for endless streams.
+
 ## Tabs
 
 Each request opens in a tab of its own, with its own response, so one can be compared
@@ -478,7 +502,8 @@ file over before sharing it.
 crates/reqorb-core/src/     the request engine, used by everything else
   lib.rs                    the public API: module list and re-exports only
   model.rs  error.rs        the data types and the error type
-  http/                     sending: client cache, one exchange, cookie jar
+  http/                     sending: client cache, one exchange, cookie jar, and
+                            following or stopping a send under way
   ws.rs  grpc.rs            the other two protocols
   graphql.rs                GraphQL over HTTP: the request, its errors, the schema
   auth/                     auth types, signing a request, negotiating with a server

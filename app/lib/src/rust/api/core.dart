@@ -7,6 +7,8 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
+// These functions are ignored because they are not marked as `pub`: `of`
+
 /// The settings a request has when it sets none of its own.
 RequestSettings defaultRequestSettings() =>
     RustLib.instance.api.crateApiCoreDefaultRequestSettings();
@@ -40,6 +42,27 @@ Future<Sent> sendRequest({
   settings: settings,
   cookies: cookies,
 );
+
+/// Like [`send_request`], reporting the response while it arrives. The
+/// stream ends with `Done` or `Failed`.
+Stream<SendUpdate> sendRequestWatched({
+  required int id,
+  required Request request,
+  required List<Variable> variables,
+  required Settings settings,
+  required List<Cookie> cookies,
+}) => RustLib.instance.api.crateApiCoreSendRequestWatched(
+  id: id,
+  request: request,
+  variables: variables,
+  settings: settings,
+  cookies: cookies,
+);
+
+/// Stops a watched send; false when it has already ended. One whose body
+/// was arriving ends with what had arrived.
+bool cancelSend({required int id}) =>
+    RustLib.instance.api.crateApiCoreCancelSend(id: id);
 
 /// Fetches the GraphQL schema of the server the request points at, using
 /// the request's own headers and authorization.
@@ -1437,6 +1460,72 @@ class Response {
           bytes == other.bytes &&
           sizeBytes == other.sizeBytes &&
           elapsedMs == other.elapsedMs;
+}
+
+/// What a watched send reports: the response as it arrives, then how the
+/// send ended. Only the fields its kind names are set.
+class SendUpdate {
+  final SendUpdateKind kind;
+  final int status;
+  final String statusText;
+  final String httpVersion;
+  final List<Header> headers;
+  final String text;
+  final int received;
+  final Sent? sent;
+
+  const SendUpdate({
+    required this.kind,
+    required this.status,
+    required this.statusText,
+    required this.httpVersion,
+    required this.headers,
+    required this.text,
+    required this.received,
+    this.sent,
+  });
+
+  @override
+  int get hashCode =>
+      kind.hashCode ^
+      status.hashCode ^
+      statusText.hashCode ^
+      httpVersion.hashCode ^
+      headers.hashCode ^
+      text.hashCode ^
+      received.hashCode ^
+      sent.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SendUpdate &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          status == other.status &&
+          statusText == other.statusText &&
+          httpVersion == other.httpVersion &&
+          headers == other.headers &&
+          text == other.text &&
+          received == other.received &&
+          sent == other.sent;
+}
+
+enum SendUpdateKind {
+  /// A response has begun: `status`, `status_text`, `http_version` and
+  /// `headers` are set. Redirects and authorization round trips each
+  /// begin one, so the last is the one the body belongs to.
+  head,
+
+  /// More of the body: `text` is the new part, empty when the body is
+  /// not text, and `received` counts every byte so far.
+  body,
+
+  /// The send is over, and `sent` is what it came to.
+  done,
+
+  /// The send failed, for the reason in `text`.
+  failed,
 }
 
 class Sent {

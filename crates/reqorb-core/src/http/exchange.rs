@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use super::cookies::Jar;
+use super::watch::{SendEvent, TextStream, Watch};
 use crate::time::now_ms;
 use crate::{BodyMode, Error, Exchange, FileAccess, Header, Request, RequestSettings, Response};
 
@@ -25,6 +26,8 @@ pub(crate) struct Transport {
     max_response_bytes: Option<u64>,
     /// Which files a request may send.
     files: FileAccess,
+    /// Who is following the send, and can stop it.
+    watch: Watch,
 }
 
 impl Transport {
@@ -34,6 +37,7 @@ impl Transport {
         jar: Option<Arc<Jar>>,
         max_response_bytes: Option<u64>,
         files: FileAccess,
+        watch: Watch,
     ) -> Self {
         Self {
             client,
@@ -42,6 +46,7 @@ impl Transport {
             log: Mutex::default(),
             max_response_bytes,
             files,
+            watch,
         }
     }
 
@@ -250,7 +255,11 @@ async fn execute_once(
     }
 
     let started = Instant::now();
-    let mut resp = transport.client.execute(built).await?;
+    let watch = &transport.watch;
+    let mut resp = tokio::select! {
+        resp = transport.client.execute(built) => resp?,
+        _ = watch.cancel.cancelled() => return Err(Error::Cancelled),
+    };
 
     let status = resp.status();
     let version = resp.version();
@@ -294,11 +303,43 @@ async fn execute_once(
             limit.div_ceil(1024 * 1024)
         ))
     };
+    let content_type = headers
+        .iter()
+        .find(|h| h.name.eq_ignore_ascii_case("content-type"))
+        .map_or("", |h| h.value.as_str());
+    let limit = transport.max_response_bytes;
+    if let Some(limit) = limit
+        && resp.content_length().is_some_and(|length| length > limit)
+    {
+        return Err(too_large(limit));
+    }
     let mut bytes = Vec::new();
-    if let Some(limit) = transport.max_response_bytes {
-        if resp.content_length().is_some_and(|length| length > limit) {
-            return Err(too_large(limit));
+    if watch.watched() {
+        watch.report(SendEvent::Head {
+            status: status.as_u16(),
+            status_text: status.canonical_reason().unwrap_or("").to_string(),
+            http_version: format!("{version:?}"),
+            headers: headers.clone(),
+        });
+        // Text is passed on as it arrives; anything else is only counted.
+        let mut text = (is_text(content_type) || content_type.is_empty()).then(TextStream::default);
+        loop {
+            let chunk = tokio::select! {
+                chunk = resp.chunk() => chunk?,
+                // What has arrived so far is the response.
+                _ = watch.cancel.cancelled() => break,
+            };
+            let Some(chunk) = chunk else { break };
+            bytes.extend_from_slice(&chunk);
+            if limit.is_some_and(|limit| bytes.len() as u64 > limit) {
+                return Err(too_large(limit.unwrap_or_default()));
+            }
+            watch.report(SendEvent::Body {
+                text: text.as_mut().map(|t| t.push(&chunk)).unwrap_or_default(),
+                received: bytes.len() as u64,
+            });
         }
+    } else if let Some(limit) = limit {
         while let Some(chunk) = resp.chunk().await? {
             bytes.extend_from_slice(&chunk);
             if bytes.len() as u64 > limit {
@@ -309,10 +350,6 @@ async fn execute_once(
         bytes = resp.bytes().await?.to_vec();
     }
     let elapsed_ms = started.elapsed().as_millis() as u64;
-    let content_type = headers
-        .iter()
-        .find(|h| h.name.eq_ignore_ascii_case("content-type"))
-        .map_or("", |h| h.value.as_str());
     // Bytes that are not UTF-8 are kept as they are, unless the server says
     // they are text in some other encoding.
     let (body, raw) = match std::str::from_utf8(&bytes) {

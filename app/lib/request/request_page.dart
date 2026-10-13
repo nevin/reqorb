@@ -1091,6 +1091,8 @@ class _RequestPageState extends State<RequestPage> {
                 ? 'The request could not be sent'
                 : 'The workspace could not be read or saved',
             sending: _sending,
+            receiving: _http.receiving,
+            stopped: _http.stopped,
             sessionSize: _store.session.length,
             onExportSession: () => exportSessionHar(context, _store),
           );
@@ -1174,7 +1176,8 @@ class _RequestPageState extends State<RequestPage> {
                   FilledButton.tonal(
                     key: const Key('send'),
                     onPressed: _cancel,
-                    child: const Text('Cancel'),
+                    // A response that is arriving is kept as far as it got.
+                    child: Text(_http.receiving ? 'Stop' : 'Cancel'),
                   )
                 else
                   Tooltip(

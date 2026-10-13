@@ -8,6 +8,8 @@ pub enum Error {
     InvalidUrl { url: String, reason: String },
     #[error("request timed out")]
     Timeout,
+    #[error("the request was cancelled")]
+    Cancelled,
     #[error("could not connect: {0}")]
     Connect(String),
     #[error("{0}")]

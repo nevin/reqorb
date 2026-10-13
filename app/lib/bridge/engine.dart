@@ -30,6 +30,21 @@ abstract class Engine {
     required List<Cookie> cookies,
   });
 
+  /// Like [sendRequest], reporting the response while it arrives: first
+  /// its head, then its body in pieces, and last how the send ended.
+  /// [id] names the send, for [cancelSend].
+  Stream<SendUpdate> sendWatched({
+    required int id,
+    required Request request,
+    required List<Variable> variables,
+    required Settings settings,
+    required List<Cookie> cookies,
+  });
+
+  /// Stops a watched send; false when it has already ended. One whose
+  /// body was arriving ends with what had arrived.
+  bool cancelSend({required int id});
+
   /// Opens a WebSocket known by [id]; its events arrive on the stream.
   Stream<WsEvent> wsOpen({
     required int id,
@@ -203,6 +218,24 @@ class RustEngine extends Engine {
     settings: settings,
     cookies: cookies,
   );
+
+  @override
+  Stream<SendUpdate> sendWatched({
+    required int id,
+    required Request request,
+    required List<Variable> variables,
+    required Settings settings,
+    required List<Cookie> cookies,
+  }) => rust.sendRequestWatched(
+    id: id,
+    request: request,
+    variables: variables,
+    settings: settings,
+    cookies: cookies,
+  );
+
+  @override
+  bool cancelSend({required int id}) => rust.cancelSend(id: id);
 
   @override
   Stream<WsEvent> wsOpen({

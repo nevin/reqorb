@@ -30,6 +30,25 @@ Sent sentWith(
   graphqlErrors: graphqlErrors,
 );
 
+/// One report of a watched send.
+SendUpdate sendUpdate(
+  SendUpdateKind kind, {
+  int status = 200,
+  List<Header> headers = const [],
+  String text = '',
+  int received = 0,
+  Sent? sent,
+}) => SendUpdate(
+  kind: kind,
+  status: status,
+  statusText: status == 200 ? 'OK' : '',
+  httpVersion: 'HTTP/1.1',
+  headers: headers,
+  text: text,
+  received: received,
+  sent: sent,
+);
+
 WsEvent wsEvent(WsEventKind kind, [String text = '']) => WsEvent(
   kind: kind,
   text: text,
@@ -64,6 +83,40 @@ class FakeEngine extends Engine {
     sends.add((request, variables));
     sentSettings.add(settings);
     return onSend(request);
+  }
+
+  /// Answers a watched send piece by piece, when a test wants to see a
+  /// response arrive. Left null, a watched send is answered by [onSend].
+  Stream<SendUpdate> Function(int id, Request request)? onWatch;
+
+  /// The watched sends that were asked to stop.
+  final stopped = <int>[];
+
+  @override
+  Stream<SendUpdate> sendWatched({
+    required int id,
+    required Request request,
+    required List<Variable> variables,
+    required Settings settings,
+    required List<Cookie> cookies,
+  }) async* {
+    sends.add((request, variables));
+    sentSettings.add(settings);
+    if (onWatch case final watch?) {
+      yield* watch(id, request);
+      return;
+    }
+    try {
+      yield sendUpdate(SendUpdateKind.done, sent: await onSend(request));
+    } catch (e) {
+      yield sendUpdate(SendUpdateKind.failed, text: '$e');
+    }
+  }
+
+  @override
+  bool cancelSend({required int id}) {
+    stopped.add(id);
+    return true;
   }
 
   // ------------------------------------------------------------- websocket
