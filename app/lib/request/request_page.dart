@@ -23,6 +23,7 @@ import 'package:reqorb/protocols/grpc_view.dart';
 import 'package:reqorb/protocols/ws_view.dart';
 import 'package:reqorb/request/auth_editor.dart';
 import 'package:reqorb/request/body_editor.dart';
+import 'package:reqorb/request/code_dialog.dart';
 import 'package:reqorb/request/cookies_tab.dart';
 import 'package:reqorb/request/key_value_editor.dart';
 import 'package:reqorb/request/request_draft.dart';
@@ -602,6 +603,22 @@ class _RequestPageState extends State<RequestPage> {
 
   void _cancel() => _http.cancel();
 
+  /// Shows the request as code in other languages.
+  void _showCode() {
+    final request = _request();
+    if (request.url.isEmpty) {
+      _urlFocus.requestFocus();
+      showMessage(context, 'Enter a URL to write the request as code');
+      return;
+    }
+    showCodeDialog(
+      context,
+      request: request,
+      variables: _variables,
+      name: _name ?? '',
+    );
+  }
+
   Future<void> _save() async {
     final request = _request();
     final origin = _origin;
@@ -975,6 +992,21 @@ class _RequestPageState extends State<RequestPage> {
                       child: const Text('Send'),
                     ),
                   ),
+                if (!_isWs && !_isGrpc) ...[
+                  const SizedBox(width: 8),
+                  Tooltip(
+                    message: 'Code: curl, JavaScript, Python and more',
+                    child: OutlinedButton(
+                      key: const Key('code'),
+                      onPressed: _showCode,
+                      style: OutlinedButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(44, 42),
+                      ),
+                      child: const Icon(Icons.code, size: 18),
+                    ),
+                  ),
+                ],
                 const SizedBox(width: 8),
                 Tooltip(
                   message: 'Save request (${shortcutModifier}S)',

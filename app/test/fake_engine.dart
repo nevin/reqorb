@@ -364,6 +364,40 @@ class FakeEngine extends Engine {
   @override
   String exportHar({required List<Exchange> exchanges}) => '{"log":{}}';
 
+  // ------------------------------------------------------------------ code
+
+  /// Every request written out as code, with what it was written for.
+  final coded = <(Request, List<Variable>, CodeTarget)>[];
+
+  @override
+  List<CodeChoice> codeChoices() => const [
+    CodeChoice(target: CodeTarget.curl, label: 'curl', fileExtension: 'sh'),
+    CodeChoice(
+      target: CodeTarget.python,
+      label: 'Python · requests',
+      fileExtension: 'py',
+    ),
+    CodeChoice(
+      target: CodeTarget.go,
+      label: 'Go · net/http',
+      fileExtension: 'go',
+    ),
+  ];
+
+  @override
+  String generateCode({
+    required Request request,
+    required List<Variable> variables,
+    required CodeTarget target,
+  }) {
+    if (request.method == 'WS') {
+      throw 'code can be generated for HTTP requests only';
+    }
+    coded.add((request, variables, target));
+    final comment = target == CodeTarget.go ? '//' : '#';
+    return '$comment ${target.name}\n\t${request.method} "${request.url}"\n';
+  }
+
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw UnimplementedError('FakeEngine has no ${invocation.memberName}');

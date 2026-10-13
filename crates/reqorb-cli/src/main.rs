@@ -10,7 +10,7 @@ use std::process::ExitCode;
 use clap::Parser;
 
 use crate::cli::{Cli, Command};
-use crate::commands::{analyze, export, grpc, import, run, send, ws};
+use crate::commands::{analyze, code, export, grpc, import, run, send, ws};
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -19,6 +19,7 @@ async fn main() -> ExitCode {
         Some(Command::Run(args)) => run(args).await,
         Some(Command::Import(args)) => import(args).await,
         Some(Command::Export(args)) => export(args).await,
+        Some(Command::Code(args)) => code(args).await,
         Some(Command::Analyze(args)) => analyze(args),
         Some(Command::Ws(args)) => ws(args).await,
         Some(Command::Grpc(args)) => grpc(args).await,

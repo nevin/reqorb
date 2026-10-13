@@ -24,6 +24,9 @@ view. One Rust core does the networking and powers all three front ends.
 - **Collections and environments:** `{{variables}}`, folders and standalone requests.
 - **Import:** Postman, OpenAPI / Swagger (file or URL), HAR, curl and `.env`.
 - **Export:** Postman, Bruno, curl, `.env`, and the session as a HAR file.
+- **Code generation:** any request as code to copy or save: curl, JavaScript,
+  TypeScript, Python, Go, Rust, Java, Kotlin, Swift, C++, C#, PHP, Ruby, Dart or
+  PowerShell.
 - **HAR analysis:** totals, a timeline and findings (failures, slow or oversized
   responses, credentials in URLs) for any HAR file or the current session.
 - **History:** every request sent is kept with its response, searchable, and opens
@@ -94,6 +97,9 @@ reqorb export shop.reqorb.json -f bruno                  # reqorb | postman | br
 reqorb export shop.reqorb.json -f postman --redact       # safe to share
 reqorb import session.har -o session.reqorb.json         # a HAR from reqorb or a browser
 reqorb analyze session.har                               # totals, slowest requests and findings
+
+reqorb POST https://httpbin.org/post --json '{"n": 1}' --code python   # print code, send nothing
+reqorb code shop.reqorb.json 'Orders/Create' -l go -e dev.env -o create.go
 
 reqorb ws wss://echo.websocket.org -m hello -n 2
 reqorb grpc grpcb.in:9000                                # list methods
@@ -302,6 +308,45 @@ share one editor.
   `Ctrl+Space` asks for the list before anything is typed. Arrow keys and `Enter`
   or a tap pick one, `Esc` dismisses.
 
+## Code generation
+
+The **`</>`** button beside **Send** shows the request as code. Pick a language, then
+**Copy** it or **Save to file…**; the language is remembered for the next time.
+
+| Language | Client | Language | Client |
+| --- | --- | --- | --- |
+| Shell | curl | Kotlin | OkHttp |
+| JavaScript | `fetch`, or axios | Swift | URLSession |
+| TypeScript | `fetch` | C++ | libcurl |
+| Python | requests | C# | HttpClient |
+| Go | net/http | PHP | cURL |
+| Rust | reqwest | Ruby | Net::HTTP |
+| Java | java.net.http | Dart | package:http |
+| | | PowerShell | Invoke-WebRequest |
+
+The code is the request as it would be sent now:
+
+- **Variables are filled in** from the active environment, the collection and what
+  was captured this session, so that it runs as it stands. A `{{variable}}` with no
+  value is left as written and named in a comment on the first line.
+- **Authorization** that is a header or a query parameter is written as one: Basic,
+  Bearer, API key and an OAuth 2.0 token already fetched. Types reqorb computes for each
+  send (Digest, OAuth 1.0, Hawk, AWS, NTLM, EdgeGrid, JWT) are left out, with a comment
+  saying so; curl alone has options of its own for Digest, NTLM and AWS.
+- **Bodies:** a JSON body is written as a value in JavaScript, TypeScript and Python
+  and as text elsewhere; form-data uses each client's own multipart support, with
+  files read from the paths in the request; a binary body is read from its file;
+  url-encoded fields and GraphQL queries are written as the body they become.
+- **The timeout** is carried over. Other per-request settings (redirects, certificate
+  checks, HTTP version) and cookies from the jar are not.
+
+Text is escaped for each language, so quotes, `$`, backslashes and line breaks in a
+header or body come out as they went in. WebSocket and gRPC requests have no code.
+
+On the command line, `--code <language>` prints a request instead of sending it, and
+`reqorb code <file> [name] -l <language>` writes one from a collection. Short names
+such as `js`, `py`, `ts`, `c++` and `c#` are understood.
+
 ## GraphQL
 
 Choose **GraphQL** on the Body tab. The query and its variables are written separately
@@ -402,6 +447,7 @@ crates/reqorb-core/src/     the request engine, used by everything else
   graphql.rs                GraphQL over HTTP: the request, its errors, the schema
   auth/                     auth types, signing a request, negotiating with a server
   formats/                  one module per format, each with its import and export
+  codegen/                  a request as code: one generator per language
   vars.rs  checks.rs        variable substitution; tests and captures
   redact.rs  analyze.rs     redaction; the HAR report
   vault.rs  history.rs      what is kept on disk: the workspace, its credentials
@@ -412,7 +458,8 @@ crates/reqorb-cli/src/      the `reqorb` command
   commands/                 one module per command
 app/lib/                    the Flutter UI, one folder per feature
   bridge/                   Engine: the one interface to the Rust library
-  request/                  the main page, the request model, the send session and the editors
+  request/                  the main page, the request model, the send session, the
+                            editors and the code dialog
   response/  protocols/     the response pane; WebSocket and gRPC sessions and views
   editor/                   the code editor: colouring, typing aids, find and replace,
                             folding, completion

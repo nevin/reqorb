@@ -14,6 +14,7 @@
 mod analyze;
 mod auth;
 mod checks;
+mod codegen;
 mod error;
 mod files;
 mod formats;
@@ -31,6 +32,7 @@ mod ws;
 pub use analyze::{HarCount, HarEntry, HarFinding, HarPhase, HarReport, HarSeverity, analyze_har};
 pub use auth::{Auth, AuthField, AuthKind, AuthParam, auth_fields};
 pub use checks::{TestResult, capture, run_tests};
+pub use codegen::{CodeTarget, generate_code};
 pub use error::Error;
 pub use files::{DirAccess, FileAccess, check_directory};
 pub use formats::{

@@ -97,6 +97,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Workspace dco_decode_box_autoadd_workspace(dynamic raw);
 
   @protected
+  CodeChoice dco_decode_code_choice(dynamic raw);
+
+  @protected
+  CodeTarget dco_decode_code_target(dynamic raw);
+
+  @protected
   Collection dco_decode_collection(dynamic raw);
 
   @protected
@@ -206,6 +212,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<AuthParam> dco_decode_list_auth_param(dynamic raw);
+
+  @protected
+  List<CodeChoice> dco_decode_list_code_choice(dynamic raw);
 
   @protected
   List<Collection> dco_decode_list_collection(dynamic raw);
@@ -438,6 +447,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Workspace sse_decode_box_autoadd_workspace(SseDeserializer deserializer);
 
   @protected
+  CodeChoice sse_decode_code_choice(SseDeserializer deserializer);
+
+  @protected
+  CodeTarget sse_decode_code_target(SseDeserializer deserializer);
+
+  @protected
   Collection sse_decode_collection(SseDeserializer deserializer);
 
   @protected
@@ -547,6 +562,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<AuthParam> sse_decode_list_auth_param(SseDeserializer deserializer);
+
+  @protected
+  List<CodeChoice> sse_decode_list_code_choice(SseDeserializer deserializer);
 
   @protected
   List<Collection> sse_decode_list_collection(SseDeserializer deserializer);
@@ -812,6 +830,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_code_choice(CodeChoice self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_code_target(CodeTarget self, SseSerializer serializer);
+
+  @protected
   void sse_encode_collection(Collection self, SseSerializer serializer);
 
   @protected
@@ -928,6 +952,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_auth_param(
     List<AuthParam> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_code_choice(
+    List<CodeChoice> self,
     SseSerializer serializer,
   );
 

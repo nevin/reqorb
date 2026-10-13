@@ -344,3 +344,63 @@ fn sends_graphql_and_prints_a_schema() {
     assert_eq!(none.status.code(), Some(2));
     assert!(stderr(&none).contains("the answer holds no schema"));
 }
+
+#[test]
+fn writes_a_request_as_code() {
+    // What would be sent, without sending it: nothing listens at this address.
+    let python = reqorb(&[
+        "POST",
+        "{{base}}/items",
+        "--var",
+        "base=http://127.0.0.1:9",
+        "--json",
+        r#"{"n": 1}"#,
+        "--bearer",
+        "t-1",
+        "--code",
+        "py",
+    ]);
+    assert!(python.status.success(), "{}", stderr(&python));
+    let code = stdout(&python);
+    assert!(code.starts_with("import requests\n"), "{code}");
+    assert!(
+        code.contains("url = \"http://127.0.0.1:9/items\""),
+        "{code}"
+    );
+    assert!(
+        code.contains("\"Authorization\": \"Bearer t-1\","),
+        "{code}"
+    );
+    assert!(code.contains("payload = {\n    \"n\": 1,\n}"), "{code}");
+
+    // A saved request by name, with its collection's variables filled in
+    // and the one nothing sets pointed out.
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("chain.reqorb.json");
+    std::fs::write(&file, chain("https://api.test", "status == 200")).unwrap();
+    let file = file.to_str().unwrap();
+    let out = dir.path().join("me.go");
+    let go = reqorb(&["code", file, "me", "-l", "go", "-o", out.to_str().unwrap()]);
+    assert!(go.status.success(), "{}", stderr(&go));
+    let code = std::fs::read_to_string(&out).unwrap();
+    assert!(
+        code.starts_with("// No value is set for {{id}}, {{token}};"),
+        "{code}"
+    );
+    assert!(code.contains("\"https://api.test/me?id={{id}}\""), "{code}");
+
+    let filled = reqorb(&[
+        "code", file, "Me", "-l", "curl", "--var", "id=7", "--var", "token=t",
+    ]);
+    assert_eq!(
+        stdout(&filled),
+        "curl \\\n  'https://api.test/me?id=7' \\\n  -H 'X-Token: t'\n"
+    );
+
+    // Which request has to be said when there are several.
+    let vague = reqorb(&["code", file, "-l", "go"]);
+    assert_eq!(vague.status.code(), Some(2));
+    assert!(stderr(&vague).contains("holds several requests (Login, Me)"));
+    let unknown = reqorb(&["code", file, "Me", "-l", "cobol"]);
+    assert!(stderr(&unknown).contains("unknown language; use one of curl, fetch"));
+}

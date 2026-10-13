@@ -149,6 +149,17 @@ abstract class Engine {
   });
   String exportExtension({required ExportFormat format});
   String exportHar({required List<Exchange> exchanges});
+
+  /// The languages a request can be written out in.
+  List<CodeChoice> codeChoices();
+
+  /// The request as code, with [variables] filled in; throws for a request
+  /// that is not HTTP.
+  String generateCode({
+    required Request request,
+    required List<Variable> variables,
+    required CodeTarget target,
+  });
   Future<HarReport> analyzeHar({required String text});
 
   // -------------------------------------------------------------- redaction
@@ -339,6 +350,17 @@ class RustEngine extends Engine {
   @override
   String exportHar({required List<Exchange> exchanges}) =>
       rust.exportHar(exchanges: exchanges);
+
+  @override
+  List<CodeChoice> codeChoices() => rust.codeChoices();
+
+  @override
+  String generateCode({
+    required Request request,
+    required List<Variable> variables,
+    required CodeTarget target,
+  }) =>
+      rust.generateCode(request: request, variables: variables, target: target);
 
   @override
   Future<HarReport> analyzeHar({required String text}) =>

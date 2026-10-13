@@ -13,7 +13,14 @@ enum CodeLanguage {
   pairs,
 
   /// The checks and captures of the Tests tab, one to a line.
-  checks;
+  checks,
+
+  /// Code in a language of the C family, or near enough: comments open
+  /// with `//`.
+  source,
+
+  /// Code in a scripting language: comments open with `#`.
+  script;
 
   /// Whether this is code with brackets and quotes that come in pairs,
   /// rather than lines of plain words.
@@ -163,6 +170,8 @@ List<Token> tokenize(String text, CodeLanguage language) {
     CodeLanguage.javascript => _tokenizeJavascript(text),
     CodeLanguage.pairs => _tokenizePairs(text),
     CodeLanguage.checks => _tokenizeChecks(text),
+    CodeLanguage.source => _tokenizeCode(text, _source),
+    CodeLanguage.script => _tokenizeCode(text, _script),
   };
   return _withVariables(text, tokens);
 }
@@ -300,6 +309,51 @@ List<Token> _tokenizeChecks(String text) {
         : m[2] != null
         ? TokenKind.number
         : m[3] != null
+        ? TokenKind.keyword
+        : TokenKind.type;
+    tokens.add(Token(m.start, m.end, kind));
+  }
+  return tokens;
+}
+
+const _codeWords =
+    r'\b(as|async|await|break|case|catch|class|const|def|defer|do|echo|else|'
+    r'end|false|False|final|fn|for|from|fun|func|if|import|in|let|new|nil|'
+    r'None|null|nullptr|package|print|public|puts|require|return|static|'
+    r'struct|throws|true|True|try|use|using|val|var|void|while)\b';
+
+/// Comment, string, number, keyword and, last, a name with a capital,
+/// which in most languages is a type.
+RegExp _codePattern(String comment, String strings) => RegExp(
+  '($comment)'
+  '|($strings)'
+  '|($_number)'
+  '|$_codeWords'
+  r'|\b([A-Z][A-Za-z0-9_]*)\b',
+);
+
+final _source = _codePattern(
+  r'//[^\n]*|/\*[\s\S]*?(?:\*/|$)',
+  r'''"(?:[^"\\\n]|\\.)*"?|'(?:[^'\\\n]|\\.)*'?|`[^`]*`?''',
+);
+
+// Between single quotes a script's text may run over many lines, as a
+// body does in a curl command; `\'` is how a shell writes a quote there.
+final _script = _codePattern(
+  r'#[^\n]*',
+  r'''"(?:[^"\\\n]|\\.)*"?|\\'|'(?:[^'\\]|\\.)*'?''',
+);
+
+List<Token> _tokenizeCode(String text, RegExp pattern) {
+  final tokens = <Token>[];
+  for (final m in pattern.allMatches(text)) {
+    final kind = m[1] != null
+        ? TokenKind.comment
+        : m[2] != null
+        ? TokenKind.string
+        : m[3] != null
+        ? TokenKind.number
+        : m[4] != null
         ? TokenKind.keyword
         : TokenKind.type;
     tokens.add(Token(m.start, m.end, kind));

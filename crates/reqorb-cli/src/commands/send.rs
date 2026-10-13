@@ -59,6 +59,13 @@ pub(crate) async fn send(args: SendArgs) -> Result<ExitCode> {
     let request = args.http.apply(&request);
 
     let variables = load_variables(&args.vars).await?;
+    if let Some(target) = args.code {
+        print!(
+            "{}",
+            reqorb_core::generate_code(&request, &variables, target)?
+        );
+        return Ok(ExitCode::SUCCESS);
+    }
     if args.schema {
         let schema =
             reqorb_core::graphql_schema(&request, &variables, &args.http.options()?, &[]).await?;

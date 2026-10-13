@@ -10,11 +10,11 @@ use flutter_rust_bridge::frb;
 use crate::frb_generated::StreamSink;
 use reqorb_core::Keychain;
 pub use reqorb_core::{
-    AppTheme, Auth, AuthField, AuthKind, AuthParam, BodyMode, Collection, Cookie, DirAccess,
-    DisabledTls, Environment, Exchange, ExportFormat, FormField, GraphQlArg, GraphQlDraft,
-    GraphQlField, GraphQlQuery, GraphQlSchema, GraphQlType, GrpcCall, GrpcMethod, GrpcReply,
-    GrpcSchema, HarCount, HarEntry, HarFinding, HarPhase, HarReport, HarSeverity, Header,
-    HistoryEntry, HttpMode, ImportResult, Indent, Item, Layout, ProxyMode, Request,
+    AppTheme, Auth, AuthField, AuthKind, AuthParam, BodyMode, CodeTarget, Collection, Cookie,
+    DirAccess, DisabledTls, Environment, Exchange, ExportFormat, FormField, GraphQlArg,
+    GraphQlDraft, GraphQlField, GraphQlQuery, GraphQlSchema, GraphQlType, GrpcCall, GrpcMethod,
+    GrpcReply, GrpcSchema, HarCount, HarEntry, HarFinding, HarPhase, HarReport, HarSeverity,
+    Header, HistoryEntry, HttpMode, ImportResult, Indent, Item, Layout, ProxyMode, Request,
     RequestSettings, Response, Sent, Settings, TestResult, Variable, Workspace, WsEvent,
     WsEventKind,
 };
@@ -666,6 +666,57 @@ pub fn export_environment(
     format: ExportFormat,
 ) -> Result<String, String> {
     reqorb_core::export_environment(&environment, format).map_err(|e| e.to_string())
+}
+
+#[frb(mirror(CodeTarget))]
+pub enum _CodeTarget {
+    Curl,
+    Fetch,
+    Axios,
+    TypeScript,
+    Python,
+    Go,
+    Rust,
+    Java,
+    Kotlin,
+    Swift,
+    Cpp,
+    CSharp,
+    Php,
+    Ruby,
+    Dart,
+    PowerShell,
+}
+
+/// A language a request can be written in, with the name to show for it.
+pub struct CodeChoice {
+    pub target: CodeTarget,
+    pub label: String,
+    /// The usual file extension for code in it.
+    pub file_extension: String,
+}
+
+/// Every language, in the order a picker should list them.
+#[frb(sync)]
+pub fn code_choices() -> Vec<CodeChoice> {
+    CodeTarget::ALL
+        .into_iter()
+        .map(|target| CodeChoice {
+            target,
+            label: target.label().to_string(),
+            file_extension: target.extension().to_string(),
+        })
+        .collect()
+}
+
+/// The request as code, with `variables` (highest priority first) filled in.
+#[frb(sync)]
+pub fn generate_code(
+    request: Request,
+    variables: Vec<Variable>,
+    target: CodeTarget,
+) -> Result<String, String> {
+    reqorb_core::generate_code(&request, &variables, target).map_err(|e| e.to_string())
 }
 
 #[frb(mirror(HarSeverity))]

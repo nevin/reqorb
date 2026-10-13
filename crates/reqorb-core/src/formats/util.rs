@@ -16,7 +16,7 @@ pub(crate) fn loose_string(value: &Value) -> String {
     }
 }
 
-pub(super) fn basic_auth(user: &str, password: &str) -> String {
+pub(crate) fn basic_auth(user: &str, password: &str) -> String {
     let encoded = base64::engine::general_purpose::STANDARD.encode(format!("{user}:{password}"));
     format!("Basic {encoded}")
 }

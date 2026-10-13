@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::{Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use reqorb_core::{ExportFormat, FileAccess, HttpMode, Proxy, Request, SendOptions};
+use reqorb_core::{CodeTarget, ExportFormat, FileAccess, HttpMode, Proxy, Request, SendOptions};
 
 /// Send HTTP requests, run saved collections, and convert between formats.
 ///
@@ -27,6 +27,8 @@ pub(crate) enum Command {
     Import(ImportArgs),
     /// Convert a collection or environment file to another format
     Export(ExportArgs),
+    /// Write a saved request as code: curl, JavaScript, Python, Go and more
+    Code(CodeArgs),
     /// Report on a HAR archive: totals, slow and failed requests, and risks
     Analyze(AnalyzeArgs),
     /// Open a WebSocket, send messages and print what arrives
@@ -154,6 +156,11 @@ pub(crate) struct SendArgs {
     /// Which operation to run when the `--graphql` query holds several
     #[arg(long, value_name = "NAME", requires = "graphql")]
     pub(crate) operation: Option<String>,
+
+    /// Print the request as code in this language instead of sending it;
+    /// see `reqorb code --help` for the languages
+    #[arg(long, value_name = "LANGUAGE", value_parser = code_target, conflicts_with = "schema")]
+    pub(crate) code: Option<CodeTarget>,
 
     /// Print the GraphQL schema of the server at the URL instead of sending
     #[arg(long, conflicts_with_all = ["data", "json", "form", "binary", "graphql"])]
@@ -334,6 +341,36 @@ pub(crate) struct ImportArgs {
     /// Write the result here instead of stdout
     #[arg(short, long, value_name = "FILE")]
     pub(crate) output: Option<PathBuf>,
+}
+
+#[derive(Args)]
+pub(crate) struct CodeArgs {
+    /// Collection file or URL (reqorb, Postman, OpenAPI/Swagger, HAR or curl)
+    pub(crate) file: String,
+
+    /// The request to write, by name or `Folder/Name` path; needed when
+    /// the file holds several
+    pub(crate) name: Option<String>,
+
+    /// curl, fetch, axios, typescript, python, go, rust, java, kotlin,
+    /// swift, cpp, csharp, php, ruby, dart or powershell
+    #[arg(short, long, value_name = "LANGUAGE", value_parser = code_target)]
+    pub(crate) language: CodeTarget,
+
+    /// Write the code here instead of stdout
+    #[arg(short, long, value_name = "FILE")]
+    pub(crate) output: Option<PathBuf>,
+
+    #[command(flatten)]
+    pub(crate) vars: VarArgs,
+}
+
+/// Reads a language given by name, or by a usual short form such as `py`.
+fn code_target(name: &str) -> Result<CodeTarget, String> {
+    CodeTarget::from_id(name).ok_or_else(|| {
+        let known: Vec<&str> = CodeTarget::ALL.iter().map(|t| t.id()).collect();
+        format!("unknown language; use one of {}", known.join(", "))
+    })
 }
 
 #[derive(Args)]

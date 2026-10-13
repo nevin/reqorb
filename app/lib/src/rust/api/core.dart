@@ -198,6 +198,21 @@ Future<String> exportEnvironment({
   format: format,
 );
 
+/// Every language, in the order a picker should list them.
+List<CodeChoice> codeChoices() =>
+    RustLib.instance.api.crateApiCoreCodeChoices();
+
+/// The request as code, with `variables` (highest priority first) filled in.
+String generateCode({
+  required Request request,
+  required List<Variable> variables,
+  required CodeTarget target,
+}) => RustLib.instance.api.crateApiCoreGenerateCode(
+  request: request,
+  variables: variables,
+  target: target,
+);
+
 /// Reports on the text of a HAR archive: totals, breakdowns and findings.
 Future<HarReport> analyzeHar({required String text}) =>
     RustLib.instance.api.crateApiCoreAnalyzeHar(text: text);
@@ -351,6 +366,52 @@ class AuthParam {
 }
 
 enum BodyMode { none, formData, urlEncoded, raw, binary, graphQl }
+
+/// A language a request can be written in, with the name to show for it.
+class CodeChoice {
+  final CodeTarget target;
+  final String label;
+
+  /// The usual file extension for code in it.
+  final String fileExtension;
+
+  const CodeChoice({
+    required this.target,
+    required this.label,
+    required this.fileExtension,
+  });
+
+  @override
+  int get hashCode => target.hashCode ^ label.hashCode ^ fileExtension.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CodeChoice &&
+          runtimeType == other.runtimeType &&
+          target == other.target &&
+          label == other.label &&
+          fileExtension == other.fileExtension;
+}
+
+enum CodeTarget {
+  curl,
+  fetch,
+  axios,
+  typeScript,
+  python,
+  go,
+  rust,
+  java,
+  kotlin,
+  swift,
+  cpp,
+  cSharp,
+  php,
+  ruby,
+  dart,
+  powerShell,
+}
 
 class Collection {
   final String name;

@@ -28,6 +28,22 @@ Future<Object?> _pickAndSave({
   required Uint8List bytes,
 }) => FilePicker.saveFile(fileName: fileName, bytes: bytes);
 
+/// Saves generated code to a file the user chooses, suggesting
+/// [fileName]. It is written as shown, which is how it has to run.
+Future<void> saveCodeFile(
+  BuildContext context,
+  String fileName,
+  String code,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    final saved = await fileSaver(fileName: fileName, bytes: utf8.encode(code));
+    if (saved != null) notify(messenger, 'Saved $fileName');
+  } catch (e) {
+    notify(messenger, 'Could not save the code: $e');
+  }
+}
+
 /// Whether the last export was redacted, offered again as the default.
 bool _redact = false;
 
