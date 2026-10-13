@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide FormField;
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -12,6 +10,7 @@ import 'package:reqorb/cookies_tab.dart';
 import 'package:reqorb/environments.dart';
 import 'package:reqorb/grpc_view.dart';
 import 'package:reqorb/key_value_editor.dart';
+import 'package:reqorb/request_draft.dart';
 import 'package:reqorb/request_settings_editor.dart';
 import 'package:reqorb/response_view.dart';
 import 'package:reqorb/sidebar.dart';
@@ -78,51 +77,43 @@ class RequestPage extends StatefulWidget {
 
 class _RequestPageState extends State<RequestPage> {
   final _scaffold = GlobalKey<ScaffoldState>();
-  final _url = TextEditingController(text: 'https://httpbin.org/get');
-  final _headers = TextEditingController();
 
-  /// The request's tests and captures, one per line.
-  final _tests = TextEditingController();
-  final _captures = TextEditingController();
-  final _body = TextEditingController();
+  /// The request in the editor. The names below are shorthand for its parts.
+  final _draft = RequestDraft(url: 'https://httpbin.org/get');
 
-  /// Which kind of body the request has; [_body] holds the raw text.
-  BodyMode _bodyMode = BodyMode.none;
+  TextEditingController get _url => _draft.url;
+  TextEditingController get _headers => _draft.headers;
+  TextEditingController get _tests => _draft.tests;
+  TextEditingController get _captures => _draft.captures;
+  TextEditingController get _body => _draft.body;
+  TextEditingController get _urlEncoded => _draft.urlEncoded;
+  TextEditingController get _binary => _draft.binary;
+  TextEditingController get _params => _draft.params;
 
-  /// Url-encoded fields as `key: value` lines.
-  final _urlEncoded = TextEditingController();
-
-  /// Form-data fields, kept in step by the form-data table.
-  List<FormField> _formData = const [];
-
-  /// Path of the file sent as a binary body.
-  final _binary = TextEditingController();
-
-  /// The URL's query string as `key:value` lines, for the Params tab.
-  final _params = TextEditingController();
-
-  /// Guards the two listeners that keep [_url] and [_params] in step.
-  bool _syncing = false;
+  String get _method => _draft.method;
+  set _method(String value) => _draft.method = value;
+  BodyMode get _bodyMode => _draft.bodyMode;
+  set _bodyMode(BodyMode value) => _draft.bodyMode = value;
+  List<FormField> get _formData => _draft.formData;
+  set _formData(List<FormField> value) => _draft.formData = value;
+  Auth? get _auth => _draft.auth;
+  set _auth(Auth? value) => _draft.auth = value;
+  RequestSettings? get _settings => _draft.settings;
+  set _settings(RequestSettings? value) => _draft.settings = value;
+  String? get _grpcMethod => _draft.grpcMethod;
+  set _grpcMethod(String? value) => _draft.grpcMethod = value;
+  String? get _protoPath => _draft.protoPath;
+  set _protoPath(String? value) => _draft.protoPath = value;
+  int get _generation => _draft.generation;
 
   /// Key-value tabs currently in Bulk Edit mode.
   final _bulk = <String>{};
-  String _method = 'GET';
   bool _sending = false;
   Sent? _sent;
   String? _error;
 
   /// The saved request being edited, if the editor was opened from one.
   RequestRef? _origin;
-
-  /// How the request in the editor authenticates; null for no auth.
-  Auth? _auth;
-
-  /// Transport options for the request in the editor; null for the defaults.
-  RequestSettings? _settings;
-
-  /// Bumped whenever the editor loads a different request, so the auth form
-  /// rebuilds from that request instead of keeping what was typed before.
-  int _generation = 0;
 
   /// Whether the docked sidebar is hidden to give the editor more room.
   bool _sidebarCollapsed = false;
@@ -143,100 +134,36 @@ class _RequestPageState extends State<RequestPage> {
   /// Identifies the send in flight, so a cancelled one is ignored on return.
   int _sendId = 0;
 
-  /// The open request as it was last saved, to tell when it has been edited.
-  Request? _saved;
-
-  /// Bumped by edits that do not go through a text controller.
-  final _revision = ValueNotifier(0);
-
   /// Notifies on any edit to the request, for the title and the tab badges.
-  late final _edits = Listenable.merge([
-    _url,
-    _headers,
-    _tests,
-    _captures,
-    _body,
-    _urlEncoded,
-    _binary,
-    _revision,
-  ]);
+  Listenable get _edits => _draft;
 
-  void _touch() => _revision.value++;
+  void _touch() => _draft.touch();
 
   WorkspaceStore get _store => widget.store;
 
   @override
   void initState() {
     super.initState();
-    _params.text = paramsTextFromUrl(_url.text);
-    _url.addListener(_urlChanged);
     // Clicking away from the title keeps what was typed.
     _titleFocus.addListener(() {
       if (!_titleFocus.hasFocus && _editingTitle) _commitTitle();
     });
-    _params.addListener(_paramsChanged);
   }
 
   @override
   void dispose() {
-    _url.dispose();
-    _headers.dispose();
-    _tests.dispose();
-    _captures.dispose();
-    _body.dispose();
-    _urlEncoded.dispose();
-    _binary.dispose();
-    _params.dispose();
+    _draft.dispose();
     final socket = _socket;
     if (socket != null) wsClose(id: socket);
     _socketEvents?.cancel();
     _urlFocus.dispose();
     _titleText.dispose();
     _titleFocus.dispose();
-    _revision.dispose();
     super.dispose();
   }
 
-  /// Typing in the URL bar updates the Params tab.
-  void _urlChanged() {
-    if (_syncing) return;
-    final text = paramsTextFromUrl(_url.text);
-    // Compared as pairs so that reformatting alone does not disturb the tab.
-    if (urlWithParamsText('', text) == urlWithParamsText('', _params.text)) {
-      return;
-    }
-    _syncing = true;
-    _params.text = text;
-    _syncing = false;
-  }
+  List<Header> _parseHeaders() => _draft.parseHeaders();
 
-  /// Editing the Params tab rewrites the URL's query string.
-  void _paramsChanged() {
-    if (_syncing) return;
-    final url = urlWithParamsText(_url.text, _params.text);
-    if (url == _url.text) return;
-    _syncing = true;
-    _url.text = url;
-    _syncing = false;
-  }
-
-  /// Parses one `Name: value` per line; lines without a colon are skipped.
-  List<Header> _parseHeaders() {
-    final headers = <Header>[];
-    for (final line in const LineSplitter().convert(_headers.text)) {
-      final i = line.indexOf(':');
-      if (i <= 0) continue;
-      headers.add(
-        Header(
-          name: line.substring(0, i).trim(),
-          value: line.substring(i + 1).trim(),
-        ),
-      );
-    }
-    return headers;
-  }
-
-  /// The request as typed, before variables are substituted.
   /// Whether the editor holds a WebSocket rather than an HTTP request.
   bool get _isWs => _method == 'WS';
 
@@ -345,11 +272,6 @@ class _RequestPageState extends State<RequestPage> {
   /// The server's methods, once loaded by reflection or from a file.
   GrpcSchema? _grpcSchema;
 
-  /// The method to call, as `package.Service/Method`.
-  String? _grpcMethod;
-
-  /// The `.proto` file the methods come from; null means reflection.
-  String? _protoPath;
   bool _grpcBusy = false;
   GrpcReply? _grpcReply;
   String? _grpcError;
@@ -486,141 +408,16 @@ class _RequestPageState extends State<RequestPage> {
     }
   }
 
-  Request _request() {
-    if (_isWs || _isGrpc) {
-      // The message being composed is kept as the body, so it is saved too.
-      return Request(
-        method: _method,
-        url: _url.text.trim(),
-        headers: _parseHeaders(),
-        body: _body.text.isEmpty ? null : _body.text,
-        form: const [],
-        auth: _auth,
-        settings: _settings,
-        grpcMethod: _isGrpc ? _grpcMethod : null,
-        protoPath: _isGrpc ? _protoPath : null,
-        tests: const [],
-        captures: const [],
-      );
-    }
-    final body = switch (_bodyMode) {
-      BodyMode.raw => _body.text,
-      BodyMode.binary => _binary.text.trim(),
-      _ => '',
-    };
-    final form = switch (_bodyMode) {
-      BodyMode.formData => _formData,
-      BodyMode.urlEncoded => [
-        for (final line in _urlEncoded.text.split('\n'))
-          if (parseKeyValueLine(line) case (final key, final value))
-            FormField(key: key, value: value, file: false),
-      ],
-      _ => const <FormField>[],
-    };
-    // A body type with nothing in it is the same as no body.
-    final empty = body.isEmpty && form.isEmpty;
-    return Request(
-      method: _method,
-      url: _url.text.trim(),
-      headers: _parseHeaders(),
-      body: body.isEmpty ? null : body,
-      bodyMode: empty ? null : _bodyMode,
-      form: form,
-      auth: _auth,
-      settings: _settings,
-      tests: linesOf(_tests.text),
-      captures: linesOf(_captures.text),
-    );
-  }
+  /// The request as typed, before variables are substituted.
+  Request _request() => _draft.toRequest();
 
-  /// Shows a request's body in the editor for its type. Text bodies saved
-  /// or imported as url-encoded strings open in the url-encoded table.
-  void _loadBody(Request request) {
-    final body = request.body ?? '';
-    final encoded = request.headers.any(
-      (h) =>
-          h.name.toLowerCase() == 'content-type' &&
-          h.value.toLowerCase().contains('x-www-form-urlencoded'),
-    );
-    var mode =
-        request.bodyMode ?? (body.isEmpty ? BodyMode.none : BodyMode.raw);
-    var fields = request.form;
-    if (mode != BodyMode.formData &&
-        fields.isEmpty &&
-        encoded &&
-        body.isNotEmpty) {
-      mode = BodyMode.urlEncoded;
-      String decode(String s) {
-        try {
-          return Uri.decodeQueryComponent(s);
-        } catch (_) {
-          return s;
-        }
-      }
+  String? _rawLanguage() => _draft.rawLanguage();
 
-      fields = [
-        for (final pair in body.split('&'))
-          if (pair.isNotEmpty)
-            switch (pair.indexOf('=')) {
-              < 0 => FormField(key: decode(pair), value: '', file: false),
-              final i => FormField(
-                key: decode(pair.substring(0, i)),
-                value: decode(pair.substring(i + 1)),
-                file: false,
-              ),
-            },
-      ];
-    }
-    _bodyMode = mode;
-    _body.text = mode == BodyMode.raw ? body : '';
-    _binary.text = mode == BodyMode.binary ? body : '';
-    _formData = mode == BodyMode.formData ? fields : const [];
-    _urlEncoded.text = mode == BodyMode.urlEncoded
-        ? [for (final f in fields) '${f.key}: ${f.value}'].join('\n')
-        : '';
-  }
-
-  /// The raw-body type whose Content-Type the headers currently carry.
-  String? _rawLanguage() {
-    for (final header in _parseHeaders()) {
-      if (header.name.toLowerCase() != 'content-type') continue;
-      final value = header.value.toLowerCase();
-      for (final entry in rawLanguages.entries) {
-        if (value.startsWith(entry.value)) return entry.key;
-      }
-    }
-    return null;
-  }
-
-  /// Sets the Content-Type header for a raw body, replacing any existing one.
-  void _setRawLanguage(String name) {
-    final lines = [
-      for (final line in _headers.text.split('\n'))
-        if (line.trim().isNotEmpty &&
-            !line.trim().toLowerCase().startsWith('content-type:'))
-          line,
-      'Content-Type: ${rawLanguages[name]}',
-    ];
-    setState(() => _headers.text = lines.join('\n'));
-  }
+  void _setRawLanguage(String name) =>
+      setState(() => _draft.setRawLanguage(name));
 
   /// Whether the open request differs from its saved copy.
-  bool get _dirty {
-    final saved = _saved;
-    if (_origin == null || saved == null) return false;
-    final now = _request();
-    return now.method != saved.method ||
-        now.url != saved.url ||
-        now.body != saved.body ||
-        now.bodyMode != saved.bodyMode ||
-        now.grpcMethod != saved.grpcMethod ||
-        now.protoPath != saved.protoPath ||
-        now.settings != saved.settings ||
-        now.auth?.kind != saved.auth?.kind ||
-        !listEquals(now.auth?.params, saved.auth?.params) ||
-        !listEquals(now.headers, saved.headers) ||
-        !listEquals(now.form, saved.form);
-  }
+  bool get _dirty => _origin != null && _draft.dirty;
 
   /// The open request's name: its saved one, or the one typed for a draft.
   String? get _name {
@@ -695,22 +492,10 @@ class _RequestPageState extends State<RequestPage> {
     setState(() {
       _wsReset();
       _grpcReset();
-      _grpcMethod = request.grpcMethod;
-      _protoPath = request.protoPath;
+      _draft.load(request);
       _origin = ref;
-      _method = request.method.toUpperCase();
-      _url.text = request.url;
-      _headers.text = [for (final h in request.headers) '${h.name}: ${h.value}']
-          .join('\n');
-      _tests.text = request.tests.join('\n');
-      _captures.text = request.captures.join('\n');
-      _loadBody(request);
-      _auth = request.auth;
-      _settings = request.settings;
-      _generation++;
       _sent = null;
       _error = null;
-      _saved = _request();
       _draftName = null;
       _editingTitle = false;
     });
@@ -725,22 +510,9 @@ class _RequestPageState extends State<RequestPage> {
       _wsReset();
       _grpcReset();
       _origin = null;
-      _method = 'GET';
-      _url.clear();
-      _headers.clear();
-      _tests.clear();
-      _captures.clear();
-      _body.clear();
-      _bodyMode = BodyMode.none;
-      _urlEncoded.clear();
-      _formData = const [];
-      _binary.clear();
-      _auth = null;
-      _settings = null;
-      _generation++;
+      _draft.clear();
       _sent = null;
       _error = null;
-      _saved = null;
       _draftName = null;
       _editingTitle = false;
     });
@@ -817,7 +589,7 @@ class _RequestPageState extends State<RequestPage> {
     final origin = _origin;
     if (origin != null && _store.itemAt(origin)?.request != null) {
       _store.updateRequest(origin, request);
-      setState(() => _saved = _request());
+      setState(_draft.markSaved);
       showMessage(context, 'Saved');
       return;
     }
@@ -851,7 +623,7 @@ class _RequestPageState extends State<RequestPage> {
     };
     setState(() {
       _origin = ref;
-      _saved = _request();
+      _draft.markSaved();
       _draftName = null;
     });
   }
@@ -897,7 +669,7 @@ class _RequestPageState extends State<RequestPage> {
             onNewRequest: () => _leave(_newRequest),
             onRemoved: () => setState(() {
               _origin = null;
-              _saved = null;
+              _draft.saved = null;
             }),
             onCollapse: docked ? toggle : null,
           );
