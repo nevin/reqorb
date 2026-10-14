@@ -130,7 +130,7 @@ Future<void> runImport(
           name: name,
           variables: found.variables,
           items: found.items,
-          untrustedScripts: found.untrustedScripts,
+          unreviewed: found.unreviewed,
         ),
       ],
       environments: result.environments,

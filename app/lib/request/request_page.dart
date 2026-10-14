@@ -16,7 +16,7 @@ import 'package:reqorb/protocols/ws_session.dart';
 import 'package:reqorb/request/environment_picker.dart';
 import 'package:reqorb/request/request_tab.dart';
 import 'package:reqorb/request/request_title.dart';
-import 'package:reqorb/request/script_consent.dart';
+import 'package:reqorb/request/collection_review.dart';
 import 'package:reqorb/request/tab_strip.dart';
 import 'package:reqorb/request/url_bar.dart';
 import 'package:reqorb/request/send_session.dart';
@@ -798,15 +798,15 @@ class _RequestPageState extends State<RequestPage> {
     }
     var sending = request;
     final origin = _origin;
-    if (hasScripts(request) &&
+    if (needsReview(request) &&
         origin != null &&
         needsConsent(_store, origin.collection)) {
-      switch (await askToRunScripts(context, _store, origin.collection)) {
-        case ScriptChoice.cancel:
+      switch (await askToReview(context, _store, origin.collection)) {
+        case ReviewChoice.cancel:
           return;
-        case ScriptChoice.skip:
+        case ReviewChoice.skip:
           sending = withoutScripts(request);
-        case ScriptChoice.allow:
+        case ReviewChoice.allow:
           break;
       }
       if (!mounted) return;

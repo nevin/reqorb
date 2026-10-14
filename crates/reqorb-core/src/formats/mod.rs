@@ -58,16 +58,27 @@ pub(crate) fn import_from(
     origin: Option<&url::Url>,
 ) -> Result<ImportResult, Error> {
     let mut result = parse(text, name_hint, origin)?;
-    // Scripts from elsewhere wait to be allowed before they run.
-    let scripted: usize = result
-        .collections
-        .iter_mut()
-        .map(|collection| {
-            let count = collection.scripts().len();
-            collection.untrusted_scripts = count > 0;
-            count
-        })
-        .sum();
+    // A curl command is one line, read in full as it is pasted.
+    if result.source == "curl" {
+        return Ok(result);
+    }
+    // Scripts and files from elsewhere wait to be allowed before use.
+    let mut scripted = 0;
+    let mut files = 0;
+    for collection in &mut result.collections {
+        scripted += collection.scripts().len();
+        files += collection.files().len();
+        collection.unreviewed = collection.needs_review();
+    }
+    if files > 0 {
+        result.warnings.insert(
+            0,
+            format!(
+                "{files} file(s) are read from your disk and sent by these requests. reqorb \
+                 asks before they are first read."
+            ),
+        );
+    }
     if scripted > 0 {
         result.warnings.insert(
             0,
@@ -258,7 +269,7 @@ fn http_only(collection: &Collection) -> Collection {
         variables: collection.variables.clone(),
         items: keep(&collection.items),
         link: None,
-        untrusted_scripts: false,
+        unreviewed: false,
     }
 }
 

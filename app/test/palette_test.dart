@@ -39,7 +39,7 @@ void main() {
         source: 'test',
         collections: [
           Collection(
-            untrustedScripts: false,
+            unreviewed: false,
             name: 'Shop',
             variables: const [],
             items: [

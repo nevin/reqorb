@@ -1843,7 +1843,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       variables: dco_decode_list_variable(arr[1]),
       items: dco_decode_list_item(arr[2]),
       link: dco_decode_opt_box_autoadd_folder_link(arr[3]),
-      untrustedScripts: dco_decode_bool(arr[4]),
+      unreviewed: dco_decode_bool(arr[4]),
     );
   }
 
@@ -3028,13 +3028,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_variables = sse_decode_list_variable(deserializer);
     var var_items = sse_decode_list_item(deserializer);
     var var_link = sse_decode_opt_box_autoadd_folder_link(deserializer);
-    var var_untrustedScripts = sse_decode_bool(deserializer);
+    var var_unreviewed = sse_decode_bool(deserializer);
     return Collection(
       name: var_name,
       variables: var_variables,
       items: var_items,
       link: var_link,
-      untrustedScripts: var_untrustedScripts,
+      unreviewed: var_unreviewed,
     );
   }
 
@@ -4560,7 +4560,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_variable(self.variables, serializer);
     sse_encode_list_item(self.items, serializer);
     sse_encode_opt_box_autoadd_folder_link(self.link, serializer);
-    sse_encode_bool(self.untrustedScripts, serializer);
+    sse_encode_bool(self.unreviewed, serializer);
   }
 
   @protected

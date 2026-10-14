@@ -314,7 +314,7 @@ pub struct _Collection {
     pub variables: Vec<Variable>,
     pub items: Vec<Item>,
     pub link: Option<FolderLink>,
-    pub untrusted_scripts: bool,
+    pub unreviewed: bool,
 }
 
 #[frb(mirror(Workspace))]

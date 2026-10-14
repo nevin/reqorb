@@ -399,7 +399,7 @@ pub(crate) mod tests {
                     }],
                 }],
                 link: None,
-                untrusted_scripts: false,
+                unreviewed: false,
             }],
             requests: vec![Item {
                 name: "Loose".into(),

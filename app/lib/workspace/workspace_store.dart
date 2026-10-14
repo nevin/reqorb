@@ -382,7 +382,7 @@ class WorkspaceStore extends ChangeNotifier {
           name: name,
           variables: const [],
           items: const [],
-          untrustedScripts: false,
+          unreviewed: false,
         ),
       ],
     );
@@ -390,9 +390,9 @@ class WorkspaceStore extends ChangeNotifier {
   }
 
   /// Lets the scripts of the collection at [index] run from now on.
-  void trustScripts(int index) {
+  void markReviewed(int index) {
     final target = collections[index];
-    if (!target.untrustedScripts) return;
+    if (!target.unreviewed) return;
     _set(
       collections: [...collections]
         ..[index] = Collection(
@@ -400,7 +400,7 @@ class WorkspaceStore extends ChangeNotifier {
           variables: target.variables,
           items: target.items,
           link: target.link,
-          untrustedScripts: false,
+          unreviewed: false,
         ),
     );
   }
@@ -412,7 +412,7 @@ class WorkspaceStore extends ChangeNotifier {
       name: name,
       variables: target.variables,
       link: target.link,
-      untrustedScripts: target.untrustedScripts,
+      unreviewed: target.unreviewed,
       items: target.items,
     );
     _set(collections: all);
@@ -433,7 +433,7 @@ class WorkspaceStore extends ChangeNotifier {
     variables: collection.variables,
     items: collection.items,
     link: link,
-    untrustedScripts: collection.untrustedScripts,
+    unreviewed: collection.unreviewed,
   );
 
   /// Keeps the collection at [index] in the folder at [dir] from now on,
@@ -593,7 +593,7 @@ class WorkspaceStore extends ChangeNotifier {
           name: newCollectionName,
           variables: const [],
           items: [item],
-          untrustedScripts: false,
+          unreviewed: false,
         ),
       );
       _set(collections: all);
@@ -604,7 +604,7 @@ class WorkspaceStore extends ChangeNotifier {
       name: target.name,
       variables: target.variables,
       link: target.link,
-      untrustedScripts: target.untrustedScripts,
+      unreviewed: target.unreviewed,
       items: [...target.items, item],
     );
     _set(collections: all);
@@ -648,7 +648,7 @@ class WorkspaceStore extends ChangeNotifier {
       name: target.name,
       variables: target.variables,
       link: target.link,
-      untrustedScripts: target.untrustedScripts,
+      unreviewed: target.unreviewed,
       items: _insert(target.items, ref.path, item),
     );
     _set(collections: all);
@@ -714,7 +714,7 @@ class WorkspaceStore extends ChangeNotifier {
       name: target.name,
       variables: target.variables,
       link: target.link,
-      untrustedScripts: target.untrustedScripts,
+      unreviewed: target.unreviewed,
       items: _replace(target.items, ref.path, change),
     );
     _set(collections: all);

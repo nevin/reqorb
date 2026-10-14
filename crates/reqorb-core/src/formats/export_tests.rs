@@ -38,7 +38,7 @@ pub(super) fn sample() -> Collection {
             },
         ],
         link: None,
-        untrusted_scripts: false,
+        unreviewed: false,
     }
 }
 
@@ -137,7 +137,7 @@ fn auth_survives_postman_and_reaches_other_formats() {
             })
             .collect(),
         link: None,
-        untrusted_scripts: false,
+        unreviewed: false,
     };
 
     // Postman keeps every type, parameter for parameter.
@@ -209,7 +209,7 @@ fn body_types_reach_every_format() {
             with("none", &|r| r.body_mode = Some(BodyMode::None)),
         ],
         link: None,
-        untrusted_scripts: false,
+        unreviewed: false,
     };
 
     // Postman keeps every type; an explicit "none" comes back as no body.
@@ -310,7 +310,7 @@ fn request_settings_survive_postman() {
             },
         ],
         link: None,
-        untrusted_scripts: false,
+        unreviewed: false,
     };
     let text = export_collection(&collection, ExportFormat::Postman).unwrap();
     let value: Value = serde_json::from_str(&text).unwrap();
@@ -424,7 +424,7 @@ fn other_tools_formats_leave_out_websocket_and_grpc_requests() {
             item("Call", "GRPC"),
         ],
         link: None,
-        untrusted_scripts: false,
+        unreviewed: false,
     };
     for format in [
         ExportFormat::Postman,

@@ -1267,7 +1267,7 @@ mod tests {
                 items: Vec::new(),
             }],
             link: None,
-            untrusted_scripts: false,
+            unreviewed: false,
         }
     }
 

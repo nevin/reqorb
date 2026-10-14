@@ -386,8 +386,9 @@ there, and an import says so when a script uses the first two. A script that run
 more than ten seconds is stopped. A script can read every variable, credentials
 included, so scripts that came from elsewhere (an import, a collection folder opened
 from disk, or one whose scripts changed in a pull) do not run until you allow them.
-The first send or run from such a collection shows its scripts and asks: allow them
-from now on, send without them this time, or cancel. Scripts are not run for WebSocket or gRPC requests, and Bruno
+The same goes for files such a collection would read from your disk and send. The
+first send or run from it shows its scripts and files and asks: allow them from now
+on, send without the scripts this time, or cancel. Scripts are not run for WebSocket or gRPC requests, and Bruno
 and curl exports leave them out. In the CLI, `--pre-script` and `--post-script` take a
 script or `@file`.
 

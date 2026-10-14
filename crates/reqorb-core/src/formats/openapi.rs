@@ -96,7 +96,7 @@ pub(crate) fn collection(
         variables: ctx.variables,
         items,
         link: None,
-        untrusted_scripts: false,
+        unreviewed: false,
     }
 }
 

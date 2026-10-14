@@ -40,6 +40,8 @@ the files and folders the user chooses.
 - Scripts can read your variables, credentials included, and put them into the request
   being sent. Scripts from an import or a folder are shown and wait for you to allow
   them, but once allowed they run on every send. Read them before you do.
-- Unless a working directory is set, a request can send any file the app can read. An
-  imported collection can name such a file.
+- Unless a working directory is set, a request can send any file the app can read.
+  A collection from an import or a folder lists the files it reads and waits for you to
+  allow them; once allowed, or in a request you write yourself, nothing more is asked.
+  On macOS and iPad the App Sandbox limits the app to files you have chosen.
 - With certificate verification turned off in Settings, connections can be intercepted.

@@ -6,7 +6,7 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:reqorb/request/script_consent.dart';
+import 'package:reqorb/request/collection_review.dart';
 import 'package:reqorb/bridge/engine.dart';
 import 'package:reqorb/runner/collection_run.dart';
 import 'package:reqorb/shared/theme.dart';
@@ -36,19 +36,19 @@ Future<void> showRunner(
 }) async {
   // A collection's scripts that have not been allowed are asked about once,
   // before the run, not at every request.
-  final scripted = steps.where((step) => hasScripts(step.request));
+  final scripted = steps.where((step) => needsReview(step.request));
   final collection = scripted.firstOrNull?.collection;
   var running = steps;
   if (collection != null && needsConsent(store, collection)) {
-    switch (await askToRunScripts(context, store, collection)) {
-      case ScriptChoice.cancel:
+    switch (await askToReview(context, store, collection)) {
+      case ReviewChoice.cancel:
         return;
-      case ScriptChoice.skip:
+      case ReviewChoice.skip:
         running = [
           for (final step in steps)
             RunStep(step.path, withoutScripts(step.request), step.collection),
         ];
-      case ScriptChoice.allow:
+      case ReviewChoice.allow:
         break;
     }
     if (!context.mounted) return;

@@ -27,7 +27,7 @@ pub fn export_native(collections: &[Collection], environments: &[Environment]) -
             .iter()
             .map(|collection| Collection {
                 link: None,
-                untrusted_scripts: false,
+                unreviewed: false,
                 ..collection.clone()
             })
             .collect(),

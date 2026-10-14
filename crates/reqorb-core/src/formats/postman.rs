@@ -97,7 +97,7 @@ impl Postman {
             variables: postman_variables(&value["variable"]),
             items: self.items(&value["item"], own_auth(value), &scripts(value)),
             link: None,
-            untrusted_scripts: false,
+            unreviewed: false,
         }
     }
 

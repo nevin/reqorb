@@ -486,14 +486,14 @@ class Collection {
   final List<Variable> variables;
   final List<Item> items;
   final FolderLink? link;
-  final bool untrustedScripts;
+  final bool unreviewed;
 
   const Collection({
     required this.name,
     required this.variables,
     required this.items,
     this.link,
-    required this.untrustedScripts,
+    required this.unreviewed,
   });
 
   @override
@@ -502,7 +502,7 @@ class Collection {
       variables.hashCode ^
       items.hashCode ^
       link.hashCode ^
-      untrustedScripts.hashCode;
+      unreviewed.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -513,7 +513,7 @@ class Collection {
           variables == other.variables &&
           items == other.items &&
           link == other.link &&
-          untrustedScripts == other.untrustedScripts;
+          unreviewed == other.unreviewed;
 }
 
 class Cookie {

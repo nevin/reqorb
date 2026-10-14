@@ -172,7 +172,7 @@ fn from_har_entries(value: &Value, name: &str, only: Option<&[u32]>) -> ImportRe
             variables: Vec::new(),
             items,
             link: None,
-            untrusted_scripts: false,
+            unreviewed: false,
         }],
         environments: Vec::new(),
         warnings,

@@ -110,7 +110,7 @@ fn postman_scripts_come_in_and_go_back_out() {
     assert!(result.warnings[0].contains("carry scripts, which run each time"));
     assert!(result.warnings[1].contains("pm.sendRequest"));
     // They wait to be allowed, wherever they come from.
-    assert!(result.collections[0].untrusted_scripts);
+    assert!(result.collections[0].unreviewed);
 
     let exported = export_collection(collection, ExportFormat::Postman).unwrap();
     let again = import(&exported, "").unwrap();
@@ -225,4 +225,32 @@ fn imports_dotenv_and_rejects_noise() {
     assert!(import("just some prose", "x").is_err());
     assert!(import("{\"foo\": 1}", "x").is_err());
     assert!(import("curl", "x").is_err());
+}
+
+#[test]
+fn a_collection_that_reads_files_waits_to_be_reviewed() {
+    let with_file = r#"{
+        "info": {"name": "Up", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+        "item": [{"name": "Upload", "request": {"method": "POST", "url": "https://api.test",
+            "body": {"mode": "formdata", "formdata": [
+                {"key": "f", "type": "file", "src": "/home/me/.ssh/id_rsa"}]}}}]
+    }"#;
+    let result = import(with_file, "").unwrap();
+    let collection = &result.collections[0];
+    assert!(collection.unreviewed);
+    assert_eq!(
+        collection.files(),
+        [("Upload".to_string(), "/home/me/.ssh/id_rsa")]
+    );
+    assert!(
+        result.warnings[0].starts_with("1 file(s) are read"),
+        "{:?}",
+        result.warnings
+    );
+
+    // Nothing to run and nothing to read: nothing to review.
+    let plain = with_file.replace(r#""type": "file", "src""#, r#""type": "text", "value""#);
+    let result = import(&plain, "").unwrap();
+    assert!(!result.collections[0].unreviewed);
+    assert!(result.warnings.is_empty(), "{:?}", result.warnings);
 }

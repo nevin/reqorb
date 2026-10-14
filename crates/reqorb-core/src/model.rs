@@ -319,14 +319,47 @@ pub struct Collection {
     /// the machine it was set on, and is left out of every export.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link: Option<FolderLink>,
-    /// Its scripts came from elsewhere, an import or a folder, and have not
-    /// been allowed to run on this machine yet. They can read every
-    /// variable, credentials included.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub untrusted_scripts: bool,
+    /// It came from elsewhere, an import or a folder, with scripts to run
+    /// or files to read from this machine, and the user has not allowed
+    /// them yet. A script can read every variable, credentials included,
+    /// and a file can be any the app can read.
+    #[serde(
+        default,
+        alias = "untrusted_scripts",
+        skip_serializing_if = "std::ops::Not::not"
+    )]
+    pub unreviewed: bool,
 }
 
 impl Collection {
+    /// Every file the collection's requests read from disk, with the path
+    /// of the request.
+    pub fn files(&self) -> Vec<(String, &str)> {
+        let mut out = Vec::new();
+        for (path, request) in self.requests() {
+            match request.effective_body_mode() {
+                BodyMode::Binary => {
+                    if let Some(file) = request.body.as_deref().filter(|f| !f.trim().is_empty()) {
+                        out.push((path, file));
+                    }
+                }
+                BodyMode::FormData => {
+                    for field in request.form.iter().filter(|f| f.file) {
+                        out.push((path.clone(), field.value.as_str()));
+                    }
+                }
+                _ => {}
+            }
+        }
+        out
+    }
+
+    /// Whether, coming from elsewhere, it has anything to review: scripts
+    /// to run or files to read.
+    pub fn needs_review(&self) -> bool {
+        !self.scripts().is_empty() || !self.files().is_empty()
+    }
+
     /// Every script in the collection, with the path of its request.
     pub fn scripts(&self) -> Vec<(String, &str, &str)> {
         self.requests()
