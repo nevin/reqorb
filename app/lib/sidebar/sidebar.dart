@@ -8,7 +8,6 @@ import 'package:reqorb/transfer/import_actions.dart';
 import 'package:reqorb/transfer/export_actions.dart';
 import 'package:reqorb/har/har_actions.dart';
 import 'package:reqorb/settings/settings_dialog.dart';
-import 'package:reqorb/spec/spec_page.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 import 'package:reqorb/shared/theme.dart';
 import 'package:reqorb/workspace/workspace_store.dart';
@@ -23,6 +22,7 @@ class Sidebar extends StatefulWidget {
     required this.onNewRequest,
     required this.onRemoved,
     required this.onHistory,
+    required this.onSpecs,
     this.onCollapse,
   });
 
@@ -39,6 +39,9 @@ class Sidebar extends StatefulWidget {
 
   /// Shows the requests sent before.
   final VoidCallback onHistory;
+
+  /// Opens the page for reading and editing API specs.
+  final VoidCallback onSpecs;
 
   /// Hides the sidebar; null when it is shown as a drawer instead.
   final VoidCallback? onCollapse;
@@ -250,7 +253,7 @@ class _SidebarState extends State<Sidebar> {
               dense: true,
               leading: const Icon(Icons.description_outlined, size: 20),
               title: const Text('API specs'),
-              onTap: () => showSpecs(context, store),
+              onTap: widget.onSpecs,
             ),
             ListTile(
               key: const Key('har-analyser'),

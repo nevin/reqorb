@@ -19,13 +19,22 @@ import 'package:reqorb/shared/split_view.dart';
 import 'package:reqorb/shared/text_dialog.dart';
 import 'package:reqorb/shared/theme.dart';
 import 'package:reqorb/spec/api_spec.dart';
+import 'package:reqorb/src/rust/api/core.dart';
 import 'package:reqorb/transfer/export_actions.dart';
 import 'package:reqorb/transfer/import_actions.dart';
 import 'package:reqorb/workspace/workspace_store.dart';
 
-/// Opens the spec page, empty, with ways to open a document.
-Future<void> showSpecs(BuildContext context, WorkspaceStore store) {
+/// Opens the spec page, empty, with ways to open a document. [onTry]
+/// opens an operation tried there as a request.
+Future<void> showSpecs(
+  BuildContext context,
+  WorkspaceStore store, {
+  void Function(String name, Request request)? onTry,
+}) {
   final engine = Engine.of(context);
+  // Trying one operation after another reads the document once.
+  String? importedText;
+  ImportResult? imported;
   return Navigator.of(context).push(
     MaterialPageRoute<void>(
       fullscreenDialog: true,
@@ -35,7 +44,84 @@ Future<void> showSpecs(BuildContext context, WorkspaceStore store) {
           store,
           () => engine.importText(text: text, nameHint: nameHintFor(name)),
         ),
+        onTry: onTry == null
+            ? null
+            : (op, text, server) async {
+                if (text != importedText) {
+                  imported = await engine.importText(text: text, nameHint: '');
+                  importedText = text;
+                }
+                final tried = requestFor(imported!, op, server: server);
+                if (tried == null) return false;
+                onTry(tried.name, tried.request);
+                return true;
+              },
       ),
+    ),
+  );
+}
+
+/// The request that importing a spec made for [op], with the collection's
+/// variables put in, since it is tried outside the collection: the server,
+/// which [server] replaces when given, and the examples of its path
+/// parameters. Null when the import has no such request.
+({String name, Request request})? requestFor(
+  ImportResult result,
+  SpecOperation op, {
+  String? server,
+}) {
+  final collection = result.collections.firstOrNull;
+  if (collection == null) return null;
+  // As the importer writes it: `/pets/{id}` as `/pets/{{id}}`.
+  final url =
+      '{{baseUrl}}${op.path.replaceAll('{', '{{').replaceAll('}', '}}')}';
+  Item? find(List<Item> items) {
+    for (final item in items) {
+      final request = item.request;
+      if (request != null &&
+          request.method == op.method &&
+          request.url == url) {
+        return item;
+      }
+      if (find(item.items) case final found?) return found;
+    }
+    return null;
+  }
+
+  final item = find(collection.items);
+  final request = item?.request;
+  if (item == null || request == null) return null;
+  final values = {
+    for (final variable in collection.variables) variable.key: variable.value,
+    'baseUrl': ?server,
+  };
+  String fill(String text) => text.replaceAllMapped(
+    RegExp(r'\{\{([^{}]+)\}\}'),
+    (match) => values[match[1]] ?? match[0]!,
+  );
+  return (
+    name: item.name,
+    request: Request(
+      method: request.method,
+      url: fill(request.url),
+      headers: [
+        for (final header in request.headers)
+          Header(name: header.name, value: fill(header.value)),
+      ],
+      body: request.body == null ? null : fill(request.body!),
+      timeoutMs: request.timeoutMs,
+      auth: request.auth,
+      settings: request.settings,
+      bodyMode: request.bodyMode,
+      form: request.form,
+      grpcMethod: request.grpcMethod,
+      protoPath: request.protoPath,
+      graphqlVariables: request.graphqlVariables,
+      graphqlOperation: request.graphqlOperation,
+      tests: request.tests,
+      captures: request.captures,
+      preScript: request.preScript,
+      postScript: request.postScript,
     ),
   );
 }
@@ -64,7 +150,13 @@ Future<String> _fetch(Uri url) async {
 enum _View { edit, split, preview }
 
 class SpecPage extends StatefulWidget {
-  const SpecPage({super.key, required this.onImport, this.name, this.text});
+  const SpecPage({
+    super.key,
+    required this.onImport,
+    this.onTry,
+    this.name,
+    this.text,
+  });
 
   /// A document to open with; none to start from the choices.
   final String? name;
@@ -73,6 +165,12 @@ class SpecPage extends StatefulWidget {
   /// Imports the document as a collection.
   final Future<void> Function(BuildContext context, String name, String text)
   onImport;
+
+  /// Opens [SpecOperation] as a request to try, made from the document's
+  /// text, with [server] as where the API is when the document does not
+  /// say in full. Answers whether it could; null to offer no trying.
+  final Future<bool> Function(SpecOperation op, String text, String? server)?
+  onTry;
 
   @override
   State<SpecPage> createState() => _SpecPageState();
@@ -84,6 +182,9 @@ class _SpecPageState extends State<SpecPage> {
   /// What the document is called, such as its file name; null until one
   /// is open.
   String? _name;
+
+  /// Where the document was opened from, when that was a web address.
+  Uri? _source;
 
   /// The text as last opened or saved, to know whether it has changed.
   String _saved = '';
@@ -121,6 +222,7 @@ class _SpecPageState extends State<SpecPage> {
     _reading?.cancel();
     setState(() {
       _name = name;
+      _source = null;
       _saved = text;
       _code.text = text;
       // Another document's preview would mislead while this one is read.
@@ -221,7 +323,9 @@ class _SpecPageState extends State<SpecPage> {
     try {
       final text = await specFetcher(url);
       final last = url.pathSegments.where((s) => s.isNotEmpty).lastOrNull;
-      if (mounted) _load(last ?? url.host, text);
+      if (!mounted) return;
+      _load(last ?? url.host, text);
+      _source = url;
     } catch (e) {
       notify(messenger, 'Could not open $url: $e');
     }
@@ -278,6 +382,52 @@ class _SpecPageState extends State<SpecPage> {
         if (mounted) _code.goToLine(line);
       })
       ..scheduleFrame();
+  }
+
+  /// Where the API is, when the document gives only a path, such as
+  /// `/api/v3`: that path from where the document was opened.
+  String? get _server {
+    final first = _spec?.servers.firstOrNull;
+    final source = _source;
+    if (first == null || source == null || first.contains('://')) return null;
+    final server = source.resolve(first).toString();
+    return server.endsWith('/')
+        ? server.substring(0, server.length - 1)
+        : server;
+  }
+
+  /// Opens [op] as a request, and says so.
+  Future<void> _try(SpecOperation op) async {
+    final onTry = widget.onTry;
+    if (onTry == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      if (await onTry(op, _code.text, _server)) {
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text('${op.method} ${op.path} is open in a new tab'),
+              action: SnackBarAction(
+                label: 'Go to it',
+                onPressed: () async {
+                  if (!mounted || !await _mayDiscard() || !mounted) return;
+                  // Changes, if any, were dropped just now.
+                  _saved = _code.text;
+                  Navigator.pop(context);
+                },
+              ),
+            ),
+          );
+      } else {
+        notify(
+          messenger,
+          'Could not make a request for ${op.method} ${op.path}',
+        );
+      }
+    } catch (e) {
+      notify(messenger, 'Could not read the spec to try it: $e');
+    }
   }
 
   /// Re-indents JSON, or writes YAML out as JSON.
@@ -462,7 +612,11 @@ class _SpecPageState extends State<SpecPage> {
         language: _json ? CodeLanguage.json : CodeLanguage.yaml,
         onChanged: _edited,
       );
-      final preview = _Preview(spec: _spec, onLine: _goToLine);
+      final preview = _Preview(
+        spec: _spec,
+        onLine: _goToLine,
+        onTry: widget.onTry == null ? null : _try,
+      );
       return Column(
         children: [
           Padding(
@@ -612,12 +766,15 @@ class _Status extends StatelessWidget {
 /// The API as documentation: its details, its problems, and its
 /// operations by tag.
 class _Preview extends StatefulWidget {
-  const _Preview({required this.spec, required this.onLine});
+  const _Preview({required this.spec, required this.onLine, this.onTry});
 
   final ApiSpec? spec;
 
   /// Shows a line of the text in the editor.
   final ValueChanged<int> onLine;
+
+  /// Opens an operation as a request; null to offer no trying.
+  final ValueChanged<SpecOperation>? onTry;
 
   @override
   State<_Preview> createState() => _PreviewState();
@@ -771,6 +928,8 @@ class _PreviewState extends State<_Preview> {
         op: op,
         opener: _opener(id),
         links: links,
+        // A webhook is a request the API sends, not one to send it.
+        onTry: op.webhook ? null : widget.onTry,
       ),
       id,
     );
@@ -1207,7 +1366,11 @@ class _Operation extends StatelessWidget {
     required this.op,
     required this.opener,
     required this.links,
+    this.onTry,
   });
+
+  /// Opens [op] as a request; null to offer no trying.
+  final ValueChanged<SpecOperation>? onTry;
 
   /// The spec [op] is in, which its examples are made from.
   final ApiSpec spec;
@@ -1322,6 +1485,16 @@ class _Operation extends StatelessWidget {
           ],
         ),
         children: [
+          if (onTry case final onTry?)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: FilledButton.tonalIcon(
+                key: Key('spec-try-$name'),
+                icon: const Icon(Icons.send, size: 16),
+                label: const Text('Try it'),
+                onPressed: () => onTry(op),
+              ),
+            ),
           if (op.deprecated)
             Text('Deprecated', style: TextStyle(color: scheme.error)),
           if (op.description.isNotEmpty) Text(op.description),

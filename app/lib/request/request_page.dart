@@ -738,7 +738,7 @@ class _RequestPageState extends State<RequestPage> {
       action(
         'Open an API spec',
         Icons.description_outlined,
-        () => showSpecs(context, _store),
+        _openSpecs,
         detail: 'OpenAPI, Swagger',
       ),
       action(
@@ -761,6 +761,32 @@ class _RequestPageState extends State<RequestPage> {
 
   void _openPalette(VoidCallback toggleSidebar) =>
       showCommandPalette(context, _paletteItems(toggleSidebar));
+
+  // ---------------------------------------------------------------- specs
+
+  /// Opens the spec page, which can hand back operations to try.
+  void _openSpecs() {
+    if (_scaffold.currentState?.isDrawerOpen ?? false) {
+      _scaffold.currentState!.closeDrawer();
+    }
+    showSpecs(context, _store, onTry: _tryOperation);
+  }
+
+  /// Opens an operation from a spec in a new, unsaved tab, behind the spec
+  /// page, which stays open for more.
+  void _tryOperation(String name, Request request) {
+    setState(() {
+      _useFreshTab();
+      _wsReset();
+      _grpcReset();
+      _draft.load(request);
+      _draft.saved = null;
+      _origin = null;
+      _http.reset();
+      _graphql.reset();
+      _draftName = name;
+    });
+  }
 
   // -------------------------------------------------------------- history
 
@@ -941,6 +967,7 @@ class _RequestPageState extends State<RequestPage> {
             onNewRequest: _newRequest,
             onRemoved: _reconcileTabs,
             onHistory: _openHistory,
+            onSpecs: _openSpecs,
             onCollapse: docked ? toggle : null,
           );
           const width = _sidebarWidth + 1;

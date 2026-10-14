@@ -6,6 +6,7 @@ import 'package:reqorb/editor/syntax.dart';
 import 'package:reqorb/main.dart';
 import 'package:reqorb/spec/api_spec.dart';
 import 'package:reqorb/spec/spec_page.dart';
+import 'package:reqorb/src/rust/api/core.dart';
 import 'package:reqorb/workspace/workspace_store.dart';
 
 import 'fake_engine.dart';
@@ -566,6 +567,113 @@ paths:
       expect(find.text('Remote'), findsOneWidget);
       expect(find.text('openapi.json'), findsOneWidget);
     });
+  });
+
+  test('a tried operation is the imported request, variables put in', () {
+    const imported = ImportResult(
+      source: 'openapi',
+      environments: [],
+      warnings: [],
+      collections: [
+        Collection(
+          name: 'Pets',
+          unreviewed: false,
+          variables: [
+            Variable(
+              key: 'baseUrl',
+              value: 'http://localhost/v1',
+              enabled: true,
+              secret: false,
+            ),
+            Variable(key: 'id', value: '7', enabled: true, secret: false),
+          ],
+          items: [
+            Item(
+              name: 'pets',
+              items: [
+                Item(
+                  name: 'List the pets',
+                  items: [],
+                  request: Request(
+                    method: 'GET',
+                    url: '{{baseUrl}}/pets',
+                    headers: [],
+                    form: [],
+                    tests: [],
+                    captures: [],
+                  ),
+                ),
+                Item(
+                  name: 'Change a pet',
+                  items: [],
+                  request: Request(
+                    method: 'PUT',
+                    url: '{{baseUrl}}/pets/{{id}}/{{owner}}',
+                    headers: [Header(name: 'X-Pet', value: '{{id}}')],
+                    body: '{"id": "{{id}}"}',
+                    form: [],
+                    tests: [],
+                    captures: [],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+    final spec = readSpec('''
+openapi: 3.0.3
+info: {title: Pets, version: "1"}
+paths:
+  /pets: {get: {responses: {"200": {description: ok}}}}
+  /pets/{id}/{owner}:
+    put:
+      parameters:
+        - {name: id, in: path, required: true}
+        - {name: owner, in: path, required: true}
+      responses: {"200": {description: ok}}
+''');
+    final put = spec.operations.last;
+    final tried = requestFor(imported, put, server: 'https://pets.test/v1')!;
+    expect(tried.name, 'Change a pet');
+    // A parameter with no example is left for the user to fill in.
+    expect(tried.request.url, 'https://pets.test/v1/pets/7/{{owner}}');
+    expect(tried.request.headers.single.value, '7');
+    expect(tried.request.body, '{"id": "7"}');
+    expect(
+      requestFor(imported, spec.operations.first)!.request.url,
+      'http://localhost/v1/pets',
+    );
+  });
+
+  testWidgets('Try it hands the operation over, and says so', (tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final tried = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SpecPage(
+          name: 'openapi.yaml',
+          text: specTemplate,
+          onImport: (_, _, _) async {},
+          onTry: (op, text, server) async {
+            tried.add('${op.method} ${op.path}');
+            return true;
+          },
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const Key('spec-view-preview')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('spec-op-GET-/items/{id}')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('spec-try-GET-/items/{id}')));
+    await tester.pumpAndSettle();
+    expect(tried, ['GET /items/{id}']);
+    expect(find.text('GET /items/{id} is open in a new tab'), findsOneWidget);
+    expect(find.text('Go to it'), findsOneWidget);
   });
 
   testWidgets('an open operation shows example bodies', (tester) async {
