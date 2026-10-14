@@ -159,7 +159,7 @@ fn parse(text: &str, name_hint: &str, origin: Option<&url::Url>) -> Result<Impor
         .lines()
         .any(|l| l.starts_with("openapi:") || l.starts_with("swagger:"))
     {
-        let value: Value = serde_yaml_ng::from_str(text)
+        let value: Value = serde_saphyr::from_str(text)
             .map_err(|e| Error::Format(format!("invalid YAML: {e}")))?;
         if openapi::is_spec(&value) {
             return Ok(openapi_result(&value, name_hint, origin));

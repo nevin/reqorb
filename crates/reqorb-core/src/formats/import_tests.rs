@@ -254,3 +254,42 @@ fn a_collection_that_reads_files_waits_to_be_reviewed() {
     assert!(!result.collections[0].unreviewed);
     assert!(result.warnings.is_empty(), "{:?}", result.warnings);
 }
+
+#[test]
+fn yaml_openapi_with_number_keys_aliases_and_a_bomb() {
+    // Status codes are numbers to YAML unless quoted; anchors are common.
+    let spec = r#"openapi: 3.0.0
+info: {title: Pets, version: 1}
+servers: [{url: 'https://pets.test'}]
+x-common: &ok {description: fine}
+paths:
+  /pets:
+    get:
+      responses:
+        200: *ok
+        '404': {description: missing}
+"#;
+    let result = import(spec, "").unwrap();
+    let requests = result.collections[0].requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].1.url, "{{baseUrl}}/pets");
+    let base = &result.collections[0].variables[0];
+    assert_eq!(
+        (base.key.as_str(), base.value.as_str()),
+        ("baseUrl", "https://pets.test")
+    );
+
+    // Each alias doubles the one before: a few lines, billions of nodes.
+    let mut bomb = String::from("openapi: 3.0.0\na: &a [x, x]\n");
+    for (i, name) in "bcdefghijklmnopqrstuvwxyz".chars().enumerate() {
+        let before = if i == 0 {
+            'a'
+        } else {
+            (b'a' + i as u8) as char
+        };
+        bomb.push_str(&format!("{name}: &{name} [*{before}, *{before}]\n"));
+    }
+    let started = std::time::Instant::now();
+    assert!(import(&bomb, "").is_err());
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+}
