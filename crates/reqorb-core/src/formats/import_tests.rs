@@ -183,6 +183,39 @@ fn curl_defaults_and_get_data() {
 }
 
 #[test]
+fn curl_with_only_a_path_takes_the_host_from_the_page() {
+    // GraphQL Playground copies its requests with a path for a URL.
+    let playground = import(
+        "curl '/graphql' -H 'Origin: https://api.test' --data-binary '{\"query\":\"{ me }\"}'",
+        "x",
+    )
+    .unwrap();
+    let request = playground.collections[0].items[0].request.clone().unwrap();
+    assert_eq!(request.url, "https://api.test/graphql");
+    assert_eq!(playground.collections[0].items[0].name, "POST /graphql");
+    assert_eq!(
+        playground.warnings,
+        ["the URL `/graphql` has no host, so the one in the Origin header was used"]
+    );
+
+    let referred = import(
+        "curl /v1/items?x=1 -H 'Referer: https://site.test/app/page'",
+        "x",
+    )
+    .unwrap();
+    let request = referred.collections[0].items[0].request.clone().unwrap();
+    assert_eq!(request.url, "https://site.test/v1/items?x=1");
+
+    let unknown = import("curl /graphql", "x").unwrap();
+    let request = unknown.collections[0].items[0].request.clone().unwrap();
+    assert_eq!(request.url, "/graphql");
+    assert_eq!(
+        unknown.warnings,
+        ["the URL `/graphql` has no host; add one before sending"]
+    );
+}
+
+#[test]
 fn curl_uploads_become_body_types() {
     let form = import("curl https://api.test/u -F title=Hi -F 'doc=@/tmp/a b.pdf;type=application/pdf' --form-string 'raw=@x'", "x").unwrap();
     let request = form.collections[0].items[0].request.clone().unwrap();

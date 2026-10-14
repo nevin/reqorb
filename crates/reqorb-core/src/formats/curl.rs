@@ -128,8 +128,32 @@ pub(super) fn curl(text: &str, name_hint: &str) -> Result<ImportResult, Error> {
     let Some(mut url) = url else {
         return Err(Error::Format("curl command has no URL".into()));
     };
-    // A leading variable usually holds the scheme already.
-    if !url.contains("://") && !url.starts_with("{{") {
+    if url.starts_with('/') {
+        // Some tools, GraphQL Playground among them, copy a path alone. The
+        // page that sent it names its site in Origin or Referer.
+        let page = ["Origin", "Referer"].into_iter().find_map(|name| {
+            let header = request
+                .headers
+                .iter()
+                .find(|h| h.name.eq_ignore_ascii_case(name))?;
+            let base = url::Url::parse(&header.value)
+                .ok()
+                .filter(|u| u.has_host())?;
+            Some((name, base.join(&url).ok()?))
+        });
+        match page {
+            Some((name, full)) => {
+                warnings.push(format!(
+                    "the URL `{url}` has no host, so the one in the {name} header was used"
+                ));
+                url = full.to_string();
+            }
+            None => warnings.push(format!(
+                "the URL `{url}` has no host; add one before sending"
+            )),
+        }
+    } else if !url.contains("://") && !url.starts_with("{{") {
+        // A leading variable usually holds the scheme already.
         url = format!("http://{url}");
     }
 
