@@ -152,7 +152,7 @@ class ResponseView extends StatelessWidget {
   }
 }
 
-class _Loaded extends StatelessWidget {
+class _Loaded extends StatefulWidget {
   const _Loaded({
     required this.response,
     required this.unresolved,
@@ -195,14 +195,68 @@ class _Loaded extends StatelessWidget {
   final bool current;
 
   @override
+  State<_Loaded> createState() => _LoadedState();
+}
+
+/// One tab of the response: what it is called, what it shows, and what
+/// copying it copies.
+typedef _Section = ({
+  Tab tab,
+  Widget view,
+  String Function() copy,
+  String what,
+});
+
+class _LoadedState extends State<_Loaded> {
+  /// The body as received, rather than re-indented and coloured. Kept from
+  /// one response to the next, as is [_format].
+  bool _raw = false;
+
+  /// What the body is read as; null to go by its type and how it looks.
+  CodeLanguage? _format;
+
+  /// Notified to open the search in the body.
+  final _find = ValueNotifier(0);
+
+  @override
+  void dispose() {
+    _find.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final _Loaded(
+      :response,
+      :unresolved,
+      :current,
+      :sessionSize,
+      :onExportSession,
+      :tests,
+      :captured,
+      :captureProblems,
+      :graphqlErrors,
+      :console,
+      :receiving,
+      :stopped,
+    ) = widget;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final color = statusColor(response.status, scheme);
-    final body = _prettyBody(response);
+    final contentType = _contentType(response);
+    final language = _raw
+        ? CodeLanguage.plain
+        : _format ?? _languageOf(contentType, response.body);
+    final body = _raw || language != CodeLanguage.json
+        ? response.body
+        : _asJson(response.body) ?? response.body;
     final json = _asJson(response.body);
     final headers = [for (final h in response.headers) '${h.name}: ${h.value}']
         .join('\n');
+    final cookies = [
+      for (final h in response.headers)
+        if (h.name.toLowerCase() == 'set-cookie') h.value,
+    ];
     final muted = theme.textTheme.bodySmall?.copyWith(
       color: scheme.onSurfaceVariant,
     );
@@ -216,15 +270,112 @@ class _Loaded extends StatelessWidget {
     final testsFailed = passed < tests.length || captureProblems.isNotEmpty;
 
     // An event stream is read as its events first, and as text second.
-    final hasEvents =
-        _contentType(response).split(';').first.trim().toLowerCase() ==
-        'text/event-stream';
+    final hasEvents = contentType == 'text/event-stream';
     final events = hasEvents ? parseSse(response.body) : const <SseEvent>[];
+
+    final Widget bodyView;
+    if (response.bytes case final bytes?) {
+      bodyView = _Binary(
+        bytes: bytes,
+        contentType: contentType,
+        onSave: () => saveBytesFile(context, _binaryFileName(response), bytes),
+      );
+    } else if (body.isEmpty) {
+      bodyView = Center(
+        child: Text(
+          receiving
+              ? 'Receiving the response… '
+                    '${formatSize(response.sizeBytes)} so far'
+              : 'The response has no body',
+          style: TextStyle(color: scheme.onSurfaceVariant),
+        ),
+      );
+    } else {
+      bodyView = Column(
+        children: [
+          _BodyBar(
+            raw: _raw,
+            onRaw: (raw) => setState(() => _raw = raw),
+            format: _format,
+            onFormat: (format) => setState(() => _format = format),
+            onFind: () => _find.value++,
+          ),
+          Expanded(
+            child: CodeView(
+              name: 'responseBody',
+              text: body,
+              language: language,
+              findRequests: _find,
+            ),
+          ),
+        ],
+      );
+    }
+
+    final sections = <_Section>[
+      if (hasEvents)
+        (
+          tab: Tab(
+            key: const Key('events-tab'),
+            height: 38,
+            text: 'Events (${events.length})',
+          ),
+          view: EventsView(events: events, live: receiving),
+          copy: () => response.body,
+          what: 'Events',
+        ),
+      (
+        tab: const Tab(height: 38, text: 'Body'),
+        view: bodyView,
+        copy: () => body,
+        what: 'Body',
+      ),
+      (
+        tab: Tab(
+          key: const Key('cookies-tab'),
+          height: 38,
+          text: cookies.isEmpty ? 'Cookies' : 'Cookies (${cookies.length})',
+        ),
+        view: _Cookies(cookies: cookies),
+        copy: () => cookies.join('\n'),
+        what: 'Cookies',
+      ),
+      (
+        tab: Tab(height: 38, text: 'Headers (${response.headers.length})'),
+        view: _Headers(headers: response.headers),
+        copy: () => headers,
+        what: 'Headers',
+      ),
+      if (hasTests)
+        (
+          tab: Tab(
+            key: const Key('test-results-tab'),
+            height: 38,
+            child: Text(
+              tests.isEmpty ? 'Tests' : 'Tests ($passed/${tests.length})',
+              style: testsFailed ? TextStyle(color: scheme.error) : null,
+            ),
+          ),
+          view: _Tests(
+            tests: tests,
+            captured: captured,
+            problems: captureProblems,
+            console: console,
+          ),
+          copy: () => [
+            for (final t in tests)
+              t.passed ? 'pass  ${t.test}' : 'FAIL  ${t.test}  (${t.detail})',
+            for (final v in captured) '${v.key} = ${v.value}',
+            ...captureProblems,
+          ].join('\n'),
+          what: 'Test results',
+        ),
+    ];
 
     return DefaultTabController(
       // Keyed, so the tabs are rebuilt when one of them comes or goes.
       key: ValueKey((hasTests, hasEvents)),
-      length: 2 + (hasTests ? 1 : 0) + (hasEvents ? 1 : 0),
+      length: sections.length,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -356,32 +507,7 @@ class _Loaded extends StatelessWidget {
                     isScrollable: true,
                     tabAlignment: TabAlignment.start,
                     dividerColor: Colors.transparent,
-                    tabs: [
-                      if (hasEvents)
-                        Tab(
-                          key: const Key('events-tab'),
-                          height: 38,
-                          text: 'Events (${events.length})',
-                        ),
-                      const Tab(height: 38, text: 'Body'),
-                      Tab(
-                        height: 38,
-                        text: 'Headers (${response.headers.length})',
-                      ),
-                      if (hasTests)
-                        Tab(
-                          key: const Key('test-results-tab'),
-                          height: 38,
-                          child: Text(
-                            tests.isEmpty
-                                ? 'Tests'
-                                : 'Tests ($passed/${tests.length})',
-                            style: testsFailed
-                                ? TextStyle(color: scheme.error)
-                                : null,
-                          ),
-                        ),
-                    ],
+                    tabs: [for (final s in sections) s.tab],
                   ),
                 ),
                 Builder(
@@ -392,26 +518,13 @@ class _Loaded extends StatelessWidget {
                     icon: const Icon(Icons.copy_outlined),
                     onPressed: () async {
                       // Whichever tab is showing is what gets copied.
-                      final (text, what) = switch (DefaultTabController.of(
-                        context,
-                      ).index) {
-                        0 => (body, 'Body'),
-                        1 => (headers, 'Headers'),
-                        _ => (
-                          [
-                            for (final t in tests)
-                              t.passed
-                                  ? 'pass  ${t.test}'
-                                  : 'FAIL  ${t.test}  (${t.detail})',
-                            for (final v in captured) '${v.key} = ${v.value}',
-                            ...captureProblems,
-                          ].join('\n'),
-                          'Test results',
-                        ),
-                      };
-                      await Clipboard.setData(ClipboardData(text: text));
+                      final section =
+                          sections[DefaultTabController.of(context).index];
+                      await Clipboard.setData(
+                        ClipboardData(text: section.copy()),
+                      );
                       if (!context.mounted) return;
-                      showMessage(context, '$what copied');
+                      showMessage(context, '${section.what} copied');
                     },
                   ),
                 ),
@@ -466,46 +579,186 @@ class _Loaded extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: TabBarView(
-              children: [
-                if (hasEvents) EventsView(events: events, live: receiving),
-                if (response.bytes case final bytes?)
-                  _Binary(
-                    bytes: bytes,
-                    contentType: _contentType(response),
-                    onSave: () => saveBytesFile(
-                      context,
-                      _binaryFileName(response),
-                      bytes,
-                    ),
-                  )
-                else
-                  body.isEmpty
-                      ? Center(
-                          child: Text(
-                            receiving
-                                ? 'Receiving the response… '
-                                      '${formatSize(response.sizeBytes)} so far'
-                                : 'The response has no body',
-                            style: TextStyle(color: scheme.onSurfaceVariant),
-                          ),
-                        )
-                      : _Body(text: body, contentType: _contentType(response)),
-                _Headers(headers: response.headers),
-                if (hasTests)
-                  _Tests(
-                    tests: tests,
-                    captured: captured,
-                    problems: captureProblems,
-                    console: console,
-                  ),
-              ],
-            ),
+            child: TabBarView(children: [for (final s in sections) s.view]),
           ),
         ],
       ),
     );
   }
+}
+
+/// Above the body: whether to show it as received, what to read it as,
+/// and a way into the search.
+class _BodyBar extends StatelessWidget {
+  const _BodyBar({
+    required this.raw,
+    required this.onRaw,
+    required this.format,
+    required this.onFormat,
+    required this.onFind,
+  });
+
+  final bool raw;
+  final ValueChanged<bool> onRaw;
+  final CodeLanguage? format;
+  final ValueChanged<CodeLanguage?> onFormat;
+  final VoidCallback onFind;
+
+  static const _formats = {
+    null: 'Auto',
+    CodeLanguage.json: 'JSON',
+    CodeLanguage.xml: 'XML / HTML',
+    CodeLanguage.javascript: 'JavaScript',
+    CodeLanguage.plain: 'Text',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final small = Theme.of(context).textTheme.labelMedium;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
+      child: Row(
+        children: [
+          SegmentedButton<bool>(
+            key: const Key('body-mode'),
+            showSelectedIcon: false,
+            style: const ButtonStyle(
+              visualDensity: VisualDensity(horizontal: -3, vertical: -3),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            segments: [
+              ButtonSegment(
+                value: false,
+                label: Text(
+                  'Pretty',
+                  key: const Key('body-pretty'),
+                  style: small,
+                ),
+              ),
+              ButtonSegment(
+                value: true,
+                label: Text('Raw', key: const Key('body-raw'), style: small),
+              ),
+            ],
+            selected: {raw},
+            onSelectionChanged: (picked) => onRaw(picked.first),
+          ),
+          const SizedBox(width: 8),
+          // A body shown as received is not read as anything.
+          if (!raw)
+            PopupMenuButton<CodeLanguage?>(
+              key: const Key('body-format'),
+              tooltip: 'Read the body as',
+              initialValue: format,
+              onSelected: onFormat,
+              itemBuilder: (_) => [
+                for (final MapEntry(:key, :value) in _formats.entries)
+                  PopupMenuItem(value: key, child: Text(value)),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(_formats[format]!, style: small),
+                    const Icon(Icons.arrow_drop_down, size: 18),
+                  ],
+                ),
+              ),
+            ),
+          const Spacer(),
+          IconButton(
+            key: const Key('body-find'),
+            tooltip: 'Find in the body ($shortcutModifier F)',
+            iconSize: 18,
+            icon: const Icon(Icons.search),
+            onPressed: onFind,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The cookies the response set, one to a row with their attributes.
+class _Cookies extends StatelessWidget {
+  const _Cookies({required this.cookies});
+
+  /// Each `Set-Cookie` header's value.
+  final List<String> cookies;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    if (cookies.isEmpty) {
+      return Center(
+        child: Text(
+          'The response set no cookies',
+          style: TextStyle(color: scheme.onSurfaceVariant),
+        ),
+      );
+    }
+    final small = mono.copyWith(fontSize: 12, color: scheme.onSurfaceVariant);
+    return SelectionArea(
+      child: ListView.separated(
+        key: const Key('response-cookies'),
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        itemCount: cookies.length,
+        separatorBuilder: (_, _) => Divider(
+          height: 1,
+          color: scheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+        itemBuilder: (context, i) {
+          final (:name, :value, :attributes) = parseSetCookie(cookies[i]);
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    name,
+                    style: mono.copyWith(color: scheme.onSurfaceVariant),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 5,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(value, style: mono),
+                      if (attributes.isNotEmpty)
+                        Text(attributes.join(' · '), style: small),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// A `Set-Cookie` value split into the cookie and what is said about it,
+/// such as `Path=/` and `HttpOnly`.
+({String name, String value, List<String> attributes}) parseSetCookie(
+  String header,
+) {
+  final parts = header.split(';').map((p) => p.trim()).toList();
+  final pair = parts.first;
+  final equals = pair.indexOf('=');
+  return (
+    name: equals < 0 ? '' : pair.substring(0, equals).trim(),
+    value: equals < 0 ? pair : pair.substring(equals + 1).trim(),
+    attributes: [
+      for (final p in parts.skip(1))
+        if (p.isNotEmpty) p,
+    ],
+  );
 }
 
 /// How each test came out, and the variables the response supplied.
@@ -712,24 +965,6 @@ class _Fact extends StatelessWidget {
   }
 }
 
-class _Body extends StatelessWidget {
-  const _Body({required this.text, required this.contentType});
-
-  final String text;
-  final String contentType;
-
-  @override
-  Widget build(BuildContext context) {
-    final named = CodeLanguage.ofContentType(contentType);
-    return CodeView(
-      name: 'responseBody',
-      text: text,
-      // As the server labelled it; otherwise as it looks.
-      language: named == CodeLanguage.plain ? null : named,
-    );
-  }
-}
-
 class _Headers extends StatelessWidget {
   const _Headers({required this.headers});
 
@@ -775,12 +1010,6 @@ String formatSize(int bytes) {
   return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 }
 
-bool _isJson(Response response) => response.headers.any(
-  (h) =>
-      h.name.toLowerCase() == 'content-type' &&
-      h.value.toLowerCase().contains('json'),
-);
-
 /// [body] re-indented if it is valid JSON, whatever the server called it;
 /// null otherwise.
 String? _asJson(String body) {
@@ -792,15 +1021,11 @@ String? _asJson(String body) {
   }
 }
 
-/// Re-indents JSON bodies; anything else is shown as received.
-String _prettyBody(Response response) {
-  if (!_isJson(response)) return response.body;
-  try {
-    return JsonEncoder.withIndent(CodeStyle.indent)
-        .convert(jsonDecode(response.body));
-  } catch (_) {
-    return response.body;
-  }
+/// The language of a body: as the server labelled it, otherwise as it
+/// looks.
+CodeLanguage _languageOf(String contentType, String body) {
+  final named = CodeLanguage.ofContentType(contentType);
+  return named == CodeLanguage.plain ? CodeLanguage.sniff(body) : named;
 }
 
 final _jsonToken = RegExp(
