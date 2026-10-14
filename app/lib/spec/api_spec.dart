@@ -42,10 +42,17 @@ class SpecOperation {
     required this.parameters,
     required this.body,
     required this.responses,
+    this.webhook = false,
   });
 
   final String method;
+
+  /// The path; for a webhook, its name.
   final String path;
+
+  /// Whether this is a request the API sends rather than one it takes:
+  /// an OpenAPI 3.1 webhook.
+  final bool webhook;
   final String summary;
   final String description;
   final String operationId;
@@ -84,15 +91,25 @@ class ApiSpec {
   /// Whether the text could be read at all; when not, [problems] says why.
   bool get readable => format.isNotEmpty;
 
-  /// The operations by their first tag, in the order the tags first
-  /// appear; untagged ones last, under `Other`.
+  /// The webhooks, which are kept apart from the paths.
+  List<SpecOperation> get webhooks => [
+    for (final op in operations)
+      if (op.webhook) op,
+  ];
+
+  /// The operations on paths by their first tag, in the order the tags
+  /// first appear; untagged ones last, under `Other`.
   Map<String, List<SpecOperation>> get byTag {
     final groups = <String, List<SpecOperation>>{};
-    for (final op in operations) {
+    final paths = [
+      for (final op in operations)
+        if (!op.webhook) op,
+    ];
+    for (final op in paths) {
       if (op.tags.isNotEmpty) (groups[op.tags.first] ??= []).add(op);
     }
     final untagged = [
-      for (final op in operations)
+      for (final op in paths)
         if (op.tags.isEmpty) op,
     ];
     if (untagged.isNotEmpty) groups['Other'] = untagged;
@@ -111,7 +128,16 @@ bool looksLikeJson(String text) {
 Object? readTree(String text) =>
     looksLikeJson(text) ? jsonDecode(text) : _plain(loadYaml(text));
 
-const _methods = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch'];
+const _methods = [
+  'get',
+  'put',
+  'post',
+  'delete',
+  'options',
+  'head',
+  'patch',
+  'trace',
+];
 
 /// Reads [text] as an OpenAPI or Swagger document. Never throws: what
 /// cannot be read is reported in [ApiSpec.problems].
@@ -261,7 +287,23 @@ class _Reader {
     if (info.isNotEmpty && info['version'] == null) {
       _problem('The info has no version', 'info');
     }
-    final operations = _operations();
+    final paths = root['paths'];
+    final webhooks = root['webhooks'];
+    final hasPaths = paths is Map<String, Object?> && paths.isNotEmpty;
+    final hasWebhooks = webhooks is Map<String, Object?> && webhooks.isNotEmpty;
+    // OpenAPI 3.1 asks for any one of these; earlier versions for paths.
+    if ('$openapi'.startsWith('3.1')) {
+      if (!hasPaths && !hasWebhooks && root['components'] == null) {
+        _problem('Has no paths, webhooks or components');
+      }
+    } else if (!hasPaths) {
+      _problem('Has no paths, so no operations');
+    }
+    final ids = <String>{};
+    final operations = [
+      if (hasPaths) ..._operations(paths, ids),
+      if (hasWebhooks) ..._operations(webhooks, ids, webhooks: true),
+    ];
     return ApiSpec(
       format: format,
       specVersion: specVersion,
@@ -288,31 +330,61 @@ class _Reader {
       if (root['servers'] case final List<Object?> servers)
         for (final server in servers)
           if (server is Map<String, Object?> && server['url'] is String)
-            server['url'] as String,
+            _serverUrl(server),
     ];
   }
 
-  List<SpecOperation> _operations() {
-    final paths = root['paths'];
-    if (paths is! Map<String, Object?> || paths.isEmpty) {
-      _problem('Has no paths, so no operations');
-      return const [];
-    }
+  /// A server's URL with each `{variable}` in it set to its default.
+  String _serverUrl(Map<String, Object?> server) {
+    final url = server['url'] as String;
+    final variables = server['variables'] is Map<String, Object?>
+        ? server['variables'] as Map<String, Object?>
+        : const <String, Object?>{};
+    return url.replaceAllMapped(RegExp(r'\{([^}]+)\}'), (match) {
+      final name = match[1]!;
+      final variable = variables[name];
+      final fallback = variable is Map<String, Object?>
+          ? variable['default']
+          : null;
+      if (fallback == null) {
+        _problem(
+          variable == null
+              ? 'The server $url does not define its variable "$name"'
+              : 'The server variable "$name" has no default',
+          name,
+        );
+        return match[0]!;
+      }
+      return '$fallback';
+    });
+  }
+
+  /// The operations of each path item in [items]: the paths, or with
+  /// [webhooks] the webhooks, which are named rather than paths.
+  List<SpecOperation> _operations(
+    Map<String, Object?> items,
+    Set<String> ids, {
+    bool webhooks = false,
+  }) {
     final operations = <SpecOperation>[];
-    final ids = <String>{};
-    for (final MapEntry(key: path, value: node) in paths.entries) {
+    for (final MapEntry(key: path, value: node) in items.entries) {
       final item = _resolve(node);
       final shared = _parameters(item['parameters']);
       for (final method in _methods) {
         final op = item[method];
         if (op is! Map<String, Object?>) continue;
-        final where = '${method.toUpperCase()} $path';
+        final where = webhooks
+            ? 'The webhook $path (${method.toUpperCase()})'
+            : '${method.toUpperCase()} $path';
         final parameters = _merge(shared, _parameters(op['parameters']));
         final id = _string(op['operationId']);
         if (id.isNotEmpty && !ids.add(id)) {
           _problem('$where repeats the operationId "$id"', id);
         }
-        for (final name in RegExp(r'\{([^}]+)\}').allMatches(path)) {
+        for (final name
+            in webhooks
+                ? const <RegExpMatch>[]
+                : RegExp(r'\{([^}]+)\}').allMatches(path)) {
           final declared = parameters.any(
             (p) => p.location == 'path' && p.name == name[1],
           );
@@ -344,6 +416,7 @@ class _Reader {
             ],
             body: _body(op, parameters),
             responses: responses,
+            webhook: webhooks,
           ),
         );
       }

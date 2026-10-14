@@ -482,6 +482,8 @@ class _SpecPageState extends State<SpecPage> {
   );
 }
 
+String _count(int n, String noun) => '$n $noun${n == 1 ? '' : 's'}';
+
 /// What kind of document it is, and whether anything is wrong with it.
 class _Status extends StatelessWidget {
   const _Status({required this.spec});
@@ -494,15 +496,21 @@ class _Status extends StatelessWidget {
     final spec = this.spec;
     if (spec == null) return const SizedBox.shrink();
     final problems = spec.problems.length;
+    final webhooks = spec.webhooks.length;
+    final paths = spec.operations.length - webhooks;
     final ok = problems == 0;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         if (spec.specVersion.isNotEmpty)
           Text(
-            '${spec.specVersion} · ${spec.format.toUpperCase()} · '
-            '${spec.operations.length} '
-            '${spec.operations.length == 1 ? 'operation' : 'operations'}',
+            [
+              spec.specVersion,
+              spec.format.toUpperCase(),
+              // A document of webhooks alone need not say it has no paths.
+              if (paths > 0 || webhooks == 0) _count(paths, 'operation'),
+              if (webhooks > 0) _count(webhooks, 'webhook'),
+            ].join(' · '),
             style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
           ),
         const SizedBox(width: 12),
@@ -563,6 +571,7 @@ class _PreviewState extends State<_Preview> {
       for (final MapEntry(:key, :value) in spec.byTag.entries)
         if (value.where(matches).isNotEmpty) key: value.where(matches).toList(),
     };
+    final webhooks = spec.webhooks.where(matches).toList();
 
     return SelectionArea(
       child: ListView(
@@ -624,7 +633,27 @@ class _PreviewState extends State<_Preview> {
               ),
               for (final op in operations) _Operation(op: op),
             ],
-            if (groups.isEmpty)
+            if (webhooks.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 16, 4, 0),
+                child: Text(
+                  'Webhooks',
+                  key: const Key('spec-webhooks'),
+                  style: theme.textTheme.titleSmall,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 2, 4, 4),
+                child: Text(
+                  'Requests the API sends to you',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              for (final op in webhooks) _Operation(op: op),
+            ],
+            if (groups.isEmpty && webhooks.isEmpty)
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Text(

@@ -92,6 +92,79 @@ paths:
       expect(messages, contains('PUT /pets/{id} lists no responses'));
     });
 
+    test('OpenAPI 3.1: webhooks, and no paths needed', () {
+      final spec = readSpec('''
+openapi: 3.1.0
+info: {title: Events, version: "1"}
+servers:
+  - url: https://{env}.events.test:{port}/v1
+    variables:
+      env: {default: api, enum: [api, staging]}
+      port: {default: "443"}
+webhooks:
+  newPet:
+    post:
+      summary: A pet was added
+      requestBody:
+        content:
+          application/json:
+            schema: {type: [object, "null"]}
+      responses:
+        "200": {description: Received}
+''');
+      expect(spec.problems, isEmpty);
+      expect(spec.servers, ['https://api.events.test:443/v1']);
+      expect(spec.byTag, isEmpty);
+      final hook = spec.webhooks.single;
+      expect(hook.path, 'newPet');
+      expect(hook.method, 'POST');
+      expect(hook.body.single.schema, 'object | null');
+    });
+
+    test('3.1 still needs something, and 3.0 still needs paths', () {
+      expect(
+        readSpec('openapi: 3.1.0\ninfo: {title: A, version: "1"}\n')
+            .problems
+            .single
+            .message,
+        'Has no paths, webhooks or components',
+      );
+      expect(
+        readSpec(
+          'openapi: 3.1.0\ninfo: {title: A, version: "1"}\ncomponents: {}\n',
+        ).problems,
+        isEmpty,
+      );
+      expect(
+        readSpec(
+          'openapi: 3.0.3\ninfo: {title: A, version: "1"}\nwebhooks: {}\n',
+        ).problems.single.message,
+        'Has no paths, so no operations',
+      );
+    });
+
+    test('a server variable needs a default', () {
+      final spec = readSpec('''
+openapi: 3.0.3
+info: {title: A, version: "1"}
+servers:
+  - url: https://{region}.a.test/{stage}
+    variables:
+      region: {enum: [eu, us]}
+paths: {}
+''');
+      expect(spec.servers, ['https://{region}.a.test/{stage}']);
+      final messages = spec.problems.map((p) => p.message);
+      expect(messages, contains('The server variable "region" has no default'));
+      expect(
+        messages,
+        contains(
+          'The server https://{region}.a.test/{stage} does not define its '
+          'variable "stage"',
+        ),
+      );
+    });
+
     test('a document that cannot be read says on which line', () {
       final spec = readSpec('openapi: 3.0.0\ninfo:\n  title: [unclosed\n');
       expect(spec.readable, isFalse);
@@ -187,6 +260,30 @@ paths:
         tester.widget<TextField>(editor).controller!.text,
         startsWith('{\n  "openapi": "3.0.3"'),
       );
+    });
+
+    testWidgets('webhooks have a section of their own', (tester) async {
+      final original = specFetcher;
+      specFetcher = (url) async =>
+          '{"openapi": "3.1.0", "info": {"title": "Hooks", "version": "1"}, '
+          '"webhooks": {"newPet": {"post": {"responses": '
+          '{"200": {"description": "ok"}}}}}}';
+      addTearDown(() => specFetcher = original);
+      await open(tester);
+      await tester.tap(find.byKey(const Key('api-specs')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('spec-start-url')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('spec-url-field')),
+        'hooks.test/openapi.json',
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('spec-webhooks')), findsOneWidget);
+      expect(find.byKey(const Key('spec-op-POST-newPet')), findsOneWidget);
+      expect(find.text('OpenAPI 3.1.0 · JSON · 1 webhook'), findsOneWidget);
+      expect(find.text('No problems'), findsOneWidget);
     });
 
     testWidgets('a spec opens from a URL', (tester) async {
