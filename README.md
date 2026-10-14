@@ -662,95 +662,19 @@ works once the variables are filled in. Values are found by the name they are st
 under, so a secret in free text or under an unrelated name is not caught: look the
 file over before sharing it.
 
-## Project layout
+## Contributing
 
-```text
-crates/reqorb-core/src/     the request engine, used by everything else
-  lib.rs                    the public API: module list and re-exports only
-  model.rs  error.rs        the data types and the error type
-  http/                     sending: client cache, one exchange, cookie jar, and
-                            following or stopping a send under way
-  ws.rs  grpc.rs            the other two protocols
-  graphql.rs                GraphQL over HTTP: the request, its errors, the schema
-  subscribe.rs              GraphQL subscriptions over a WebSocket
-  auth/                     auth types, signing a request, negotiating with a server
-  formats/                  one module per format, each with its import and export,
-                            and the folder of files a collection can be kept as
-  codegen/                  a request as code: one generator per language
-  vars.rs  checks.rs        variable substitution; tests and captures
-  script.rs                 scripts: the JavaScript run before a request and on its
-                            response, and what it can see (script_prelude.js)
-  redact.rs  analyze.rs     redaction; the HAR report
-  data.rs                   the data file of a run: CSV or JSON rows as variables
-  vault.rs  history.rs      what is kept on disk: the workspace, its credentials
-                            encrypted, and the requests sent
-crates/reqorb-cli/src/      the `reqorb` command
-  cli.rs                    every command, argument and option
-  input.rs  output.rs       reading what the user gave; printing and writing files
-  commands/                 one module per command
-crates/reqorb-alloc/        the allocator the CLI and app use, which holds a
-                            script to its memory limit
-app/lib/                    the Flutter UI, one folder per feature
-  bridge/                   Engine: the one interface to the Rust library
-  request/                  the main page, the request model, the send session, the
-                            editors and the code dialog
-  response/  protocols/     the response pane; WebSocket and gRPC sessions and views
-  editor/                   the code editor: colouring, typing aids, find and replace,
-                            folding, completion
-  graphql/                  the GraphQL editor, schema browser and schema session
-  runner/  palette/         running a collection; the find-anything box
-  sidebar/  environments/  settings/  har/  history/
-  transfer/                 import and export actions
-  workspace/                the saved workspace and collection actions
-  shared/                   theme, messages and small reusable widgets
-app/rust/                   the bridge crate exposing the core to Dart
-```
+[CONTRIBUTING.md](CONTRIBUTING.md) covers setting up, the checks to run before pushing,
+and how changes are written. The guides in [docs/](docs/) go further:
 
-In the app, widgets show state and hand actions on; the state lives in models that
-notify when they change (`RequestDraft`, `SendSession`, `WsSession`, `GrpcSession`,
-`GraphqlSession`, `WorkspaceStore`), and everything that reaches the Rust library goes through `Engine`.
-Tests put a stand-in engine in its place, so the whole app runs headlessly.
-
-Dependencies point one way: the CLI and the bridge depend on the core, never the
-reverse, and inside the core `model` depends on nothing while the protocol and format
-modules depend on it.
-
-## Development
-
-```bash
-cargo test --workspace                               # core tests, and the CLI run against a local server
-cargo clippy --workspace --all-targets -- -D warnings
-cd app && flutter analyze
-cd app && flutter test                               # the app against a stand-in engine, no window needed
-cd app && caffeinate -d flutter test integration_test -d macos   # the real app, end to end
-cd app && flutter_rust_bridge_codegen generate       # after changing app/rust/src/api
-scripts/coverage.sh                                  # how much the tests cover; fails below the floor
-```
-
-GitHub Actions runs all of these on every push (`.github/workflows/ci.yml`), and a
-failure in any of them, the end-to-end job included, fails the run.
-
-The end-to-end tests drive the real window and need it to stay in front: they stall if
-the display sleeps (`caffeinate -d` prevents that) and taps go astray if another window
-takes focus, so do not use the machine while they run. They pass on CI's clean runner;
-prefer `flutter test` for everyday work.
-
-### Releasing
-
-Set the same version in `Cargo.toml` and `app/pubspec.yaml`, then push a tag for it:
-
-```bash
-git tag v0.2.0 && git push origin v0.2.0
-```
-
-`.github/workflows/release.yml` then builds the CLI for macOS (Apple silicon and
-Intel), Linux and Windows, and the macOS app, and publishes them as a GitHub release
-with a SHA-256 checksum for each. The app is signed with a Developer ID and notarized when the repository has the
-secrets the workflow lists at its top; without them it is signed ad hoc, and other Macs
-refuse to open it until it is allowed in **System Settings › Privacy & Security**.
-
-The same steps run locally: `scripts/package-cli.sh` and `scripts/package-macos.sh`
-write to `dist/`.
+- [Architecture](docs/architecture.md): the crates, the app, and a request's path from a
+  click to the network
+- [Development](docs/development.md): running the app and the CLI, changing the bridge,
+  debugging
+- [Testing](docs/testing.md): the four layers of tests and when to use each
+- [Extending reqorb](docs/extending.md): adding a format, a code language, an auth type,
+  a setting or a bridge call
+- [Releasing](docs/releasing.md): versions, signing, and the app icon
 
 ## License
 
