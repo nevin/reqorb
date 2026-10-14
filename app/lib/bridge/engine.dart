@@ -1,6 +1,8 @@
 /// The app's one doorway to the Rust engine.
 library;
 
+import 'dart:io';
+
 import 'package:flutter/widgets.dart' hide FormField;
 import 'package:reqorb/src/rust/api/core.dart' as rust;
 import 'package:reqorb/src/rust/api/core.dart';
@@ -127,6 +129,11 @@ abstract class Engine {
   /// Reads the workspace, decrypting its credentials with the key in the
   /// system keychain.
   Future<LoadedWorkspace> loadWorkspace({required String path});
+
+  /// Moves an unreadable workspace file out of the way, so that saving
+  /// does not replace it, and returns where it went; null when it could not
+  /// be moved, or there was nothing there.
+  Future<String?> keepAside({required String path});
 
   /// Writes the workspace. Returns why its credentials were left
   /// unencrypted, when its settings asked for them to be and the keychain
@@ -364,6 +371,23 @@ class RustEngine extends Engine {
   @override
   Future<LoadedWorkspace> loadWorkspace({required String path}) =>
       rust.loadWorkspace(path: path);
+
+  @override
+  Future<String?> keepAside({required String path}) async {
+    final file = File(path);
+    if (!file.existsSync()) return null;
+    final stamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+    final dot = path.lastIndexOf('.');
+    final aside = dot > path.lastIndexOf('/')
+        ? '${path.substring(0, dot)}.unreadable-$stamp${path.substring(dot)}'
+        : '$path.unreadable-$stamp';
+    try {
+      await file.rename(aside);
+      return aside;
+    } on FileSystemException {
+      return null;
+    }
+  }
 
   @override
   Future<String?> saveWorkspace({

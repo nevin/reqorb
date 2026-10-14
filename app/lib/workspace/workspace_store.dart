@@ -162,7 +162,13 @@ class WorkspaceStore extends ChangeNotifier {
       keyProblem = loaded.problem;
       error = null;
     } catch (e) {
-      error = e.toString();
+      // What is in memory is now an empty workspace, and the first change
+      // would save it over the file. Kept aside, its contents are not lost.
+      final kept = await engine.keepAside(path: path);
+      error = kept == null
+          ? '$e'
+          : 'The workspace could not be read: $e\n'
+                'It was kept as $kept, and a new one was started.';
     }
     notifyListeners();
   }
@@ -624,10 +630,31 @@ class WorkspaceStore extends ChangeNotifier {
     final item = itemAt(ref);
     if (item == null) return;
     final parent = ref.path.sublist(0, ref.path.length - 1);
+    final siblings = parent.isEmpty
+        ? (ref.collection == RequestRef.noCollection
+              ? requests
+              : collections[ref.collection].items)
+        : itemAt(RequestRef(ref.collection, parent))?.items ?? const [];
     insertItem(
       RequestRef(ref.collection, [...parent, 1 << 30]),
-      Item(name: '${item.name} copy', request: item.request, items: item.items),
+      Item(
+        name: copyName(item.name, {for (final s in siblings) s.name}),
+        request: item.request,
+        items: item.items,
+      ),
     );
+  }
+
+  /// The name for a copy of [name] that none of [taken] has: `Login copy`,
+  /// then `Login copy 2`, and a copy of `Login copy` is `Login copy 2`
+  /// rather than `Login copy copy`.
+  static String copyName(String name, Set<String> taken) {
+    final base = name.replaceFirst(RegExp(r' copy( \d+)?$'), '');
+    var candidate = '$base copy';
+    for (var n = 2; taken.contains(candidate); n++) {
+      candidate = '$base copy $n';
+    }
+    return candidate;
   }
 
   static List<Item> _insert(List<Item> items, List<int> path, Item item) {

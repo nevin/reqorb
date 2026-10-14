@@ -206,6 +206,11 @@ readable, and an unchanged workspace saves to an unchanged file.
   keychain yet; Settings says so, and credentials are saved as plain text.
 - **What it does not cover:** credentials typed into a URL or a request body, and files
   you export; use **Redact** for those.
+- **The file itself** is readable by your user only, and is written whole or not at
+  all. One that cannot be read is kept beside it under a dated name, rather than
+  replaced by the new, empty workspace.
+
+[SECURITY.md](SECURITY.md) sets out what reqorb protects and how to report a problem.
 
 ### Working directory
 
@@ -377,8 +382,10 @@ console.log('made', order.id);
 
 A script can reach nothing but the request, the response and the variables: no files,
 no network, no timers, so `pm.sendRequest`, `require`, `setTimeout` and `fetch` are not
-there, and an import says so when a script uses the first two. A script that loops
-without end is stopped. Scripts are not run for WebSocket or gRPC requests, and Bruno
+there, and an import says so when a script uses the first two. A script that runs for
+more than ten seconds is stopped. A script can read every variable, credentials
+included, so a Postman import says when the collection carries scripts: read them
+before sending if you do not know where it came from. Scripts are not run for WebSocket or gRPC requests, and Bruno
 and curl exports leave them out. In the CLI, `--pre-script` and `--post-script` take a
 script or `@file`.
 
@@ -435,6 +442,9 @@ with another or left half-written while a second is sent. A request that is alre
 open is brought forward rather than opened twice, and a tab nothing has been done in
 is reused. A dot marks a tab with unsaved changes to a saved request; closing it asks
 whether to save them. `⌘N` opens a tab and `⌘W` closes one (`Ctrl` elsewhere).
+`⌘1` to `⌘8` go to a tab by its place and `⌘9` to the last; `Ctrl-Tab` and
+`Ctrl-Shift-Tab` (or `⌘⇧]` and `⌘⇧[`) go to the next and previous. `⌘.` stops a send
+or a call that is under way.
 
 `⌘K` (or the magnifier beside the environment) opens a box that finds things by a few
 letters of their name, in order: `crord` finds "Create order". It lists open tabs,

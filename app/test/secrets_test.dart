@@ -58,6 +58,20 @@ void main() {
       },
     );
 
+    test('an unreadable workspace is kept aside, not saved over', () async {
+      // The fake engine fails to read when nothing was ever saved.
+      final engine = FakeEngine();
+      final store = WorkspaceStore('work.json', engine: engine);
+      await store.load();
+      expect(engine.keptAside, ['work.json']);
+      expect(store.error, contains('It was kept as work.json.unreadable'));
+
+      // Only now is it safe for a change to be saved.
+      store.addEnvironment();
+      await store.flush();
+      expect(engine.saved?.environments, hasLength(1));
+    });
+
     test('counts locked credentials, and again as they are replaced', () async {
       final engine = FakeEngine();
       final first = WorkspaceStore('unused.json', engine: engine);

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reqorb/main.dart';
 import 'package:reqorb/response/sse.dart';
@@ -199,6 +200,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('error')), findsNothing);
     expect(find.byKey(const Key('status')), findsNothing);
+  });
+
+  testWidgets('a send is stopped from the keyboard', (tester) async {
+    await open(tester);
+    await push(tester, sendUpdate(SendUpdateKind.head, headers: json));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+    await tester.sendKeyEvent(LogicalKeyboardKey.period);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+    await tester.pump();
+    expect(engine.stopped, [sendId]);
+    await updates.close();
+    await tester.pumpAndSettle();
   });
 
   testWidgets('a failure part way is reported', (tester) async {

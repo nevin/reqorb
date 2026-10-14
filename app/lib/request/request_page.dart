@@ -183,6 +183,23 @@ class _RequestPageState extends State<RequestPage> {
     _active = _tabs.length - 1;
   }
 
+  /// Moves to the tab [step] places along, wrapping round at either end.
+  void _stepTab(int step) => _selectTab((_active + step) % _tabs.length);
+
+  /// Moves to the tab at [index], if there is one.
+  void _selectPlace(int index) {
+    if (index < _tabs.length) _selectTab(index);
+  }
+
+  /// Stops whatever the open request is waiting on, as its button would.
+  void _stopRunning() {
+    if (_isGrpc && _grpc.calling) {
+      _grpc.stop();
+    } else if (!_isGrpc && !_isWs && _sending) {
+      _cancel();
+    }
+  }
+
   void _selectTab(int index) {
     if (index == _active) return;
     setState(() {
@@ -641,6 +658,8 @@ class _RequestPageState extends State<RequestPage> {
         _primary,
         shortcut: shortcutModifier == '⌘' ? '↵' : 'Enter',
       ),
+      if ((_isGrpc && _grpc.calling) || (!_isGrpc && !_isWs && _sending))
+        action('Stop', Icons.stop_circle_outlined, _stopRunning, shortcut: '.'),
       action('New request', Icons.add, _newRequest, shortcut: 'N'),
       action('Save the request', Icons.save_outlined, _save, shortcut: 'S'),
       if (http) action('Show as code', Icons.code, _showCode, detail: 'curl'),
@@ -893,10 +912,38 @@ class _RequestPageState extends State<RequestPage> {
                 (LogicalKeyboardKey.keyL, _urlFocus.requestFocus),
                 (LogicalKeyboardKey.keyK, () => _openPalette(toggle)),
                 (LogicalKeyboardKey.keyP, () => _openPalette(toggle)),
+                (LogicalKeyboardKey.period, _stopRunning),
+                // The ninth is the last, however many there are.
+                for (final (i, digit) in _digits.indexed)
+                  (digit, () => _selectPlace(i == 8 ? _tabs.length - 1 : i)),
               ]) ...{
                 SingleActivator(key, meta: true): action,
                 SingleActivator(key, control: true): action,
               },
+              // The next and previous tab, as browsers have them.
+              const SingleActivator(
+                LogicalKeyboardKey.tab,
+                control: true,
+              ): () =>
+                  _stepTab(1),
+              const SingleActivator(
+                LogicalKeyboardKey.tab,
+                control: true,
+                shift: true,
+              ): () =>
+                  _stepTab(-1),
+              const SingleActivator(
+                LogicalKeyboardKey.bracketRight,
+                meta: true,
+                shift: true,
+              ): () =>
+                  _stepTab(1),
+              const SingleActivator(
+                LogicalKeyboardKey.bracketLeft,
+                meta: true,
+                shift: true,
+              ): () =>
+                  _stepTab(-1),
             },
             // Holds the focus when no field does, so that the shortcuts
             // work from the moment the window opens.
@@ -1189,11 +1236,16 @@ class _RequestPageState extends State<RequestPage> {
                           child: const Text('Invoke'),
                         )
                 else if (_sending)
-                  FilledButton.tonal(
-                    key: const Key('send'),
-                    onPressed: _cancel,
-                    // A response that is arriving is kept as far as it got.
-                    child: Text(_http.receiving ? 'Stop' : 'Cancel'),
+                  Tooltip(
+                    message:
+                        '${_http.receiving ? 'Stop' : 'Cancel'} '
+                        '($shortcutModifier.)',
+                    child: FilledButton.tonal(
+                      key: const Key('send'),
+                      onPressed: _cancel,
+                      // A response that is arriving is kept as far as it got.
+                      child: Text(_http.receiving ? 'Stop' : 'Cancel'),
+                    ),
                   )
                 else
                   Tooltip(
@@ -1279,3 +1331,16 @@ class _RequestPageState extends State<RequestPage> {
     );
   }
 }
+
+/// The keys that pick a tab by its place, the first nine.
+const _digits = [
+  LogicalKeyboardKey.digit1,
+  LogicalKeyboardKey.digit2,
+  LogicalKeyboardKey.digit3,
+  LogicalKeyboardKey.digit4,
+  LogicalKeyboardKey.digit5,
+  LogicalKeyboardKey.digit6,
+  LogicalKeyboardKey.digit7,
+  LogicalKeyboardKey.digit8,
+  LogicalKeyboardKey.digit9,
+];

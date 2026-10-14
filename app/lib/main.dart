@@ -14,9 +14,12 @@ Future<void> main() async {
   final directory = await getApplicationSupportDirectory();
   final store = WorkspaceStore('${directory.path}/workspace.json');
   await store.load();
-  await store.loadHistory();
-  await store.restoreWorkingDir(folders);
-  await store.restoreLinks(folders);
+  // Each needs the workspace and none needs another, so they overlap.
+  await Future.wait([
+    store.loadHistory(),
+    store.restoreWorkingDir(folders),
+    store.restoreLinks(folders),
+  ]);
   runApp(ReqorbApp(store: store));
 }
 

@@ -68,8 +68,12 @@ fn imports_postman_collection() {
     assert_eq!(requests[3].1.body_mode, Some(BodyMode::FormData));
     assert_eq!(login.auth, None, "noauth overrides inherited auth");
 
-    // The collection's own script comes with every request in it.
-    assert!(result.warnings.is_empty(), "{:?}", result.warnings);
+    // The collection's own script comes with every request in it, and
+    // the user is told that scripts came in.
+    assert_eq!(result.warnings.len(), 1, "{:?}", result.warnings);
+    assert!(
+        result.warnings[0].starts_with(&format!("{} request(s) carry scripts", requests.len()))
+    );
     for (_, request) in &requests {
         assert_eq!(request.post_script.as_deref(), Some("pm.test()"));
         assert_eq!(request.pre_script, None);
@@ -101,8 +105,10 @@ fn postman_scripts_come_in_and_go_back_out() {
         get.post_script.as_deref(),
         Some("pm.sendRequest('x');\n\npm.test('ok', () => {});")
     );
-    assert_eq!(result.warnings.len(), 1);
-    assert!(result.warnings[0].contains("pm.sendRequest"));
+    // That scripts came in at all, and that some reach for what is missing.
+    assert_eq!(result.warnings.len(), 2, "{:?}", result.warnings);
+    assert!(result.warnings[0].contains("carry scripts, which run each time"));
+    assert!(result.warnings[1].contains("pm.sendRequest"));
 
     let exported = export_collection(collection, ExportFormat::Postman).unwrap();
     let again = import(&exported, "").unwrap();

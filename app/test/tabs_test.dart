@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reqorb/main.dart';
 import 'package:reqorb/src/rust/api/core.dart';
@@ -47,6 +48,38 @@ void main() {
 
   String url(WidgetTester tester) =>
       tester.widget<TextField>(find.byKey(const Key('url'))).controller!.text;
+
+  testWidgets('tabs are picked from the keyboard', (tester) async {
+    await open(tester);
+    await tap(tester, find.text('Ping'));
+    await tap(tester, find.text('Pong'));
+    expect(tabs(tester), ['Ping', 'Pong']);
+
+    Future<void> press(LogicalKeyboardKey key, {bool shift = false}) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+      if (shift) await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+      await tester.sendKeyEvent(key);
+      if (shift) await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+      await tester.pumpAndSettle();
+    }
+
+    await press(LogicalKeyboardKey.digit1);
+    expect(url(tester), 'https://api.test/ping');
+    await press(LogicalKeyboardKey.tab);
+    expect(url(tester), 'https://api.test/pong');
+    // Round from the last to the first, and back.
+    await press(LogicalKeyboardKey.tab);
+    expect(url(tester), 'https://api.test/ping');
+    await press(LogicalKeyboardKey.tab, shift: true);
+    expect(url(tester), 'https://api.test/pong');
+    await press(LogicalKeyboardKey.digit1);
+    // The ninth is the last; a place with no tab is ignored.
+    await press(LogicalKeyboardKey.digit9);
+    expect(url(tester), 'https://api.test/pong');
+    await press(LogicalKeyboardKey.digit5);
+    expect(url(tester), 'https://api.test/pong');
+  });
 
   testWidgets('a saved request opens in the untouched first tab', (
     tester,

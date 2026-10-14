@@ -258,7 +258,11 @@ class _Loaded extends StatelessWidget {
                   ),
                 ),
                 _Fact(Icons.schedule, '${response.elapsedMs} ms', 'Time'),
-                _Fact(Icons.data_usage, formatSize(response.sizeBytes), 'Size'),
+                _Fact(
+                  Icons.storage_outlined,
+                  formatSize(response.sizeBytes),
+                  'Size',
+                ),
                 Text(response.httpVersion, style: muted),
                 if (receiving)
                   Row(

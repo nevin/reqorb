@@ -423,6 +423,15 @@ class FakeEngine extends Engine {
         problem: locked > 0 ? 'its key is not in this keychain' : null,
       );
 
+  /// The paths [keepAside] was asked to move.
+  final keptAside = <String>[];
+
+  @override
+  Future<String?> keepAside({required String path}) async {
+    keptAside.add(path);
+    return '$path.unreadable';
+  }
+
   @override
   Future<String?> saveWorkspace({
     required String path,

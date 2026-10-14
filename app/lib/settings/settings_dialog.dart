@@ -703,21 +703,26 @@ class _SettingsDialogState extends State<SettingsDialog> {
     final theme = Theme.of(context);
     final key = shortcutModifier;
     final enter = key == '⌘' ? '↵' : 'Enter';
-    const actions = [
-      ('Send, connect or call', 'enter'),
-      ('Save the request', 'S'),
-      ('New request', 'N'),
-      ('Close request', 'W'),
-      ('Go to the address', 'L'),
-      ('Show or hide the sidebar', 'B'),
-      ('Find anything: requests, environments, actions', 'K'),
+    final actions = [
+      ('Send, connect or call', '$key$enter'),
+      ('Stop a send or a call', '$key.'),
+      ('Save the request', '${key}S'),
+      ('New request', '${key}N'),
+      ('Close request', '${key}W'),
+      ('Go to the address', '${key}L'),
+      ('Show or hide the sidebar', '${key}B'),
+      ('Find anything: requests, environments, actions', '${key}K'),
+      ('Go to the first eight tabs', '${key}1 – ${key}8'),
+      ('Go to the last tab', '${key}9'),
+      ('Next tab', 'Ctrl Tab'),
+      ('Previous tab', 'Ctrl ⇧ Tab'),
     ];
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final (action, letter) in actions)
+          for (final (action, keys) in actions)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Row(
@@ -735,10 +740,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         horizontal: 8,
                         vertical: 3,
                       ),
-                      child: Text(
-                        '$key${letter == 'enter' ? enter : letter}',
-                        style: mono.copyWith(fontSize: 12),
-                      ),
+                      child: Text(keys, style: mono.copyWith(fontSize: 12)),
                     ),
                   ),
                 ],

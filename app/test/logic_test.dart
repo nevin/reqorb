@@ -11,6 +11,26 @@ import 'package:reqorb/workspace/workspace_store.dart';
 import 'fake_engine.dart';
 
 void main() {
+  test('copies are numbered instead of piling up the word copy', () {
+    expect(WorkspaceStore.copyName('Login', {}), 'Login copy');
+    expect(WorkspaceStore.copyName('Login', {'Login copy'}), 'Login copy 2');
+    // A copy of a copy is named as a copy of the first.
+    expect(
+      WorkspaceStore.copyName('Login copy', {'Login', 'Login copy'}),
+      'Login copy 2',
+    );
+    expect(
+      WorkspaceStore.copyName('Login copy 2', {
+        'Login copy',
+        'Login copy 2',
+        'Login copy 3',
+      }),
+      'Login copy 4',
+    );
+    // Only a trailing "copy" counts.
+    expect(WorkspaceStore.copyName('copy users', {}), 'copy users copy');
+  });
+
   test('reads key and value lines', () {
     expect(parseKeyValueLine('Accept: application/json'), (
       'Accept',

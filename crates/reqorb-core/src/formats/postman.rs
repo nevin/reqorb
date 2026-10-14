@@ -38,6 +38,8 @@ pub(super) struct Postman {
     warnings: Vec<String>,
     /// Scripts that use what reqorb's scripts do not have.
     out_of_reach: usize,
+    /// Requests that carry a script of either kind.
+    scripted: usize,
 }
 
 /// The scripts an entry carries for before a request and after it, each
@@ -80,6 +82,14 @@ fn joined(outer: &str, inner: &str) -> String {
 
 impl Postman {
     pub(super) fn finish(mut self) -> Vec<String> {
+        if self.scripted > 0 {
+            self.warnings.push(format!(
+                "{} request(s) carry scripts, which run each time they are sent and can read \
+                 your variables, credentials included: read them before sending if you do not \
+                 trust where the collection came from",
+                self.scripted
+            ));
+        }
         if self.out_of_reach > 0 {
             self.warnings.push(format!(
                 "{} script(s) use pm.sendRequest or require, which reqorb's scripts do not have",
@@ -125,6 +135,9 @@ impl Postman {
                     if script.contains("pm.sendRequest") || script.contains("require(") {
                         self.out_of_reach += 1;
                     }
+                }
+                if !both.0.trim().is_empty() || !both.1.trim().is_empty() {
+                    self.scripted += 1;
                 }
                 request.pre_script = Some(both.0).filter(|s| !s.trim().is_empty());
                 request.post_script = Some(both.1).filter(|s| !s.trim().is_empty());
