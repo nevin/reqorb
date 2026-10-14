@@ -423,6 +423,9 @@ on, send without the scripts this time, or cancel. Scripts are not run for WebSo
 and curl exports leave them out. In the CLI, `--pre-script` and `--post-script` take a
 script or `@file`.
 
+[docs/scripts.md](docs/scripts.md) lists every name a script can use, each assertion and
+its aliases, and which parts of Postman's `pm` work.
+
 ## Authorization
 
 A request can carry one of: API key, bearer token, JWT bearer, basic, digest, OAuth 1.0,
@@ -699,6 +702,7 @@ and how changes are written. The guides in [docs/](docs/) go further:
 - [Releasing](docs/releasing.md): versions, signing, and the app icon
 - [File formats](docs/file-formats.md): reqorb files and collection folders, field by
   field
+- [Script reference](docs/scripts.md): everything a script can use
 - [Troubleshooting](docs/troubleshooting.md): common problems and their fixes
 
 [CHANGELOG.md](CHANGELOG.md) lists what changed in each release.

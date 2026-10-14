@@ -12,6 +12,7 @@ fresh clone to a change that is ready to push. The guides in [docs/](docs/) go d
 | [Extending reqorb](docs/extending.md) | add an import or export format, a code language, an auth type, a setting or a bridge call |
 | [Releasing](docs/releasing.md) | cut a version, sign the macOS app, and change the app icon |
 | [File formats](docs/file-formats.md) | read or generate reqorb files and collection folders |
+| [Script reference](docs/scripts.md) | see everything a pre-request or post-response script can use |
 | [Troubleshooting](docs/troubleshooting.md) | get past a failed build, a stalled test or locked credentials |
 
 ## Set up
