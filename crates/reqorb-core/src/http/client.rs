@@ -37,7 +37,12 @@ pub(super) fn client_for(
         http_mode,
         proxy: proxy.clone(),
     };
-    if !own_connection && let Some(client) = CLIENTS.lock().unwrap().get(&key) {
+    if !own_connection
+        && let Some(client) = CLIENTS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&key)
+    {
         return Ok(client.clone());
     }
 
@@ -79,6 +84,9 @@ pub(super) fn client_for(
         return Ok(builder.pool_max_idle_per_host(1).build()?);
     }
     let client = builder.build()?;
-    CLIENTS.lock().unwrap().insert(key, client.clone());
+    CLIENTS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(key, client.clone());
     Ok(client)
 }

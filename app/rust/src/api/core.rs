@@ -413,7 +413,10 @@ pub async fn send_request_watched(
     sink: StreamSink<SendUpdate>,
 ) {
     let cancel = reqorb_core::Cancel::default();
-    SENDS.lock().unwrap().insert(id, cancel.clone());
+    SENDS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(id, cancel.clone());
     let sink = std::sync::Arc::new(sink);
     let progress = sink.clone();
     let watch = reqorb_core::Watch::new(
@@ -448,7 +451,10 @@ pub async fn send_request_watched(
         &watch,
     )
     .await;
-    SENDS.lock().unwrap().remove(&id);
+    SENDS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .remove(&id);
     let _ = sink.add(match result {
         Ok(sent) => SendUpdate {
             sent: Some(sent),
@@ -467,7 +473,7 @@ pub async fn send_request_watched(
 pub fn cancel_send(id: u32) -> bool {
     SENDS
         .lock()
-        .unwrap()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .get(&id)
         .map(|cancel| cancel.cancel())
         .is_some()
@@ -600,13 +606,19 @@ pub async fn ws_open(
             return;
         }
     };
-    SOCKETS.lock().unwrap().insert(id, handle);
+    SOCKETS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(id, handle);
     while let Some(event) = events.recv().await {
         if sink.add(event).is_err() {
             break;
         }
     }
-    SOCKETS.lock().unwrap().remove(&id);
+    SOCKETS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .remove(&id);
 }
 
 /// Sends a text message; false when the connection is not open.
@@ -614,7 +626,7 @@ pub async fn ws_open(
 pub fn ws_send(id: u32, text: String) -> bool {
     SOCKETS
         .lock()
-        .unwrap()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .get(&id)
         .is_some_and(|socket| socket.send_text(text))
 }
@@ -624,7 +636,7 @@ pub fn ws_send(id: u32, text: String) -> bool {
 pub fn ws_close(id: u32) -> bool {
     SOCKETS
         .lock()
-        .unwrap()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .get(&id)
         .is_some_and(|socket| socket.close())
 }
@@ -709,7 +721,10 @@ pub async fn grpc_call_watched(
     sink: StreamSink<GrpcUpdate>,
 ) {
     let cancel = reqorb_core::Cancel::default();
-    CALLS.lock().unwrap().insert(id, cancel.clone());
+    CALLS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(id, cancel.clone());
     let sink = std::sync::Arc::new(sink);
     let progress = sink.clone();
     let result = reqorb_core::grpc_call_watched(
@@ -725,7 +740,10 @@ pub async fn grpc_call_watched(
         &cancel,
     )
     .await;
-    CALLS.lock().unwrap().remove(&id);
+    CALLS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .remove(&id);
     let _ = sink.add(match result {
         Ok(reply) => GrpcUpdate {
             message: None,
@@ -746,7 +764,7 @@ pub async fn grpc_call_watched(
 pub fn grpc_cancel(id: u32) -> bool {
     CALLS
         .lock()
-        .unwrap()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .get(&id)
         .map(|cancel| cancel.cancel())
         .is_some()

@@ -191,7 +191,11 @@ async fn oauth2_token(client: Sender<'_>, auth: &Auth) -> Result<String, Error> 
         .map(|p| format!("{}={}", p.key, p.value))
         .collect::<Vec<_>>()
         .join("\n");
-    let cached = token_cache().lock().unwrap().get(&cache_key).cloned();
+    let cached = token_cache()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .get(&cache_key)
+        .cloned();
     if let Some((token, expires)) = cached
         && Instant::now() < expires
     {
@@ -249,7 +253,7 @@ async fn oauth2_token(client: Sender<'_>, auth: &Auth) -> Result<String, Error> 
     let expires = Instant::now() + Duration::from_secs(lifetime.saturating_sub(30));
     token_cache()
         .lock()
-        .unwrap()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .insert(cache_key, (token.to_string(), expires));
     Ok(token.to_string())
 }

@@ -52,7 +52,12 @@ impl Transport {
 
     /// Hands over the exchanges made so far, oldest first.
     pub(super) fn take_log(&self) -> Vec<Exchange> {
-        std::mem::take(&mut *self.log.lock().unwrap())
+        std::mem::take(
+            &mut *self
+                .log
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        )
     }
 }
 
@@ -64,14 +69,18 @@ pub(crate) async fn execute(transport: &Transport, request: &Request) -> Result<
     loop {
         let started_ms = now_ms();
         let (response, sent) = execute_once(transport, &current).await?;
-        transport.log.lock().unwrap().push(Exchange {
-            started_ms,
-            request: Request {
-                headers: sent,
-                ..current.clone()
-            },
-            response: response.clone(),
-        });
+        transport
+            .log
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(Exchange {
+                started_ms,
+                request: Request {
+                    headers: sent,
+                    ..current.clone()
+                },
+                response: response.clone(),
+            });
         let location = response
             .headers
             .iter()
@@ -120,11 +129,11 @@ pub(crate) async fn execute(transport: &Transport, request: &Request) -> Result<
             && from.host_str() == to.host_str()
             && from.port_or_known_default() == to.port_or_known_default();
         current.headers.retain(|h| {
-            let name = h.name.to_ascii_lowercase();
-            // Credentials are not handed to a different site unless asked.
-            let credential =
-                ["authorization", "cookie", "proxy-authorization"].contains(&name.as_str());
-            name != "referer" && (same_origin || rules.follow_auth_header || !credential)
+            // Credentials are not handed to a different site unless asked:
+            // `Authorization`, and an API key under a header of its own.
+            let credential = crate::redact::is_sensitive(&h.name);
+            !h.name.eq_ignore_ascii_case("referer")
+                && (same_origin || rules.follow_auth_header || !credential)
         });
         // Like browsers, never reveal an HTTPS address to a plain HTTP site.
         if !rules.remove_referer && !(from.scheme() == "https" && to.scheme() == "http") {

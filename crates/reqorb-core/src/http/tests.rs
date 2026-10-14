@@ -499,6 +499,7 @@ async fn redirects_follow_the_request_settings() {
     let mut post = Request::new("POST", "");
     post.add_header("Content-Type", "text/plain");
     post.add_header("Authorization", "Bearer t");
+    post.add_header("X-Api-Key", "k");
     post.body = Some("payload".into());
     let to = |url: &str| {
         let mut request = post.clone();
@@ -576,6 +577,8 @@ async fn redirects_follow_the_request_settings() {
             "{}",
             seen[0]
         );
+        // An API key in a header of its own is a credential too.
+        assert_eq!(seen[0].contains("x-api-key: k"), keep, "{}", seen[0]);
     }
 }
 

@@ -44,6 +44,12 @@ impl Cookie {
     }
 }
 
+/// Whether `domain` is one under which anyone may register a name, such as
+/// `com` or `co.uk`, by the Public Suffix List.
+fn is_public_suffix(domain: &str) -> bool {
+    psl::suffix_str(domain).is_some_and(|suffix| suffix.eq_ignore_ascii_case(domain))
+}
+
 /// Applies one `Set-Cookie` header received from `url`. Cookies for a
 /// domain the response does not belong to are ignored.
 pub fn store_set_cookie(jar: &mut Vec<Cookie>, header: &str, url: &Url, now: i64) {
@@ -51,13 +57,27 @@ pub fn store_set_cookie(jar: &mut Vec<Cookie>, header: &str, url: &Url, now: i64
         return;
     };
     let host = url.host_str().unwrap_or("").to_ascii_lowercase();
+    // Only a page reached securely may set a cookie kept for secure pages.
+    if parsed.secure() == Some(true) && url.scheme() != "https" {
+        return;
+    }
     let (domain, host_only) = match parsed.domain().map(|d| d.trim_start_matches('.')) {
         Some(domain) if !domain.is_empty() => {
             let domain = domain.to_ascii_lowercase();
-            if host != domain && !host.ends_with(&format!(".{domain}")) {
+            if domain == host {
+                // A cookie for exactly this host, but which a public suffix
+                // such as `localhost` must not share with others under it.
+                (domain.clone(), is_public_suffix(&domain))
+            } else if matches!(url.host(), Some(url::Host::Domain(_)))
+                && host.ends_with(&format!(".{domain}"))
+                // Otherwise `evil.com` could set a cookie that every site
+                // under `.com` would be sent.
+                && !is_public_suffix(&domain)
+            {
+                (domain, false)
+            } else {
                 return;
             }
-            (domain, false)
         }
         _ => (host, true),
     };
@@ -121,14 +141,20 @@ impl Jar {
     }
 
     pub fn snapshot(&self) -> Vec<Cookie> {
-        self.0.lock().unwrap().clone()
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 }
 
 impl Jar {
     /// Stores the `Set-Cookie` headers of a response from `url`.
     pub fn store<'a>(&self, headers: impl Iterator<Item = &'a str>, url: &Url) {
-        let mut jar = self.0.lock().unwrap();
+        let mut jar = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let now = now();
         for header in headers {
             store_set_cookie(&mut jar, header, url, now);
@@ -138,7 +164,14 @@ impl Jar {
     /// The `Cookie` header for a request to `url`. Cookies the request names
     /// itself in `own` win over stored ones of the same name.
     pub fn header_for(&self, url: &Url, own: Option<&str>) -> Option<String> {
-        let stored = cookie_header(&self.0.lock().unwrap(), url, now());
+        let stored = cookie_header(
+            &self
+                .0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+            url,
+            now(),
+        );
         let Some(own) = own else {
             return stored;
         };
@@ -219,6 +252,29 @@ mod tests {
         let dated = "d=1; Expires=Wed, 21 Oct 2015 07:28:00 GMT";
         store_set_cookie(&mut jar, dated, &from, 0);
         assert_eq!(jar.last().unwrap().expires, Some(1_445_412_480));
+    }
+
+    #[test]
+    fn refuses_cookies_for_public_suffixes_addresses_and_insecure_pages() {
+        let mut jar = Vec::new();
+        let at = |s: &str, jar: &mut Vec<Cookie>, header: &str| {
+            store_set_cookie(jar, header, &url(s), 100)
+        };
+        // Every site under these could otherwise be sent the cookie.
+        at("https://evil.com/", &mut jar, "a=1; Domain=com");
+        at("https://evil.co.uk/", &mut jar, "b=1; Domain=.co.uk");
+        // An address is not a name with others under it.
+        at("http://10.0.0.1/", &mut jar, "c=1; Domain=0.0.1");
+        // A secure cookie from a page that was not.
+        at("http://shop.test/", &mut jar, "d=1; Secure");
+        assert!(jar.is_empty(), "{jar:?}");
+
+        // Exactly the host is fine, even a public suffix, but for it alone.
+        at("http://localhost:8080/", &mut jar, "e=1; Domain=localhost");
+        at("http://10.0.0.1/", &mut jar, "f=1; Domain=10.0.0.1");
+        at("https://shop.co.uk/", &mut jar, "g=1; Domain=shop.co.uk");
+        let kept: Vec<_> = jar.iter().map(|c| (c.name.as_str(), c.host_only)).collect();
+        assert_eq!(kept, [("e", true), ("f", false), ("g", false)]);
     }
 
     #[test]

@@ -570,10 +570,9 @@ impl Workspace {
             std::fs::create_dir_all(dir).map_err(io)?;
         }
         let text = serde_json::to_string_pretty(self).expect("workspace serialises");
-        // Write then rename so a crash mid-write cannot corrupt the workspace.
-        let tmp = path.with_extension("json.tmp");
-        std::fs::write(&tmp, text).map_err(io)?;
-        std::fs::rename(&tmp, path).map_err(io)
+        // Whole or not at all, and for this user's eyes only: it holds
+        // cookies, and credentials too when the keychain cannot be used.
+        crate::files::replace_file(path, text.as_bytes(), true).map_err(io)
     }
 
     pub fn active_variables(&self) -> &[Variable] {

@@ -141,24 +141,30 @@ pub fn append_history(
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(io(path))?;
     }
-    std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
+    let mut options = std::fs::OpenOptions::new();
+    options.create(true).append(true);
+    // What was sent and received is this user's business alone.
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    options
         .open(path)
         .and_then(|mut file| file.write_all(lines.as_bytes()))
         .map_err(io(path))?;
 
     // Trimming rewrites the file, so it waits until there is a fair
-    // amount to drop instead of happening on every send.
+    // amount to drop instead of happening on every send. Counting needs
+    // only the line breaks, not the text decoded.
     let limit = limit as usize;
-    let text = std::fs::read_to_string(path).map_err(io(path))?;
+    let bytes = std::fs::read(path).map_err(io(path))?;
+    if bytes.iter().filter(|&&b| b == b'\n').count() <= limit + (limit / 4).max(10) {
+        return Ok(());
+    }
+    let text = String::from_utf8_lossy(&bytes);
     let kept: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
     if kept.len() > limit + (limit / 4).max(10) {
         let mut trimmed = kept[kept.len() - limit..].join("\n");
         trimmed.push('\n');
-        let tmp = path.with_extension("tmp");
-        std::fs::write(&tmp, trimmed).map_err(io(path))?;
-        std::fs::rename(&tmp, path).map_err(io(path))?;
+        crate::files::replace_file(path, trimmed.as_bytes(), true).map_err(io(path))?;
     }
     Ok(())
 }

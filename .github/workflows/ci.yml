@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+# The jobs only read the code; nothing they run can write to the repository.
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -27,6 +31,17 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       # Core tests and the CLI tests, which run the binary against a local server.
       - run: cargo test --workspace
+
+  audit:
+    name: Dependency advisories
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      # Fails on a known vulnerability in any crate the build uses.
+      - run: cargo audit
 
   flutter:
     name: Flutter analyze and unit tests

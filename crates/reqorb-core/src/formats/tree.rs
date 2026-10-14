@@ -237,10 +237,14 @@ fn owned(dir: &Path, found: &mut Vec<PathBuf>, folders: &mut Vec<PathBuf>) {
     for entry in entries.flatten() {
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().into_owned();
-        if name.starts_with('.') {
+        // Links are never ours: removing through one could reach anywhere.
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
+        if name.starts_with('.') || kind.is_symlink() {
             continue;
         }
-        if path.is_dir() {
+        if kind.is_dir() {
             if path.join(FOLDER_FILE).is_file() {
                 owned(&path, found, folders);
                 folders.push(path);
@@ -274,13 +278,26 @@ pub fn write_collection_dir(dir: &str, collection: &Collection) -> Result<(), Er
     let (mut stale, mut folders) = (Vec::new(), Vec::new());
     owned(root, &mut stale, &mut folders);
     for (path, text) in &files {
-        if std::fs::read_to_string(path).is_ok_and(|current| &current == text) {
+        // A folder from a clone could be a link to anywhere on this machine.
+        for folder in path.ancestors().skip(1).take_while(|f| *f != root) {
+            if std::fs::symlink_metadata(folder).is_ok_and(|m| m.file_type().is_symlink()) {
+                return Err(io(
+                    "write into",
+                    folder,
+                    "it is a link, and reqorb writes only into real folders",
+                ));
+            }
+        }
+        let is_link = std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink());
+        if !is_link && std::fs::read_to_string(path).is_ok_and(|current| &current == text) {
             continue;
         }
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| io("create", parent, e))?;
         }
-        std::fs::write(path, text).map_err(|e| io("write", path, e))?;
+        // Replaced, so a link in its place is not written through.
+        crate::files::replace_file(path, text.as_bytes(), false)
+            .map_err(|e| io("write", path, e))?;
     }
     for path in stale.iter().filter(|path| !files.contains_key(*path)) {
         std::fs::remove_file(path).map_err(|e| io("remove", path, e))?;
@@ -315,7 +332,11 @@ fn read_items(dir: &Path, order: &[String]) -> Result<Vec<Item>, Error> {
         let entry = entry.map_err(|e| io("read", dir, e))?;
         let name = entry.file_name().to_string_lossy().into_owned();
         let path = entry.path();
-        let ours = if path.is_dir() {
+        // A link could lead out of the folder to any file on this machine.
+        let kind = entry.file_type().map_err(|e| io("read", &path, e))?;
+        let ours = if kind.is_symlink() {
+            false
+        } else if kind.is_dir() {
             !name.starts_with('.') && path.join(FOLDER_FILE).is_file()
         } else {
             name.ends_with(REQUEST_SUFFIX)
@@ -460,6 +481,39 @@ mod tests {
         walk(dir, dir, &mut out);
         out.sort();
         out
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn links_planted_in_the_folder_are_neither_written_through_nor_read() {
+        use std::os::unix::fs::symlink;
+        let dir = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+        let precious = outside.path().join("precious.request.json");
+        std::fs::write(&precious, "keep me").unwrap();
+
+        // A file of the collection's that is really a link to another one.
+        symlink(&precious, dir.path().join("Login.request.json")).unwrap();
+        write_collection_dir(path, &shop()).unwrap();
+        assert_eq!(std::fs::read_to_string(&precious).unwrap(), "keep me");
+        assert!(
+            !std::fs::symlink_metadata(dir.path().join("Login.request.json"))
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+
+        // A folder of the collection's that is really a link elsewhere.
+        std::fs::remove_dir_all(dir.path().join("Orders")).unwrap();
+        symlink(outside.path(), dir.path().join("Orders")).unwrap();
+        let refused = write_collection_dir(path, &shop()).unwrap_err().to_string();
+        assert!(refused.contains("it is a link"), "{refused}");
+        assert_eq!(std::fs::read_to_string(&precious).unwrap(), "keep me");
+        // And nothing behind it is read as part of the collection.
+        std::fs::write(outside.path().join(FOLDER_FILE), r#"{"name":"Away"}"#).unwrap();
+        let read = read_collection_dir(path, None).unwrap();
+        assert!(read.items.iter().all(|item| item.name != "Away"));
     }
 
     #[test]

@@ -14,7 +14,6 @@ use base64::Engine;
 use chacha20poly1305::aead::Aead;
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce};
 use hmac::{Hmac, Mac};
-use serde_json::Value;
 use sha2::Sha256;
 
 use crate::auth::auth_fields;
@@ -217,7 +216,8 @@ fn secrets(workspace: &mut Workspace, visit: &mut dyn FnMut(&mut String)) {
         visit(&mut cookie.value);
     }
     // A proxy address may carry a user name and password.
-    if workspace.settings.proxy_url.contains('@') {
+    let proxy = &workspace.settings.proxy_url;
+    if proxy.contains('@') || proxy.starts_with(LOCKED) {
         visit(&mut workspace.settings.proxy_url);
     }
 }
@@ -231,31 +231,30 @@ fn seal(workspace: &mut Workspace, key: &[u8; KEY_BYTES]) {
     });
 }
 
-/// Decrypts every encrypted value in `saved`, wherever it is, and returns
-/// how many could not be. Those are left as they are, so that saving the
-/// workspace again does not destroy them.
-fn unseal(saved: &mut Value, key: Option<&[u8; KEY_BYTES]>) -> u32 {
-    match saved {
-        Value::String(text) if text.starts_with(LOCKED) => {
-            match key.and_then(|key| unlock(key, text)) {
-                Some(plain) => {
-                    *text = plain;
-                    0
-                }
-                None => 1,
+/// Decrypts the encrypted credentials in the workspace and returns how many
+/// could not be. Those are left as they are, so that saving the workspace
+/// again does not destroy them.
+///
+/// Only the places [`seal`] encrypts are decrypted. Otherwise anyone holding
+/// a copy of the file could have its credentials read out, by handing the
+/// user a collection whose URL is one of them and waiting for it to be sent.
+fn unseal(workspace: &mut Workspace, key: Option<&[u8; KEY_BYTES]>) -> u32 {
+    let mut locked = 0;
+    secrets(workspace, &mut |value| {
+        if value.starts_with(LOCKED) {
+            match key.and_then(|key| unlock(key, value)) {
+                Some(plain) => *value = plain,
+                None => locked += 1,
             }
         }
-        Value::Array(list) => list.iter_mut().map(|v| unseal(v, key)).sum(),
-        Value::Object(map) => map.values_mut().map(|v| unseal(v, key)).sum(),
-        _ => 0,
-    }
+    });
+    locked
 }
 
 /// How many values in the workspace are still encrypted, because the key
 /// they were encrypted with could not be read.
 pub fn locked_secrets(workspace: &Workspace) -> u32 {
-    let mut saved = serde_json::to_value(workspace).expect("workspace serialises");
-    unseal(&mut saved, None)
+    unseal(&mut workspace.clone(), None)
 }
 
 /// Whether credentials can be encrypted here, and if not, why. Makes the
@@ -288,8 +287,8 @@ pub fn load_workspace(path: &Path, keys: &dyn KeyStore) -> Result<Loaded, Error>
         }
         Err(e) => return Err(Error::Io(format!("{}: {e}", path.display()))),
     };
-    let invalid = |e: serde_json::Error| Error::Format(format!("{}: {e}", path.display()));
-    let mut saved: Value = serde_json::from_str(&text).map_err(invalid)?;
+    let mut workspace: Workspace = serde_json::from_str(&text)
+        .map_err(|e| Error::Format(format!("{}: {e}", path.display())))?;
     // The keychain is only troubled when there is something to decrypt.
     let (key, problem) = if text.contains(LOCKED) {
         match key_from(keys, false) {
@@ -300,9 +299,9 @@ pub fn load_workspace(path: &Path, keys: &dyn KeyStore) -> Result<Loaded, Error>
     } else {
         (None, None)
     };
-    let locked = unseal(&mut saved, key.as_ref());
+    let locked = unseal(&mut workspace, key.as_ref());
     Ok(Loaded {
-        workspace: serde_json::from_value(saved).map_err(invalid)?,
+        workspace,
         locked,
         problem: problem.filter(|_| locked > 0),
     })
@@ -464,6 +463,12 @@ pub(crate) mod tests {
         let workspace = sample();
 
         assert_eq!(save_workspace(&workspace, &path, &keys).unwrap(), None);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o600, "only its owner may read the file");
+        }
         let text = std::fs::read_to_string(&path).unwrap();
         for secret in SECRETS {
             assert!(!text.contains(secret), "{secret} is in the file");
@@ -489,6 +494,38 @@ pub(crate) mod tests {
         // Saved again unchanged, the file is the same to the byte.
         save_workspace(&loaded.workspace, &path, &keys).unwrap();
         assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
+    }
+
+    #[test]
+    fn a_credential_copied_where_none_belongs_is_not_decrypted() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("workspace.json");
+        let keys = MemoryKeys::default();
+        save_workspace(&sample(), &path, &keys).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        let stolen = text
+            .split('"')
+            .find(|part| part.starts_with(LOCKED))
+            .unwrap()
+            .to_string();
+
+        // A collection someone else wrote, that would send the value to them.
+        let mut planted = sample();
+        let request = Request::new("GET", &stolen);
+        planted.requests.push(Item {
+            name: "Bait".into(),
+            request: Some(request),
+            items: Vec::new(),
+        });
+        planted.collections[0].name = stolen.clone();
+        save_workspace(&planted, &path, &keys).unwrap();
+
+        let loaded = load_workspace(&path, &keys).unwrap().workspace;
+        let bait = loaded.requests.last().unwrap().request.as_ref().unwrap();
+        assert_eq!(bait.url, stolen);
+        assert_eq!(loaded.collections[0].name, stolen);
+        // The credentials where they belong still open.
+        assert_eq!(loaded.environments, sample().environments);
     }
 
     #[test]

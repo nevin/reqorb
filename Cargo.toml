@@ -7,3 +7,17 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/nevin/reqorb"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+# Optimised across crates for the shipped app and CLI. Panics still unwind:
+# the bridge turns them into errors for the app instead of a crash.
+[profile.release]
+lto = "thin"
+codegen-units = 4

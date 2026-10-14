@@ -28,7 +28,7 @@ final _swagger = jsonEncode({
     'token': {'type': 'apiKey', 'in': 'header', 'name': 'X-Token'},
   },
   'security': [
-    {'token': []},
+    {'token': <String>[]},
   ],
   'paths': {
     '/orders/{orderId}': {
@@ -127,7 +127,7 @@ final _graphqlSchema = jsonEncode({
               'name': 'name',
               'description': '',
               'isDeprecated': false,
-              'args': [],
+              'args': <Object>[],
               'type': {'kind': 'SCALAR', 'name': 'String'},
             },
           ],

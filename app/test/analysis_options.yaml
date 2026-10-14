@@ -1,0 +1,9 @@
+include: ../analysis_options.yaml
+
+# Tests read decoded JSON as it comes, own the sinks a test harness closes,
+# and may wait on files as they please.
+linter:
+  rules:
+    avoid_dynamic_calls: false
+    close_sinks: false
+    avoid_slow_async_io: false

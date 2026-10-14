@@ -75,8 +75,16 @@ pub async fn send_watched(
 ) -> Result<Sent, Error> {
     // The script that prepares the request sees it as written, so that
     // what it sets can be used by the variables in it.
-    let mut request = request.clone();
-    let prepared = script::before(&mut request, variables)?;
+    let (request, prepared) = if script::present(request.pre_script.as_deref()) {
+        let (mut request, known) = (request.clone(), variables.to_vec());
+        script::apart(script::time_limit(), move || {
+            script::before(&mut request, &known).map(|done| (request, done))
+        })
+        .await
+        .map_err(|why| Error::Script(format!("the pre-request script failed: {why}")))??
+    } else {
+        (request.clone(), script::Outcome::default())
+    };
     let variables: Vec<Variable> = prepared
         .set
         .iter()
@@ -127,7 +135,16 @@ pub async fn send_watched(
     // The script that follows sees what the captures kept, and its own
     // tests and values come after theirs.
     let known: Vec<Variable> = captured.iter().chain(variables).cloned().collect();
-    let judged = script::after(&as_sent, &response, &known);
+    let judged = if script::present(request.post_script.as_deref()) {
+        let received = response.clone();
+        script::apart(script::time_limit(), move || {
+            script::after(&as_sent, &received, &known)
+        })
+        .await
+        .unwrap_or_else(script::failed_after)
+    } else {
+        script::Outcome::default()
+    };
     tests.extend(judged.tests);
     // What either script set is kept as a capture is; the last word on a
     // name is the one that stands.

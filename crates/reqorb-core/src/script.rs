@@ -6,7 +6,11 @@
 //! and what it decides cross as JSON, and the objects it works with are
 //! written in JavaScript themselves (`script_prelude.js`).
 
-use boa_engine::{Context, Source};
+use std::future::Future;
+use std::task::Poll;
+use std::time::{Duration, Instant};
+
+use boa_engine::{Context, JsError, JsValue, Script, Source};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -15,9 +19,46 @@ use crate::{Error, Header, Request, Response, Variable};
 
 const PRELUDE: &str = include_str!("script_prelude.js");
 
-/// How far a script may run before it is taken to be stuck.
+/// How far a script may run before it is taken to be stuck. The loop limit
+/// applies to each loop on its own, so loops inside loops are caught by
+/// the time limit instead.
 const LOOP_LIMIT: u64 = 5_000_000;
 const RECURSION_LIMIT: usize = 400;
+const TIME_LIMIT: Duration = Duration::from_secs(10);
+/// How many instructions run between looks at the clock.
+const BUDGET: u32 = 50_000;
+
+/// Why evaluation stopped short.
+enum Stopped {
+    Failed(JsError),
+    /// The time ran out, part way through, which leaves the engine in no
+    /// state to be asked anything more.
+    OutOfTime,
+}
+
+/// Evaluates `code`, giving up at `deadline`.
+fn evaluate(context: &mut Context, code: &str, deadline: Instant) -> Result<JsValue, Stopped> {
+    let script = Script::parse(Source::from_bytes(code), None, context).map_err(Stopped::Failed)?;
+    let mut running = std::pin::pin!(script.evaluate_async_with_budget(context, BUDGET));
+    // The engine pauses after each budget of instructions and is ready to
+    // go on at once, so it needs no waking, only asking again.
+    let mut asking = std::task::Context::from_waker(std::task::Waker::noop());
+    loop {
+        if let Poll::Ready(result) = running.as_mut().poll(&mut asking) {
+            return result.map_err(Stopped::Failed);
+        }
+        if Instant::now() >= deadline {
+            return Err(Stopped::OutOfTime);
+        }
+    }
+}
+
+fn out_of_time(limit: Duration) -> String {
+    format!(
+        "it ran for longer than {} seconds and was stopped",
+        limit.as_secs_f32()
+    )
+}
 
 /// What a script decided.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -86,7 +127,9 @@ fn run(
     request: &mut Request,
     response: Option<&Response>,
     variables: &[Variable],
+    limit: Duration,
 ) -> Result<Outcome, String> {
+    let deadline = Instant::now() + limit;
     // The first of each name is the one in force.
     let mut known = serde_json::Map::new();
     for variable in variables.iter().filter(|v| v.enabled) {
@@ -123,20 +166,33 @@ fn run(
     // keeps anything in it from being read as code.
     let quoted = Value::from(input.to_string()).to_string();
     let setup = format!("{PRELUDE}(JSON.parse({quoted}));");
-    context
-        .eval(Source::from_bytes(&setup))
-        .map_err(|e| format!("could not be started: {}", problem(&e)))?;
+    match evaluate(&mut context, &setup, deadline) {
+        Ok(_) => {}
+        Err(Stopped::Failed(e)) => return Err(format!("could not be started: {}", problem(&e))),
+        Err(Stopped::OutOfTime) => return Err(out_of_time(limit)),
+    }
 
     // Evaluated on its own, so that its lines are numbered as written.
-    let failed = context.eval(Source::from_bytes(script)).err();
+    let failed = match evaluate(&mut context, script, deadline) {
+        Ok(_) => None,
+        Err(Stopped::Failed(e)) => Some(e),
+        Err(Stopped::OutOfTime) => return Err(out_of_time(limit)),
+    };
 
-    let finished = context
-        .eval(Source::from_bytes("__reqorb_finish()"))
-        .ok()
-        .and_then(|value| value.as_string().map(|s| s.to_std_string_escaped()))
-        .and_then(|text| serde_json::from_str::<Finished>(&text).ok());
+    // Reading back runs the script's own code too, if it replaced `toJSON`.
+    let (finished, unreadable) = match evaluate(&mut context, "__reqorb_finish()", deadline) {
+        Ok(value) => (
+            value
+                .as_string()
+                .map(|s| s.to_std_string_escaped())
+                .and_then(|text| serde_json::from_str::<Finished>(&text).ok()),
+            None,
+        ),
+        Err(Stopped::Failed(e)) => (None, Some(e)),
+        Err(Stopped::OutOfTime) => return Err(out_of_time(limit)),
+    };
     let Some(finished) = finished else {
-        return Err(match failed {
+        return Err(match failed.or(unreadable) {
             Some(e) => problem(&e),
             None => "left nothing that could be read back".into(),
         });
@@ -188,7 +244,7 @@ pub(crate) fn before(request: &mut Request, variables: &[Variable]) -> Result<Ou
     let Some(script) = request.pre_script.clone().filter(|s| !s.trim().is_empty()) else {
         return Ok(Outcome::default());
     };
-    run(&script, request, None, variables)
+    run(&script, request, None, variables, TIME_LIMIT)
         .map_err(|problem| Error::Script(format!("the pre-request script failed: {problem}")))
 }
 
@@ -204,17 +260,61 @@ pub(crate) fn after(request: &Request, response: &Response, variables: &[Variabl
     };
     // The script may read the request, and nothing comes of changing it.
     let mut seen = request.clone();
-    match run(script, &mut seen, Some(response), variables) {
+    match run(script, &mut seen, Some(response), variables, TIME_LIMIT) {
         Ok(outcome) => outcome,
-        Err(problem) => Outcome {
-            tests: vec![TestResult {
-                test: "the test script".into(),
-                passed: false,
-                detail: problem,
-            }],
-            ..Outcome::default()
-        },
+        Err(problem) => failed_after(problem),
     }
+}
+
+/// Whether there is a script to run.
+pub(crate) fn present(script: Option<&str>) -> bool {
+    script.is_some_and(|s| !s.trim().is_empty())
+}
+
+/// Does `work`, which runs a script, on a thread of its own: a script may
+/// compute for seconds, and the threads that move requests and responses
+/// along must not wait for it.
+///
+/// The script stops itself at the time limit, except inside code that the
+/// engine calls back from its own, such as a `map` callback or a `toJSON`,
+/// where it cannot be interrupted. Waiting ends a little after the limit
+/// all the same, and a script stuck there is left to finish on its own.
+pub(crate) async fn apart<T: Send + 'static>(
+    limit: Duration,
+    work: impl FnOnce() -> T + Send + 'static,
+) -> Result<T, String> {
+    let (done, finished) = tokio::sync::oneshot::channel();
+    std::thread::Builder::new()
+        .name("reqorb-script".into())
+        // The room the engine needs for scripts that nest deeply.
+        .stack_size(8 * 1024 * 1024)
+        .spawn(move || {
+            let _ = done.send(std::panic::catch_unwind(std::panic::AssertUnwindSafe(work)));
+        })
+        .map_err(|e| format!("could not be started: {e}"))?;
+    let grace = Duration::from_secs(2).min(limit);
+    match tokio::time::timeout(limit + grace, finished).await {
+        Ok(Ok(Ok(value))) => Ok(value),
+        Ok(Ok(Err(panic))) => std::panic::resume_unwind(panic),
+        Ok(Err(_)) => Err("ended without a result".into()),
+        Err(_) => Err(out_of_time(limit)),
+    }
+}
+
+/// The send's view of a script that could not be run to the end.
+pub(crate) fn failed_after(problem: String) -> Outcome {
+    Outcome {
+        tests: vec![TestResult {
+            test: "the test script".into(),
+            passed: false,
+            detail: problem,
+        }],
+        ..Outcome::default()
+    }
+}
+
+pub(crate) const fn time_limit() -> Duration {
+    TIME_LIMIT
 }
 
 #[cfg(test)]
@@ -242,6 +342,50 @@ mod tests {
             .iter()
             .map(|v| (v.key.as_str(), v.value.as_str()))
             .collect()
+    }
+
+    #[test]
+    fn a_script_that_will_not_end_is_stopped_in_time() {
+        let limit = Duration::from_millis(300);
+        for script in [
+            // Each loop on its own stays under the loop limit.
+            "for (let i = 0; i < 4e6; i++) { for (let j = 0; j < 4e6; j++) {} }",
+            // And code of its own can run when its results are read back.
+            "Object.prototype.toJSON = function () { for (let i = 0; i < 4e6; i++) \
+             { for (let j = 0; j < 4e6; j++) {} } };",
+        ] {
+            let started = Instant::now();
+            let mut request = Request::new("GET", "https://api.test");
+            let stopped = run(script, &mut request, None, &[], limit).unwrap_err();
+            // Stopped by the clock, or by the loop limit within a function.
+            assert!(
+                stopped.contains("longer than 0.3 seconds") || stopped.contains("loop"),
+                "{stopped}"
+            );
+            // Generous, as the tests run side by side and unoptimised.
+            assert!(started.elapsed() < Duration::from_secs(8), "{script}");
+        }
+    }
+
+    #[tokio::test]
+    async fn waiting_ends_even_where_the_engine_cannot_stop_the_script() {
+        // Each callback stays inside the loop limit, and the engine cannot
+        // look at the clock inside `map`.
+        let script = "[...Array(1e6)].map(() => { for (let i = 0; i < 4e6; i++) {} })";
+        let started = Instant::now();
+        let limit = Duration::from_millis(200);
+        let outcome = apart(limit, move || {
+            run(
+                script,
+                &mut Request::new("GET", "https://api.test"),
+                None,
+                &[],
+                limit,
+            )
+        })
+        .await;
+        assert_eq!(outcome.unwrap_err(), out_of_time(limit));
+        assert!(started.elapsed() < Duration::from_secs(2));
     }
 
     #[test]

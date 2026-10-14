@@ -58,9 +58,56 @@ impl FileAccess {
                     root.display()
                 )));
             }
+            // The file that was checked is the one read, even if a link
+            // is changed in between.
+            return std::fs::read(&real).map_err(unreadable);
         }
         std::fs::read(&resolved).map_err(unreadable)
     }
+}
+
+/// Writes `contents` to `path` whole or not at all: into a new file beside
+/// it, flushed to disk, which then takes its place. A link at `path` is
+/// replaced, never followed. A `private` file is readable by its owner
+/// alone, as anything holding credentials should be.
+pub(crate) fn replace_file(path: &Path, contents: &[u8], private: bool) -> std::io::Result<()> {
+    use std::io::Write;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    // Saves may overlap, so each takes a name of its own.
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let name = path.file_name().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, "the path names no file")
+    })?;
+    let mut temporary = std::ffi::OsString::from(".");
+    temporary.push(name);
+    temporary.push(format!(
+        ".{}-{}.tmp",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
+    let temporary = path.with_file_name(temporary);
+
+    let mut options = std::fs::OpenOptions::new();
+    // A new file, so that nothing already at that name is written through.
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(if private { 0o600 } else { 0o644 });
+    }
+    #[cfg(not(unix))]
+    let _ = private;
+    let written = options.open(&temporary).and_then(|mut file| {
+        file.write_all(contents)?;
+        file.sync_all()?;
+        drop(file);
+        std::fs::rename(&temporary, path)
+    });
+    if written.is_err() {
+        let _ = std::fs::remove_file(&temporary);
+    }
+    written
 }
 
 /// What can be done with a directory, to tell whether it will serve as the
