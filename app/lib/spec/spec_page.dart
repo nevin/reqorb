@@ -593,56 +593,101 @@ class _Preview extends StatefulWidget {
   State<_Preview> createState() => _PreviewState();
 }
 
+/// One entry in the preview's list: what builds it, and for a card, its
+/// id there.
+typedef _Item = ({String? id, Widget Function() build});
+
 class _PreviewState extends State<_Preview> {
   final _filter = TextEditingController();
+  final _scroll = ScrollController();
 
-  /// Each schema's card, to scroll to, and what opens it.
-  final _cards = <String, GlobalKey>{};
+  /// Each card's key, to find it once it is built, and what opens it,
+  /// which keeps it open while it is scrolled away and built again. By
+  /// the card's id: `op:GET /pets`, `hook:newPet`, `schema:Pet`.
+  final _keys = <String, GlobalKey>{};
   final _openers = <String, ExpansibleController>{};
+
+  /// The ids of the entries in the list as last built, in order.
+  List<String?> _ids = const [];
+
+  /// Counts the schemas shown, so that one shown later takes over.
+  int _shows = 0;
+  Timer? _settle;
 
   @override
   void dispose() {
     _settle?.cancel();
     _filter.dispose();
+    _scroll.dispose();
     for (final opener in _openers.values) {
       opener.dispose();
     }
     super.dispose();
   }
 
-  GlobalKey _card(String name) => _cards.putIfAbsent(name, GlobalKey.new);
-  ExpansibleController _opener(String name) =>
-      _openers.putIfAbsent(name, ExpansibleController.new);
+  GlobalKey _key(String id) => _keys.putIfAbsent(id, GlobalKey.new);
+  ExpansibleController _opener(String id) =>
+      _openers.putIfAbsent(id, ExpansibleController.new);
 
   /// Opens the schema called [name] and scrolls to it.
   void _show(String name) {
+    final id = 'schema:$name';
     // A filter could be hiding it.
     if (_filter.text.isNotEmpty) setState(_filter.clear);
-    final opener = _opener(name);
-    if (_card(name).currentContext != null && !opener.isExpanded) {
-      opener.expand();
-    }
-    void scroll() {
-      if (!mounted) return;
-      if (!opener.isExpanded) opener.expand();
-      final card = _card(name).currentContext;
-      if (card == null || !card.mounted) return;
-      Scrollable.ensureVisible(
-        card,
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOut,
-        alignment: 0.05,
-      );
-    }
-
-    // Into view once laid out, and to the top once it has opened out and
-    // there is room below it to scroll.
-    WidgetsBinding.instance.addPostFrameCallback((_) => scroll());
-    _settle?.cancel();
-    _settle = Timer(const Duration(milliseconds: 300), scroll);
+    // Opened even before it is built, it is built open.
+    _opener(id).expand();
+    final show = ++_shows;
+    WidgetsBinding.instance
+      ..addPostFrameCallback((_) => _reveal(id, show))
+      ..scheduleFrame();
   }
 
-  Timer? _settle;
+  /// Scrolls until the card [id] is built, then brings it into view.
+  Future<void> _reveal(String id, int show) async {
+    final index = _ids.indexOf(id);
+    var guessed = false;
+    for (var step = 0; index >= 0 && step < 50; step++) {
+      if (!mounted || show != _shows || !_scroll.hasClients) return;
+      if (_key(id).currentContext case final card? when card.mounted) {
+        _bringIntoView(card);
+        // And again once it has opened out and there is room below it.
+        _settle?.cancel();
+        _settle = Timer(const Duration(milliseconds: 300), () {
+          final card = _key(id).currentContext;
+          if (mounted && show == _shows && card != null) _bringIntoView(card);
+        });
+        return;
+      }
+      final position = _scroll.position;
+      final double to;
+      if (!guessed) {
+        // The list reckons its length from the entries built so far, so
+        // the same share of that length lands near.
+        guessed = true;
+        to =
+            (position.maxScrollExtent + position.viewportDimension) *
+            index /
+            _ids.length;
+      } else {
+        final first = _ids.indexWhere(
+          (id) => id != null && _keys[id]?.currentContext != null,
+        );
+        final back = first >= 0 && index < first;
+        to = position.pixels + (back ? -1 : 1) * position.viewportDimension;
+      }
+      position.jumpTo(
+        to.clamp(position.minScrollExtent, position.maxScrollExtent),
+      );
+      await WidgetsBinding.instance.endOfFrame;
+    }
+  }
+
+  void _bringIntoView(BuildContext card) => Scrollable.ensureVisible(
+    card,
+    duration: const Duration(milliseconds: 250),
+    curve: Curves.easeOut,
+    alignment: 0.05,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -684,16 +729,24 @@ class _PreviewState extends State<_Preview> {
       ),
     );
 
-    // A column rather than a list, so that a schema far down is built and
-    // can be scrolled to.
-    return SelectionArea(
-      child: SingleChildScrollView(
-        key: const Key('spec-preview'),
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (spec.readable) ...[
+    // A list built as it is scrolled, as a spec can have thousands of
+    // operations and schemas.
+    final items = <_Item>[];
+    void add(Widget Function() build, [String? id]) =>
+        items.add((id: id, build: build));
+    void addOperation(SpecOperation op, String id) => add(
+      () =>
+          _Operation(key: _key(id), op: op, opener: _opener(id), links: links),
+      id,
+    );
+
+    if (spec.readable) {
+      add(
+        () => Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Wrap(
                 spacing: 8,
                 crossAxisAlignment: WrapCrossAlignment.center,
@@ -722,96 +775,127 @@ class _PreviewState extends State<_Preview> {
                     ),
                   ),
               ],
-              const SizedBox(height: 12),
             ],
-            if (spec.problems.isNotEmpty) ...[
-              _Problems(problems: spec.problems),
-              const SizedBox(height: 12),
-            ],
-            if (spec.operations.isNotEmpty || spec.schemas.isNotEmpty) ...[
-              TextField(
-                key: const Key('spec-filter'),
-                controller: _filter,
-                decoration: InputDecoration(
-                  isDense: true,
-                  prefixIcon: const Icon(Icons.search, size: 18),
-                  hintText: spec.schemas.isEmpty
-                      ? 'Filter operations'
-                      : 'Filter operations and schemas',
-                ),
-                onChanged: (_) => setState(() {}),
-              ),
-              const SizedBox(height: 8),
-              for (final MapEntry(key: tag, value: operations)
-                  in groups.entries) ...[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
-                  child: Text(tag, style: theme.textTheme.titleSmall),
-                ),
-                for (final op in operations) _Operation(op: op, links: links),
-              ],
-              if (webhooks.isNotEmpty) ...[
-                heading(
-                  'Webhooks',
-                  const Key('spec-webhooks'),
-                  'Requests the API sends to you',
-                ),
-                for (final op in webhooks) _Operation(op: op, links: links),
-              ],
-              if (schemas.isNotEmpty) ...[
-                heading(
-                  'Schemas (${spec.schemas.length})',
-                  const Key('spec-schemas'),
-                  'What the requests and responses carry',
-                ),
-                for (final schema in schemas)
-                  _Schema(
-                    key: _card(schema.name),
-                    schema: schema,
-                    opener: _opener(schema.name),
-                    links: links,
-                  ),
-              ],
-              if (groups.isEmpty && webhooks.isEmpty && schemas.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.all(16),
+          ),
+        ),
+      );
+    }
+    if (spec.problems.isNotEmpty) {
+      add(
+        () => Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: _Problems(problems: spec.problems),
+        ),
+      );
+    }
+    if (spec.operations.isNotEmpty || spec.schemas.isNotEmpty) {
+      add(
+        () => Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: TextField(
+            key: const Key('spec-filter'),
+            controller: _filter,
+            decoration: InputDecoration(
+              isDense: true,
+              prefixIcon: const Icon(Icons.search, size: 18),
+              hintText: spec.schemas.isEmpty
+                  ? 'Filter operations'
+                  : 'Filter operations and schemas',
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+        ),
+      );
+      for (final MapEntry(key: tag, value: operations) in groups.entries) {
+        add(
+          () => Padding(
+            padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
+            child: Text(tag, style: theme.textTheme.titleSmall),
+          ),
+        );
+        for (final op in operations) {
+          addOperation(op, 'op:${op.method} ${op.path}');
+        }
+      }
+      if (webhooks.isNotEmpty) {
+        add(
+          () => heading(
+            'Webhooks',
+            const Key('spec-webhooks'),
+            'Requests the API sends to you',
+          ),
+        );
+        for (final op in webhooks) {
+          addOperation(op, 'hook:${op.method} ${op.path}');
+        }
+      }
+      if (schemas.isNotEmpty) {
+        add(
+          () => heading(
+            'Schemas (${spec.schemas.length})',
+            const Key('spec-schemas'),
+            'What the requests and responses carry',
+          ),
+        );
+        for (final schema in schemas) {
+          final id = 'schema:${schema.name}';
+          add(
+            () => _Schema(
+              key: _key(id),
+              schema: schema,
+              opener: _opener(id),
+              links: links,
+            ),
+            id,
+          );
+        }
+      }
+      if (groups.isEmpty && webhooks.isEmpty && schemas.isEmpty) {
+        add(
+          () => Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              'Nothing matches',
+              style: TextStyle(color: scheme.onSurfaceVariant),
+            ),
+          ),
+        );
+      }
+    }
+    if (spec.security.isNotEmpty) {
+      add(() => heading('Security', const Key('spec-security')));
+      for (final security in spec.security) {
+        add(
+          () => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(width: 160, child: Text(security.name, style: mono)),
+                Expanded(
                   child: Text(
-                    'Nothing matches',
+                    [
+                      security.summary,
+                      if (security.description.isNotEmpty) security.description,
+                    ].join(' — '),
                     style: TextStyle(color: scheme.onSurfaceVariant),
                   ),
                 ),
-            ],
-            if (spec.security.isNotEmpty) ...[
-              heading('Security', const Key('spec-security')),
-              for (final security in spec.security)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 3,
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: 160,
-                        child: Text(security.name, style: mono),
-                      ),
-                      Expanded(
-                        child: Text(
-                          [
-                            security.summary,
-                            if (security.description.isNotEmpty)
-                              security.description,
-                          ].join(' — '),
-                          style: TextStyle(color: scheme.onSurfaceVariant),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ],
-        ),
+              ],
+            ),
+          ),
+        );
+      }
+    }
+    _ids = [for (final item in items) item.id];
+
+    return SelectionArea(
+      child: ListView.builder(
+        key: const Key('spec-preview'),
+        controller: _scroll,
+        padding: const EdgeInsets.all(16),
+        itemCount: items.length,
+        itemBuilder: (_, index) => items[index].build(),
       ),
     );
   }
@@ -1066,9 +1150,15 @@ class _Schema extends StatelessWidget {
 }
 
 class _Operation extends StatelessWidget {
-  const _Operation({required this.op, required this.links});
+  const _Operation({
+    super.key,
+    required this.op,
+    required this.opener,
+    required this.links,
+  });
 
   final SpecOperation op;
+  final ExpansibleController opener;
   final _Links links;
 
   @override
@@ -1120,6 +1210,7 @@ class _Operation extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: ExpansionTile(
+        controller: opener,
         shape: const Border(),
         collapsedShape: const Border(),
         tilePadding: const EdgeInsets.symmetric(horizontal: 12),

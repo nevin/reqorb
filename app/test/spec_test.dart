@@ -448,6 +448,63 @@ components:
     });
   });
 
+  testWidgets('a type opens a schema far down a long list', (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final text = StringBuffer(
+      'openapi: 3.0.3\ninfo: {title: Many, version: "1"}\npaths:\n',
+    );
+    for (var i = 0; i < 100; i++) {
+      text.write(
+        '  /things$i:\n    get:\n      tags: [t${i % 20}]\n'
+        '      responses:\n        "200":\n          description: ok\n'
+        '          content:\n            application/json:\n'
+        '              schema: {\$ref: "#/components/schemas/S$i"}\n',
+      );
+    }
+    text.write('components:\n  schemas:\n');
+    for (var i = 0; i < 100; i++) {
+      text.write(
+        '    S$i:\n      properties:\n        field$i: {type: string}\n',
+      );
+    }
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SpecPage(
+          name: 'many.yaml',
+          text: text.toString(),
+          onImport: (_, _, _) async {},
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const Key('spec-view-preview')));
+    await tester.pumpAndSettle();
+    // Built as it is scrolled: the schemas at the end are not built yet.
+    expect(find.byKey(const Key('spec-schema-S99')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('spec-op-GET-/things0')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('spec-link-S0')));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(find.text('field0', findRichText: true), findsOneWidget);
+    final card = tester.getRect(find.byKey(const Key('spec-schema-S0')));
+    final list = tester.getRect(find.byKey(const Key('spec-preview')));
+    expect(card.top, inInclusiveRange(list.top, list.top + list.height / 3));
+
+    // The operation, scrolled away and built again, is still open.
+    for (var i = 0; i < 5; i++) {
+      await tester.drag(
+        find.byKey(const Key('spec-preview')),
+        const Offset(0, 2000),
+      );
+      await tester.pumpAndSettle();
+    }
+    expect(find.byKey(const Key('spec-schema-S0')), findsNothing);
+    expect(find.byKey(const Key('spec-link-S0')), findsOneWidget);
+  });
+
   testWidgets('a long spec is read in the background', (tester) async {
     tester.view.physicalSize = const Size(1400, 1000);
     tester.view.devicePixelRatio = 1;
