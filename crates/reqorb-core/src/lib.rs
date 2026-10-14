@@ -41,9 +41,9 @@ pub use data::parse_run_data;
 pub use error::Error;
 pub use files::{DirAccess, FileAccess, check_directory};
 pub use formats::{
-    ExportFormat, ImportResult, export_collection, export_environment, export_native, import,
-    import_har, import_url, is_collection_dir, read_collection_dir, to_curl, to_har,
-    write_collection_dir,
+    ExportFormat, ImportResult, collection_dir_stamp, export_collection, export_environment,
+    export_native, import, import_har, import_url, is_collection_dir, read_collection_dir, to_curl,
+    to_har, write_collection_dir,
 };
 pub use graphql::{
     GraphQlArg, GraphQlDraft, GraphQlField, GraphQlQuery, GraphQlSchema, GraphQlType,

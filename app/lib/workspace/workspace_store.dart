@@ -428,6 +428,39 @@ class WorkspaceStore extends ChangeNotifier {
   /// only one that has changed is written again.
   final _written = <String, Collection>{};
 
+  /// Each linked folder's fingerprint when it was last read or written, to
+  /// tell when its files have changed since, as by a pull.
+  final _stamps = <String, String>{};
+
+  /// Folders whose files changed on disk while the copy here changed too.
+  /// Neither is written over the other until the user says which to keep.
+  final folderConflicts = <String>{};
+
+  static const _conflict =
+      'The files changed on disk since reqorb last read them, and the copy '
+      'here changed too. Reload from folder to take the files, or Keep mine '
+      'to write this copy over them.';
+
+  Future<void> _stamp(String dir) async {
+    try {
+      _stamps[dir] = await engine.collectionDirStamp(dir: dir);
+    } catch (_) {
+      _stamps.remove(dir);
+    }
+  }
+
+  /// Whether the files in [dir] are not what they were when last read or
+  /// written here.
+  Future<bool> _changedOnDisk(String dir) async {
+    final known = _stamps[dir];
+    if (known == null) return false;
+    try {
+      return await engine.collectionDirStamp(dir: dir) != known;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Collection _linked(Collection collection, FolderLink? link) => Collection(
     name: collection.name,
     variables: collection.variables,
@@ -455,6 +488,7 @@ class WorkspaceStore extends ChangeNotifier {
       return '$e';
     }
     _written[dir] = linked;
+    await _stamp(dir);
     folderProblems.remove(dir);
     _set(collections: [...collections]..[index] = linked);
     return null;
@@ -467,6 +501,8 @@ class WorkspaceStore extends ChangeNotifier {
     final dir = collections[index].link?.path;
     if (dir == null) return;
     _written.remove(dir);
+    _stamps.remove(dir);
+    folderConflicts.remove(dir);
     folderProblems.remove(dir);
     _set(
       collections: [...collections]
@@ -484,7 +520,9 @@ class WorkspaceStore extends ChangeNotifier {
     if (link == null) return null;
     try {
       final read = await engine.readCollectionDir(dir: link.path, local: local);
+      await _stamp(link.path);
       folderProblems.remove(link.path);
+      folderConflicts.remove(link.path);
       final at = collections.indexOf(local);
       if (at < 0) return null;
       // As read, it is also what the folder holds.
@@ -512,6 +550,7 @@ class WorkspaceStore extends ChangeNotifier {
       final read = await engine.readCollectionDir(dir: dir);
       final linked = _linked(read, FolderLink(path: dir, grant: grant));
       _written[dir] = linked;
+      await _stamp(dir);
       _set(collections: [...collections, linked]);
       return null;
     } catch (e) {
@@ -553,9 +592,18 @@ class WorkspaceStore extends ChangeNotifier {
       if (folderProblems.containsKey(dir) && !_written.containsKey(dir)) {
         continue;
       }
+      if (folderConflicts.contains(dir)) continue;
+      // Files changed by a pull are not written over unseen.
+      if (await _changedOnDisk(dir)) {
+        folderConflicts.add(dir);
+        folderProblems[dir] = _conflict;
+        changed = true;
+        continue;
+      }
       try {
         await engine.writeCollectionDir(dir: dir, collection: collection);
         _written[dir] = collection;
+        await _stamp(dir);
         changed = folderProblems.remove(dir) != null || changed;
       } catch (e) {
         changed = folderProblems[dir] != '$e' || changed;
@@ -563,6 +611,50 @@ class WorkspaceStore extends ChangeNotifier {
       }
     }
     if (changed) notifyListeners();
+  }
+
+  /// Writes the collection at [index] over its folder's files, though they
+  /// changed on disk since they were read. Returns what went wrong.
+  Future<String?> keepMine(int index) async {
+    if (index < 0 || index >= collections.length) return null;
+    final collection = collections[index];
+    final dir = collection.link?.path;
+    if (dir == null) return null;
+    try {
+      await engine.writeCollectionDir(dir: dir, collection: collection);
+    } catch (e) {
+      folderProblems[dir] = '$e';
+      notifyListeners();
+      return '$e';
+    }
+    _written[dir] = collection;
+    await _stamp(dir);
+    folderConflicts.remove(dir);
+    folderProblems.remove(dir);
+    notifyListeners();
+    return null;
+  }
+
+  /// Looks for linked folders whose files changed on disk, as when the app
+  /// comes back to the front after a pull. One whose copy here has not
+  /// changed since is read again; one where both changed is a conflict.
+  Future<void> checkFolders() async {
+    for (var i = 0; i < collections.length; i++) {
+      final collection = collections[i];
+      final dir = collection.link?.path;
+      if (dir == null || folderConflicts.contains(dir)) continue;
+      if (!await _changedOnDisk(dir)) continue;
+      // The list may have changed while the disk was looked at.
+      final at = collections.indexOf(collection);
+      if (at < 0) continue;
+      if (_written[dir] == collection) {
+        await reloadCollection(at);
+      } else {
+        folderConflicts.add(dir);
+        folderProblems[dir] = _conflict;
+        notifyListeners();
+      }
+    }
   }
 
   void removeCollection(int index) {

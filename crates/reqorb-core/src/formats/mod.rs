@@ -23,7 +23,9 @@ use serde_json::{Value, json};
 pub use curl::to_curl;
 pub use har::{import_har, to_har};
 pub use native::export_native;
-pub use tree::{is_collection_dir, read_collection_dir, write_collection_dir};
+pub use tree::{
+    collection_dir_stamp, is_collection_dir, read_collection_dir, write_collection_dir,
+};
 
 use self::bruno::bruno_collection;
 use self::curl::curl;

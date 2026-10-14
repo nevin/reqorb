@@ -948,6 +948,11 @@ pub fn is_collection_dir(dir: String) -> bool {
     reqorb_core::is_collection_dir(&dir)
 }
 
+/// A fingerprint of a collection folder's files, which changes when they do.
+pub fn collection_dir_stamp(dir: String) -> Result<String, String> {
+    reqorb_core::collection_dir_stamp(&dir).map_err(|e| e.to_string())
+}
+
 /// The rows of a CSV or JSON data file, each as the variables it sets
 /// for one time through a run.
 #[frb(sync)]

@@ -215,6 +215,10 @@ abstract class Engine {
   /// Whether the folder at [dir] holds a collection written by reqorb.
   bool isCollectionDir({required String dir});
 
+  /// A fingerprint of the collection files in [dir], which changes when
+  /// any of them is changed, added or removed.
+  Future<String> collectionDirStamp({required String dir});
+
   /// The rows of a CSV or JSON data file, each as the variables it sets
   /// for one time through a run; throws when the file cannot be read.
   List<List<Variable>> parseRunData({
@@ -482,6 +486,10 @@ class RustEngine extends Engine {
 
   @override
   bool isCollectionDir({required String dir}) => rust.isCollectionDir(dir: dir);
+
+  @override
+  Future<String> collectionDirStamp({required String dir}) =>
+      rust.collectionDirStamp(dir: dir);
 
   @override
   List<List<Variable>> parseRunData({

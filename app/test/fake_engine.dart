@@ -513,6 +513,7 @@ class FakeEngine extends Engine {
   }) async {
     if (folderFailure case final failure?) throw failure;
     folderWrites[dir] = (folderWrites[dir] ?? 0) + 1;
+    folderVersions[dir] = (folderVersions[dir] ?? 0) + 1;
     // The files hold neither the link nor any credentials.
     folderFiles[dir] = Collection(
       unreviewed: false,
@@ -541,6 +542,20 @@ class FakeEngine extends Engine {
 
   @override
   bool isCollectionDir({required String dir}) => folderFiles.containsKey(dir);
+
+  /// How many times each folder's files have changed; a change made by
+  /// hand, as a pull would make, is [changeFolder].
+  final folderVersions = <String, int>{};
+
+  /// Changes the files in [dir] behind the app's back.
+  void changeFolder(String dir, Collection collection) {
+    folderFiles[dir] = collection;
+    folderVersions[dir] = (folderVersions[dir] ?? 0) + 1;
+  }
+
+  @override
+  Future<String> collectionDirStamp({required String dir}) async =>
+      '${folderVersions[dir] ?? 0}';
 
   @override
   dynamic noSuchMethod(Invocation invocation) =>

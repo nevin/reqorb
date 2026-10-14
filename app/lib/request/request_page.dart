@@ -156,10 +156,16 @@ class _RequestPageState extends State<RequestPage> {
   void initState() {
     super.initState();
     _graphql.addListener(_sessionChanged);
+    _lifecycle = AppLifecycleListener(onResume: _store.checkFolders);
   }
+
+  /// Coming back to the app, as after a pull in a terminal, takes up what
+  /// changed in the folders that collections are kept in.
+  late final AppLifecycleListener _lifecycle;
 
   @override
   void dispose() {
+    _lifecycle.dispose();
     for (final tab in _tabs) {
       tab.sessions.removeListener(_sessionChanged);
       tab.dispose();

@@ -18,6 +18,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use crate::auth::auth_fields;
 use crate::redact::is_sensitive;
@@ -374,6 +375,25 @@ fn read_items(dir: &Path, order: &[String]) -> Result<Vec<Item>, Error> {
     Ok(items)
 }
 
+/// A fingerprint of the collection's files in `dir`: their names and what
+/// they hold. It changes when any of them is changed, added or removed, as
+/// by a pull, so a write can tell that it would replace work it never saw.
+pub fn collection_dir_stamp(dir: &str) -> Result<String, Error> {
+    let root = Path::new(dir);
+    let (mut files, mut folders) = (Vec::new(), Vec::new());
+    owned(root, &mut files, &mut folders);
+    files.sort();
+    let mut hash = Sha256::new();
+    for path in files {
+        let name = path.strip_prefix(root).unwrap_or(&path);
+        hash.update(name.to_string_lossy().replace('\\', "/").as_bytes());
+        hash.update([0]);
+        hash.update(std::fs::read(&path).map_err(|e| io("read", &path, e))?);
+        hash.update([0]);
+    }
+    Ok(hex::encode(hash.finalize()))
+}
+
 /// Whether `dir` holds a collection written by [`write_collection_dir`].
 pub fn is_collection_dir(dir: &str) -> bool {
     Path::new(dir).join(COLLECTION_FILE).is_file()
@@ -559,6 +579,30 @@ mod tests {
                 .unwrap()
                 .unreviewed
         );
+    }
+
+    #[test]
+    fn the_stamp_changes_with_the_files_and_only_then() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+        write_collection_dir(path, &shop()).unwrap();
+        let first = collection_dir_stamp(path).unwrap();
+        // Written again unchanged, or with someone's notes beside it.
+        write_collection_dir(path, &shop()).unwrap();
+        std::fs::write(dir.path().join("NOTES.md"), "mine").unwrap();
+        assert_eq!(collection_dir_stamp(path).unwrap(), first);
+
+        // A changed request, an added one and a removed one each show.
+        let file = dir.path().join("Login.request.json");
+        let text = std::fs::read_to_string(&file).unwrap();
+        std::fs::write(&file, text.replace("/login", "/signin")).unwrap();
+        let changed = collection_dir_stamp(path).unwrap();
+        assert_ne!(changed, first);
+        std::fs::write(dir.path().join("New.request.json"), "{}").unwrap();
+        let added = collection_dir_stamp(path).unwrap();
+        assert_ne!(added, changed);
+        std::fs::remove_file(dir.path().join("New.request.json")).unwrap();
+        assert_eq!(collection_dir_stamp(path).unwrap(), changed);
     }
 
     #[test]

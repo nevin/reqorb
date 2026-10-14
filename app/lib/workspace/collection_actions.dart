@@ -117,3 +117,16 @@ Future<void> reloadFromFolder(
   final problem = await store.reloadCollection(index);
   notify(messenger, problem ?? '$name was read again from its folder');
 }
+
+/// Writes the collection over its folder's files, which changed on disk
+/// while the copy here changed too.
+Future<void> keepMineInFolder(
+  BuildContext context,
+  WorkspaceStore store,
+  int index,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final name = store.collections[index].name;
+  final problem = await store.keepMine(index);
+  notify(messenger, problem ?? 'The folder now holds $name as it is here');
+}

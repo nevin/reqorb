@@ -283,9 +283,12 @@ shop/
   the files that changed. A small folder icon marks the collection.
 - **Open collection folder…** in the import menu opens a folder someone else keeps,
   for instance one you have just cloned.
-- **Reload from folder** reads the files again after a pull, a checkout or an edit by
-  hand. This also happens for every such collection when the app starts. reqorb does
-  not watch the folder while it is open.
+- **Changes on disk** from a pull, a checkout or an edit by hand are read in when the
+  app starts and whenever it comes back to the front, if the collection has not been
+  changed in the app since. If both changed, neither is written over the other: the
+  collection is marked, and its menu offers **Reload from folder** to take the files or
+  **Keep mine, over the folder** to write the app's copy. **Reload from folder** also
+  reads the files again at any time.
 - **Credentials are not written.** Passwords, tokens, keys, secret variables and
   headers such as `Authorization` are blank in the files, unless the value is only a
   `{{variable}}`. Their values stay in the workspace on your machine and are put back

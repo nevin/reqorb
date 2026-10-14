@@ -121,6 +121,66 @@ void main() {
     expect(engine.folderWrites['/work/shop'], 1);
   });
 
+  testWidgets('a folder changed by a pull is taken up when nothing here '
+      'changed', (tester) async {
+    await open(tester);
+    picker.next = '/work/shop';
+    await menu(tester, 'link-collection');
+    await saved(tester);
+
+    engine.changeFolder(
+      '/work/shop',
+      shop([
+        leaf('Login', 'https://api.test/login'),
+        leaf('Logout', 'https://api.test/logout'),
+      ]),
+    );
+    // As when the app comes back to the front.
+    await store.checkFolders();
+    await saved(tester);
+    expect(find.text('Logout'), findsOneWidget);
+    expect(store.folderConflicts, isEmpty);
+    expect(engine.folderWrites['/work/shop'], 1);
+  });
+
+  testWidgets('a folder and the copy here that both changed are not written '
+      'over each other', (tester) async {
+    await open(tester);
+    picker.next = '/work/shop';
+    await menu(tester, 'link-collection');
+    await saved(tester);
+
+    // A pull changes the files, and then the copy here is changed before
+    // the app has looked at them.
+    final theirs = shop([leaf('Theirs', 'https://api.test/theirs')]);
+    engine.changeFolder('/work/shop', theirs);
+    store.renameCollection(0, 'Mine');
+    await saved(tester);
+    expect(engine.folderFiles['/work/shop'], theirs, reason: 'not written');
+    expect(store.folderConflicts, {'/work/shop'});
+    expect(find.byKey(const Key('folder-problem')), findsOneWidget);
+    // Further changes wait too.
+    store.renameCollection(0, 'Mine again');
+    await saved(tester);
+    expect(engine.folderFiles['/work/shop'], theirs);
+
+    // Keeping this copy writes it over theirs.
+    await menu(tester, 'keep-mine');
+    expect(engine.folderFiles['/work/shop']!.name, 'Mine again');
+    expect(store.folderConflicts, isEmpty);
+    expect(find.byKey(const Key('folder-problem')), findsNothing);
+
+    // Or, another time, taking theirs reads the folder.
+    engine.changeFolder('/work/shop', theirs);
+    store.renameCollection(0, 'Mine once more');
+    await saved(tester);
+    expect(store.folderConflicts, {'/work/shop'});
+    await menu(tester, 'reload-collection');
+    expect(store.collections.single.name, 'Shop');
+    expect(find.text('Theirs'), findsOneWidget);
+    expect(store.folderConflicts, isEmpty);
+  });
+
   testWidgets('opens a collection that someone else keeps in a folder', (
     tester,
   ) async {

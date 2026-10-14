@@ -274,6 +274,10 @@ Future<Collection> readCollectionDir({
 bool isCollectionDir({required String dir}) =>
     RustLib.instance.api.crateApiCoreIsCollectionDir(dir: dir);
 
+/// A fingerprint of a collection folder's files, which changes when they do.
+Future<String> collectionDirStamp({required String dir}) =>
+    RustLib.instance.api.crateApiCoreCollectionDirStamp(dir: dir);
+
 /// The rows of a CSV or JSON data file, each as the variables it sets
 /// for one time through a run.
 List<List<Variable>> parseRunData({

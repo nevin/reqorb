@@ -461,6 +461,12 @@ class _SidebarState extends State<Sidebar> {
               value: () => reloadFromFolder(context, store, index),
               child: const Text('Reload from folder'),
             ),
+            if (store.folderConflicts.contains(collection.link?.path))
+              PopupMenuItem(
+                key: const Key('keep-mine'),
+                value: () => keepMineInFolder(context, store, index),
+                child: const Text('Keep mine, over the folder'),
+              ),
             PopupMenuItem(
               key: const Key('unlink-collection'),
               value: () => store.unlinkCollection(index),
