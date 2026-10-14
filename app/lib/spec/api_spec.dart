@@ -29,6 +29,39 @@ typedef SpecResponse = ({
   List<SpecContent> content,
 });
 
+/// One field of a schema. Fields of an object inside it follow it, one
+/// [depth] further in.
+typedef SpecField = ({
+  String name,
+  String type,
+  bool required,
+  String description,
+  List<String> notes,
+  int depth,
+});
+
+/// A named schema, from `components/schemas` or Swagger 2's `definitions`.
+class SpecSchema {
+  const SpecSchema({
+    required this.name,
+    required this.type,
+    required this.description,
+    required this.fields,
+    required this.notes,
+  });
+
+  final String name;
+  final String type;
+  final String description;
+  final List<SpecField> fields;
+
+  /// What else it says: the values it allows, what it extends, and such.
+  final List<String> notes;
+}
+
+/// A way of authenticating that the API declares.
+typedef SpecSecurity = ({String name, String summary, String description});
+
 /// One method on one path.
 class SpecOperation {
   const SpecOperation({
@@ -74,6 +107,8 @@ class ApiSpec {
     required this.servers,
     required this.operations,
     required this.problems,
+    this.schemas = const [],
+    this.security = const [],
   });
 
   /// `json` or `yaml`: what the text was written in.
@@ -87,6 +122,8 @@ class ApiSpec {
   final List<String> servers;
   final List<SpecOperation> operations;
   final List<SpecProblem> problems;
+  final List<SpecSchema> schemas;
+  final List<SpecSecurity> security;
 
   /// Whether the text could be read at all; when not, [problems] says why.
   bool get readable => format.isNotEmpty;
@@ -205,6 +242,8 @@ class _Reader {
   bool get _swagger => root['swagger'] != null;
 
   void _problem(String message, [String? near]) {
+    // A broken reference is met as often as it is used; once says it.
+    if (problems.any((p) => p.message == message)) return;
     problems.add((message: message, line: near == null ? null : _lineOf(near)));
   }
 
@@ -260,6 +299,12 @@ class _Reader {
       final items = _schema(node['items'], depth + 1);
       return items.isEmpty ? 'array' : 'array of $items';
     }
+    if ((type == 'object' || type.isEmpty) && node['properties'] == null) {
+      if (node['additionalProperties'] case final Map<String, Object?> values) {
+        final of = _schema(values, depth + 1);
+        return of.isEmpty ? 'map' : 'map of $of';
+      }
+    }
     final format = node['format'];
     return format == null ? type : '$type ($format)';
   }
@@ -291,12 +336,13 @@ class _Reader {
     final webhooks = root['webhooks'];
     final hasPaths = paths is Map<String, Object?> && paths.isNotEmpty;
     final hasWebhooks = webhooks is Map<String, Object?> && webhooks.isNotEmpty;
-    // OpenAPI 3.1 asks for any one of these; earlier versions for paths.
+    // OpenAPI 3.1 asks for any one of these; earlier versions for paths,
+    // though there may be none in it.
     if ('$openapi'.startsWith('3.1')) {
       if (!hasPaths && !hasWebhooks && root['components'] == null) {
         _problem('Has no paths, webhooks or components');
       }
-    } else if (!hasPaths) {
+    } else if (paths is! Map<String, Object?>) {
       _problem('Has no paths, so no operations');
     }
     final ids = <String>{};
@@ -313,7 +359,166 @@ class _Reader {
       servers: _servers(),
       operations: operations,
       problems: problems,
+      schemas: _schemas(),
+      security: _security(),
     );
+  }
+
+  Map<String, Object?> _map(Object? node) =>
+      node is Map<String, Object?> ? node : const {};
+
+  List<SpecSchema> _schemas() {
+    final named = _swagger
+        ? _map(root['definitions'])
+        : _map(_map(root['components'])['schemas']);
+    return [
+      for (final MapEntry(key: name, :value) in named.entries)
+        if (value is Map<String, Object?>) _named(name, value),
+    ];
+  }
+
+  SpecSchema _named(String name, Map<String, Object?> node) {
+    final parents = [
+      if (node['allOf'] case final List<Object?> parts)
+        for (final part in parts)
+          if (_map(part)[r'$ref'] case final String ref) ref.split('/').last,
+    ];
+    final fields = _fields(node, 0, {name});
+    return SpecSchema(
+      name: name,
+      // An object put together from others is still an object.
+      type: node['allOf'] != null && node['oneOf'] == null
+          ? 'object'
+          : _schema(node).isEmpty && fields.isNotEmpty
+          ? 'object'
+          : _schema(node),
+      description: _string(node['description']),
+      fields: fields,
+      notes: [
+        if (parents.isNotEmpty) 'extends ${parents.join(', ')}',
+        ..._notes(node),
+      ],
+    );
+  }
+
+  /// The fields of [node], with those of what it extends, and those of
+  /// any object written out inside it, one level further in. A field
+  /// that refers to another schema is not opened: that schema is shown
+  /// on its own.
+  List<SpecField> _fields(
+    Map<String, Object?> node,
+    int depth,
+    Set<String> seen,
+  ) {
+    final out = <SpecField>[];
+    final required = <String>{
+      if (node['required'] case final List<Object?> names)
+        for (final name in names) '$name',
+    };
+    if (node['allOf'] case final List<Object?> parts) {
+      for (final part in parts) {
+        final map = _map(part);
+        if (map[r'$ref'] case final String ref) {
+          final name = ref.split('/').last;
+          if (seen.add(name)) out.addAll(_fields(_resolve(map), depth, seen));
+        } else {
+          out.addAll(_fields(map, depth, seen));
+        }
+      }
+    }
+    for (final MapEntry(key: name, :value) in _map(
+      node['properties'],
+    ).entries) {
+      final field = _map(value);
+      out.add((
+        name: name,
+        type: _schema(field),
+        required: required.contains(name),
+        description: _string(field['description']),
+        notes: _notes(field),
+        depth: depth,
+      ));
+      if (field[r'$ref'] != null || depth >= 4) continue;
+      final items = _map(field['items']);
+      final inner = field['properties'] != null || field['allOf'] != null
+          ? field
+          : items[r'$ref'] == null && items['properties'] != null
+          ? items
+          : null;
+      if (inner != null) out.addAll(_fields(inner, depth + 1, seen));
+    }
+    return out;
+  }
+
+  /// What a schema says beyond its type, in short.
+  List<String> _notes(Map<String, Object?> node) {
+    String shown(Object? value) {
+      final text = value is String ? value : jsonEncode(value);
+      return text.length > 60 ? '${text.substring(0, 57)}…' : text;
+    }
+
+    return [
+      if (node['enum'] case final List<Object?> values)
+        'one of: ${values.take(12).map(shown).join(', ')}'
+            '${values.length > 12 ? ', …' : ''}',
+      if (node.containsKey('const')) 'always ${shown(node['const'])}',
+      if (node.containsKey('default')) 'default ${shown(node['default'])}',
+      if (node.containsKey('example')) 'example ${shown(node['example'])}',
+      for (final (key, label) in const [
+        ('minLength', 'min length'),
+        ('maxLength', 'max length'),
+        ('minimum', 'min'),
+        ('maximum', 'max'),
+        ('minItems', 'min items'),
+        ('maxItems', 'max items'),
+        ('pattern', 'pattern'),
+      ])
+        if (node[key] != null) '$label ${node[key]}',
+      if (node['nullable'] == true) 'nullable',
+      if (node['readOnly'] == true) 'read-only',
+      if (node['writeOnly'] == true) 'write-only',
+      if (node['deprecated'] == true) 'deprecated',
+    ];
+  }
+
+  List<SpecSecurity> _security() {
+    final schemes = _swagger
+        ? _map(root['securityDefinitions'])
+        : _map(_map(root['components'])['securitySchemes']);
+    return [
+      for (final MapEntry(key: name, :value) in schemes.entries)
+        () {
+          final scheme = _resolve(value);
+          final type = _string(scheme['type']);
+          final summary = switch (type) {
+            'apiKey' =>
+              'API key in the ${_string(scheme['in'])} '
+                  '"${_string(scheme['name'])}"',
+            'http' => [
+              'HTTP ${_string(scheme['scheme'])}',
+              if (_string(scheme['bearerFormat']) case final f
+                  when f.isNotEmpty)
+                '($f)',
+            ].join(' '),
+            'basic' => 'HTTP basic',
+            'oauth2' => [
+              'OAuth 2',
+              if (scheme['flows'] case final Map<String, Object?> flows)
+                '(${flows.keys.join(', ')})'
+              else if (_string(scheme['flow']) case final f when f.isNotEmpty)
+                '($f)',
+            ].join(' '),
+            'openIdConnect' => 'OpenID Connect',
+            'mutualTLS' => 'Mutual TLS',
+            _ => type,
+          };
+          return (
+            name: name,
+            summary: summary,
+            description: _string(scheme['description']),
+          );
+        }(),
+    ];
   }
 
   List<String> _servers() {

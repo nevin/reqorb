@@ -165,6 +165,118 @@ paths: {}
       );
     });
 
+    test('schemas list their fields, nested ones further in', () {
+      final spec = readSpec('''
+openapi: 3.0.3
+info: {title: Shop, version: "1"}
+paths: {}
+components:
+  securitySchemes:
+    key: {type: apiKey, in: header, name: X-Key, description: From the portal}
+    bearer: {type: http, scheme: bearer, bearerFormat: JWT}
+    oauth: {type: oauth2, flows: {clientCredentials: {tokenUrl: /t, scopes: {}}}}
+  schemas:
+    Base:
+      type: object
+      required: [id]
+      properties:
+        id: {type: string, format: uuid, readOnly: true}
+    Pet:
+      description: A pet for sale
+      allOf:
+        - \$ref: "#/components/schemas/Base"
+        - type: object
+          required: [name]
+          properties:
+            name: {type: string, minLength: 1, example: Rex}
+            status: {type: string, enum: [available, sold], default: available}
+            owner:
+              type: object
+              properties:
+                email: {type: string, format: email}
+            tags:
+              type: array
+              items: {\$ref: "#/components/schemas/Tag"}
+            extra:
+              type: object
+              additionalProperties: {type: integer}
+    Tag:
+      type: object
+      properties:
+        label: {type: string}
+    Status:
+      type: string
+      enum: [on, off]
+''');
+      expect(spec.problems, isEmpty);
+      expect(spec.schemas.map((s) => s.name), ['Base', 'Pet', 'Tag', 'Status']);
+      final pet = spec.schemas[1];
+      expect(pet.type, 'object');
+      expect(pet.description, 'A pet for sale');
+      expect(pet.notes, ['extends Base']);
+      expect(
+        [for (final f in pet.fields) '${'  ' * f.depth}${f.name}: ${f.type}'],
+        [
+          'id: string (uuid)',
+          'name: string',
+          'status: string',
+          'owner: object',
+          '  email: string (email)',
+          'tags: array of Tag',
+          'extra: map of integer',
+        ],
+      );
+      expect(pet.fields.first.required, isTrue);
+      expect(pet.fields.first.notes, ['read-only']);
+      expect(pet.fields[1].notes, ['example Rex', 'min length 1']);
+      expect(pet.fields[2].notes, [
+        'one of: available, sold',
+        'default available',
+      ]);
+      expect(spec.schemas.last.type, 'string');
+      expect(spec.schemas.last.notes, ['one of: on, off']);
+      expect(spec.security, [
+        (
+          name: 'key',
+          summary: 'API key in the header "X-Key"',
+          description: 'From the portal',
+        ),
+        (name: 'bearer', summary: 'HTTP bearer (JWT)', description: ''),
+        (
+          name: 'oauth',
+          summary: 'OAuth 2 (clientCredentials)',
+          description: '',
+        ),
+      ]);
+    });
+
+    test('Swagger 2 keeps schemas in definitions', () {
+      final spec = readSpec(
+        '{"swagger": "2.0", "info": {"title": "A", '
+        '"version": "1"}, "paths": {}, "securityDefinitions": {"basic": '
+        '{"type": "basic"}}, "definitions": {"User": {"type": "object", '
+        '"properties": {"name": {"type": "string"}}}}}',
+      );
+      expect(spec.schemas.single.name, 'User');
+      expect(spec.schemas.single.fields.single.name, 'name');
+      expect(spec.security.single.summary, 'HTTP basic');
+    });
+
+    test('a broken reference is reported once', () {
+      final spec = readSpec('''
+openapi: 3.0.3
+info: {title: A, version: "1"}
+paths: {}
+components:
+  schemas:
+    A: {properties: {b: {\$ref: "#/components/schemas/Gone"}}}
+    C: {properties: {d: {\$ref: "#/components/schemas/Gone"}}}
+''');
+      expect(spec.problems.map((p) => p.message), [
+        'Nothing at #/components/schemas/Gone',
+      ]);
+    });
+
     test('a document that cannot be read says on which line', () {
       final spec = readSpec('openapi: 3.0.0\ninfo:\n  title: [unclosed\n');
       expect(spec.readable, isFalse);
@@ -260,6 +372,30 @@ paths: {}
         tester.widget<TextField>(editor).controller!.text,
         startsWith('{\n  "openapi": "3.0.3"'),
       );
+    });
+
+    testWidgets('a type opens the schema it names', (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      await open(tester);
+      tester.view.physicalSize = const Size(1400, 900);
+      await tester.tap(find.byKey(const Key('api-specs')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('spec-start-template')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('spec-view-preview')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('spec-schemas')), findsOneWidget);
+      expect(find.text('Schemas (1)'), findsOneWidget);
+      // Folded: its fields are not shown yet.
+      expect(find.text('name', findRichText: true), findsNothing);
+
+      await tester.tap(find.byKey(const Key('spec-op-GET-/items')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('spec-link-Item')));
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      expect(find.text('name', findRichText: true), findsOneWidget);
+      expect(find.text('id', findRichText: true), findsWidgets);
     });
 
     testWidgets('webhooks have a section of their own', (tester) async {

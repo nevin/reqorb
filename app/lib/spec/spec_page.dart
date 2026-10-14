@@ -549,11 +549,53 @@ class _Preview extends StatefulWidget {
 class _PreviewState extends State<_Preview> {
   final _filter = TextEditingController();
 
+  /// Each schema's card, to scroll to, and what opens it.
+  final _cards = <String, GlobalKey>{};
+  final _openers = <String, ExpansibleController>{};
+
   @override
   void dispose() {
+    _settle?.cancel();
     _filter.dispose();
+    for (final opener in _openers.values) {
+      opener.dispose();
+    }
     super.dispose();
   }
+
+  GlobalKey _card(String name) => _cards.putIfAbsent(name, GlobalKey.new);
+  ExpansibleController _opener(String name) =>
+      _openers.putIfAbsent(name, ExpansibleController.new);
+
+  /// Opens the schema called [name] and scrolls to it.
+  void _show(String name) {
+    // A filter could be hiding it.
+    if (_filter.text.isNotEmpty) setState(_filter.clear);
+    final opener = _opener(name);
+    if (_card(name).currentContext != null && !opener.isExpanded) {
+      opener.expand();
+    }
+    void scroll() {
+      if (!mounted) return;
+      if (!opener.isExpanded) opener.expand();
+      final card = _card(name).currentContext;
+      if (card == null || !card.mounted) return;
+      Scrollable.ensureVisible(
+        card,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+        alignment: 0.05,
+      );
+    }
+
+    // Into view once laid out, and to the top once it has opened out and
+    // there is room below it to scroll.
+    WidgetsBinding.instance.addPostFrameCallback((_) => scroll());
+    _settle?.cancel();
+    _settle = Timer(const Duration(milliseconds: 300), scroll);
+  }
+
+  Timer? _settle;
 
   @override
   Widget build(BuildContext context) {
@@ -572,97 +614,157 @@ class _PreviewState extends State<_Preview> {
         if (value.where(matches).isNotEmpty) key: value.where(matches).toList(),
     };
     final webhooks = spec.webhooks.where(matches).toList();
+    final schemas = [
+      for (final schema in spec.schemas)
+        if (query.isEmpty || schema.name.toLowerCase().contains(query)) schema,
+    ];
+    final names = {for (final schema in spec.schemas) schema.name};
+    final links = (names: names, open: _show);
+    Widget heading(String text, Key key, [String? note]) => Padding(
+      padding: const EdgeInsets.fromLTRB(4, 16, 4, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(text, key: key, style: theme.textTheme.titleSmall),
+          if (note != null)
+            Text(
+              note,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+        ],
+      ),
+    );
 
+    // A column rather than a list, so that a schema far down is built and
+    // can be scrolled to.
     return SelectionArea(
-      child: ListView(
+      child: SingleChildScrollView(
         key: const Key('spec-preview'),
         padding: const EdgeInsets.all(16),
-        children: [
-          if (spec.readable) ...[
-            Wrap(
-              spacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Text(
-                  spec.title.isEmpty ? 'Untitled API' : spec.title,
-                  key: const Key('spec-api-title'),
-                  style: theme.textTheme.headlineSmall,
-                ),
-                if (spec.version.isNotEmpty) _Chip(spec.version),
-                if (spec.specVersion.isNotEmpty) _Chip(spec.specVersion),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (spec.readable) ...[
+              Wrap(
+                spacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    spec.title.isEmpty ? 'Untitled API' : spec.title,
+                    key: const Key('spec-api-title'),
+                    style: theme.textTheme.headlineSmall,
+                  ),
+                  if (spec.version.isNotEmpty) _Chip(spec.version),
+                  if (spec.specVersion.isNotEmpty) _Chip(spec.specVersion),
+                ],
+              ),
+              if (spec.description.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(spec.description),
               ],
-            ),
-            if (spec.description.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(spec.description),
-            ],
-            if (spec.servers.isNotEmpty) ...[
+              if (spec.servers.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                for (final server in spec.servers)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: Text(
+                      server,
+                      style: mono.copyWith(color: scheme.onSurfaceVariant),
+                    ),
+                  ),
+              ],
               const SizedBox(height: 12),
-              for (final server in spec.servers)
+            ],
+            if (spec.problems.isNotEmpty) ...[
+              _Problems(problems: spec.problems),
+              const SizedBox(height: 12),
+            ],
+            if (spec.operations.isNotEmpty || spec.schemas.isNotEmpty) ...[
+              TextField(
+                key: const Key('spec-filter'),
+                controller: _filter,
+                decoration: InputDecoration(
+                  isDense: true,
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  hintText: spec.schemas.isEmpty
+                      ? 'Filter operations'
+                      : 'Filter operations and schemas',
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 8),
+              for (final MapEntry(key: tag, value: operations)
+                  in groups.entries) ...[
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 2),
-                  child: Text(
-                    server,
-                    style: mono.copyWith(color: scheme.onSurfaceVariant),
-                  ),
+                  padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
+                  child: Text(tag, style: theme.textTheme.titleSmall),
                 ),
-            ],
-            const SizedBox(height: 12),
-          ],
-          if (spec.problems.isNotEmpty) ...[
-            _Problems(problems: spec.problems),
-            const SizedBox(height: 12),
-          ],
-          if (spec.operations.isNotEmpty) ...[
-            TextField(
-              key: const Key('spec-filter'),
-              controller: _filter,
-              decoration: const InputDecoration(
-                isDense: true,
-                prefixIcon: Icon(Icons.search, size: 18),
-                hintText: 'Filter operations',
-              ),
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: 8),
-            for (final MapEntry(key: tag, value: operations)
-                in groups.entries) ...[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
-                child: Text(tag, style: theme.textTheme.titleSmall),
-              ),
-              for (final op in operations) _Operation(op: op),
-            ],
-            if (webhooks.isNotEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(4, 16, 4, 0),
-                child: Text(
+                for (final op in operations) _Operation(op: op, links: links),
+              ],
+              if (webhooks.isNotEmpty) ...[
+                heading(
                   'Webhooks',
-                  key: const Key('spec-webhooks'),
-                  style: theme.textTheme.titleSmall,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(4, 2, 4, 4),
-                child: Text(
+                  const Key('spec-webhooks'),
                   'Requests the API sends to you',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
+                ),
+                for (final op in webhooks) _Operation(op: op, links: links),
+              ],
+              if (schemas.isNotEmpty) ...[
+                heading(
+                  'Schemas (${spec.schemas.length})',
+                  const Key('spec-schemas'),
+                  'What the requests and responses carry',
+                ),
+                for (final schema in schemas)
+                  _Schema(
+                    key: _card(schema.name),
+                    schema: schema,
+                    opener: _opener(schema.name),
+                    links: links,
+                  ),
+              ],
+              if (groups.isEmpty && webhooks.isEmpty && schemas.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    'Nothing matches',
+                    style: TextStyle(color: scheme.onSurfaceVariant),
                   ),
                 ),
-              ),
-              for (final op in webhooks) _Operation(op: op),
             ],
-            if (groups.isEmpty && webhooks.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  'No operation matches',
-                  style: TextStyle(color: scheme.onSurfaceVariant),
+            if (spec.security.isNotEmpty) ...[
+              heading('Security', const Key('spec-security')),
+              for (final security in spec.security)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 3,
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 160,
+                        child: Text(security.name, style: mono),
+                      ),
+                      Expanded(
+                        child: Text(
+                          [
+                            security.summary,
+                            if (security.description.isNotEmpty)
+                              security.description,
+                          ].join(' — '),
+                          style: TextStyle(color: scheme.onSurfaceVariant),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -738,10 +840,189 @@ class _Problems extends StatelessWidget {
 }
 
 /// One operation, folded to a line until opened.
+/// The schemas there are, and how to show one: what a type that names a
+/// schema links to.
+typedef _Links = ({Set<String> names, ValueChanged<String> open});
+
+/// A type, such as `array of Pet`, with each schema it names a link to it.
+class _TypeText extends StatelessWidget {
+  const _TypeText(this.type, this.links);
+
+  final String type;
+  final _Links links;
+
+  static final _word = RegExp(r'[A-Za-z0-9_.\-]+');
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final style = mono.copyWith(color: scheme.primary);
+    final spans = <InlineSpan>[];
+    var at = 0;
+    for (final match in _word.allMatches(type)) {
+      final name = match[0]!;
+      if (!links.names.contains(name)) continue;
+      if (match.start > at) {
+        spans.add(TextSpan(text: type.substring(at, match.start)));
+      }
+      spans.add(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.baseline,
+          baseline: TextBaseline.alphabetic,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              key: Key('spec-link-$name'),
+              onTap: () => links.open(name),
+              child: Text(
+                name,
+                style: style.copyWith(
+                  decoration: TextDecoration.underline,
+                  decorationColor: scheme.primary.withValues(alpha: 0.5),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      at = match.end;
+    }
+    if (at < type.length) spans.add(TextSpan(text: type.substring(at)));
+    return Text.rich(TextSpan(style: style, children: spans));
+  }
+}
+
+/// A named schema, folded to a line until opened.
+class _Schema extends StatelessWidget {
+  const _Schema({
+    super.key,
+    required this.schema,
+    required this.opener,
+    required this.links,
+  });
+
+  final SpecSchema schema;
+  final ExpansibleController opener;
+  final _Links links;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final muted = TextStyle(color: scheme.onSurfaceVariant);
+    final small = theme.textTheme.bodySmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 3),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        key: Key('spec-schema-${schema.name}'),
+        controller: opener,
+        shape: const Border(),
+        collapsedShape: const Border(),
+        tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        expandedCrossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
+          children: [
+            Text(
+              schema.name,
+              style: mono.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(width: 12),
+            if (schema.type.isNotEmpty) _TypeText(schema.type, links),
+            if (schema.description.isNotEmpty) ...[
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  schema.description,
+                  style: muted,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ],
+        ),
+        children: [
+          if (schema.description.isNotEmpty) Text(schema.description),
+          if (schema.notes.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(schema.notes.join(' · '), style: small),
+            ),
+          if (schema.fields.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            for (final field in schema.fields)
+              Padding(
+                padding: EdgeInsets.fromLTRB(field.depth * 20.0, 3, 0, 3),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 180 - field.depth * 20.0,
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            if (field.depth > 0)
+                              TextSpan(
+                                text: '└ ',
+                                style: TextStyle(color: scheme.outline),
+                              ),
+                            TextSpan(text: field.name),
+                            if (field.required)
+                              TextSpan(
+                                text: ' *',
+                                style: TextStyle(color: scheme.error),
+                              ),
+                          ],
+                        ),
+                        style: mono,
+                      ),
+                    ),
+                    SizedBox(
+                      width: 220,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 12),
+                        child: _TypeText(
+                          field.type.isEmpty ? 'any' : field.type,
+                          links,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (field.description.isNotEmpty)
+                            Text(field.description, style: muted),
+                          if (field.notes.isNotEmpty)
+                            Text(field.notes.join(' · '), style: small),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+          if (schema.fields.isEmpty && schema.notes.isEmpty)
+            Text('No fields', style: muted),
+        ],
+      ),
+    );
+  }
+}
+
 class _Operation extends StatelessWidget {
-  const _Operation({required this.op});
+  const _Operation({required this.op, required this.links});
 
   final SpecOperation op;
+  final _Links links;
 
   @override
   Widget build(BuildContext context) {
@@ -774,10 +1055,7 @@ class _Operation extends StatelessWidget {
                 width: 220,
                 child: Padding(
                   padding: const EdgeInsets.only(right: 12),
-                  child: Text(
-                    middle,
-                    style: mono.copyWith(color: scheme.primary),
-                  ),
+                  child: _TypeText(middle, links),
                 ),
               ),
               Expanded(child: Text(right, style: muted)),
