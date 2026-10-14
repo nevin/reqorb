@@ -1,8 +1,15 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:reqorb/editor/code_controller.dart';
 import 'package:reqorb/shared/theme.dart';
+
+/// The longest text, in characters, shown in an editor; longer text is
+/// shown in a [LineView]. An editor lays out all its text again on each
+/// change: at a megabyte that takes half a second, and at ten, ten seconds
+/// or more.
+const editLimit = 1024 * 1024;
 
 /// Text too long for an editor, shown read-only a line at a time: only
 /// the lines in view are built, so it opens at once whatever its length.
@@ -27,10 +34,16 @@ class _LineViewState extends State<LineView> {
   /// Where each line starts in the text, to find the line of an offset.
   List<int> _starts = const [];
 
-  /// The longest line, in characters, which sets how far it scrolls
-  /// across; past [_widest] a line is cut short.
-  int _longest = 0;
+  /// A line longer than [_widest] goes on over more rows, without a
+  /// number, as minified JSON does. For each row, its line and where in
+  /// the line it starts; for each line, its first row.
+  Int32List _rowLine = Int32List(0);
+  Int32List _rowFrom = Int32List(0);
+  Int32List _firstRow = Int32List(0);
   static const _widest = 2000;
+
+  /// The longest row, in characters, which sets how far it scrolls across.
+  int _longest = 0;
 
   /// The line [CodeController.goToLine] asked for, shown marked.
   int? _sought;
@@ -68,14 +81,33 @@ class _LineViewState extends State<LineView> {
     _text = widget.controller.text;
     _lines = _text.split('\n');
     final starts = List<int>.filled(_lines.length, 0);
+    final firstRow = Int32List(_lines.length);
+    var rows = 0;
     var at = 0;
     var longest = 0;
     for (var i = 0; i < _lines.length; i++) {
+      final length = _lines[i].length;
       starts[i] = at;
-      at += _lines[i].length + 1;
-      longest = math.max(longest, _lines[i].length);
+      at += length + 1;
+      longest = math.max(longest, length);
+      firstRow[i] = rows;
+      rows += length <= _widest ? 1 : (length + _widest - 1) ~/ _widest;
+    }
+    final rowLine = Int32List(rows);
+    final rowFrom = Int32List(rows);
+    for (var i = 0, row = 0; i < _lines.length; i++) {
+      var from = 0;
+      do {
+        rowLine[row] = i;
+        rowFrom[row] = from;
+        row++;
+        from += _widest;
+      } while (from < _lines[i].length);
     }
     _starts = starts;
+    _rowLine = rowLine;
+    _rowFrom = rowFrom;
+    _firstRow = firstRow;
     _longest = math.min(longest, _widest);
     _sought = null;
   }
@@ -101,12 +133,13 @@ class _LineViewState extends State<LineView> {
       }
     }
     setState(() => _sought = low);
+    final row = _firstRow[low];
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_vertical.hasClients) return;
       final position = _vertical.position;
-      // A few lines above it, for context.
+      // A few rows above it, for context.
       position.jumpTo(
-        ((low - 3) * _lineHeight).clamp(0, position.maxScrollExtent),
+        ((row - 3) * _lineHeight).clamp(0, position.maxScrollExtent),
       );
     });
   }
@@ -141,8 +174,10 @@ class _LineViewState extends State<LineView> {
                 controller: _vertical,
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 itemExtent: _lineHeight,
-                itemCount: _lines.length,
-                itemBuilder: (_, index) {
+                itemCount: _rowLine.length,
+                itemBuilder: (_, row) {
+                  final index = _rowLine[row];
+                  final from = _rowFrom[row];
                   final line = _lines[index];
                   return ColoredBox(
                     color: index == _sought
@@ -154,7 +189,7 @@ class _LineViewState extends State<LineView> {
                           width: gutter,
                           child: SelectionContainer.disabled(
                             child: Text(
-                              '${index + 1}',
+                              from == 0 ? '${index + 1}' : '',
                               textAlign: TextAlign.right,
                               style: numbers,
                             ),
@@ -163,9 +198,12 @@ class _LineViewState extends State<LineView> {
                         SizedBox(width: CodeStyle.fontSize),
                         Expanded(
                           child: Text(
-                            line.length > _widest
-                                ? '${line.substring(0, _widest)}…'
-                                : line,
+                            line.length <= _widest
+                                ? line
+                                : line.substring(
+                                    from,
+                                    math.min(from + _widest, line.length),
+                                  ),
                             maxLines: 1,
                             softWrap: false,
                             overflow: TextOverflow.clip,

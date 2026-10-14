@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -228,6 +229,32 @@ class _LoadedState extends State<_Loaded> {
   /// What the body is read as; null to go by its type and how it looks.
   CodeLanguage? _format;
 
+  /// The body last re-indented, and what came of it: worked out once per
+  /// body rather than on every build, and apart from the screen when it
+  /// is long, as at ten megabytes that takes a second.
+  String? _indented;
+  String? _indentedJson;
+  int _indents = 0;
+
+  /// [body] re-indented if it is JSON; null if not, or until a long one
+  /// has been, when the page is built again.
+  String? _jsonOf(String body) {
+    if (body == _indented) return _indentedJson;
+    _indented = body;
+    _indentedJson = null;
+    if (body.length <= _indentApartOver) {
+      return _indentedJson = _asJson(body);
+    }
+    final indent = ++_indents;
+    _asJsonApart(body).then((json) {
+      if (!mounted || indent != _indents) return;
+      setState(() => _indentedJson = json);
+    });
+    return null;
+  }
+
+  static const _indentApartOver = 256 * 1024;
+
   @override
   Widget build(BuildContext context) {
     final _Loaded(
@@ -259,10 +286,10 @@ class _LoadedState extends State<_Loaded> {
     final language = raw
         ? CodeLanguage.plain
         : _format ?? _languageOf(contentType, response.body);
+    final json = _jsonOf(response.body);
     final body = raw || language != CodeLanguage.json
         ? response.body
-        : _asJson(response.body) ?? response.body;
-    final json = _asJson(response.body);
+        : json ?? response.body;
     final headers = [for (final h in response.headers) '${h.name}: ${h.value}']
         .join('\n');
     final cookies = [
@@ -1171,6 +1198,10 @@ String? _asJson(String body) {
     return null;
   }
 }
+
+/// [_asJson] on another isolate. Made here, out of the state, so that the
+/// closure sent there holds only the body.
+Future<String?> _asJsonApart(String body) => Isolate.run(() => _asJson(body));
 
 /// The language of a body: as the server labelled it, otherwise as it
 /// looks.

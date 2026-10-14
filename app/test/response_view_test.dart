@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:reqorb/editor/line_view.dart';
 import 'package:reqorb/response/response_view.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 
@@ -92,6 +93,49 @@ void main() {
     await tester.tap(find.text('Text').last);
     await tester.pumpAndSettle();
     expect(shown(tester), '{"a":1}');
+  });
+
+  testWidgets('a body too long for an editor is shown a line at a time', (
+    tester,
+  ) async {
+    // Minified, as big responses often are: one line of over a megabyte.
+    final items = [
+      for (var i = 0; i < 40000; i++) '{"id":$i,"name":"item $i"}',
+    ];
+    final body = '[${items.join(',')}]';
+    expect(body.length, greaterThan(editLimit));
+    await show(
+      tester,
+      headers: const [Header(name: 'content-type', value: 'application/json')],
+      body: body,
+    );
+    String text() =>
+        tester.widget<LineView>(find.byType(LineView)).controller.text;
+
+    // As received while it is re-indented apart; the one line goes on
+    // over rows that are not numbered.
+    expect(find.byKey(const Key('responseBody')), findsNothing);
+    expect(text(), body);
+    final rows = find.descendant(
+      of: find.byKey(const Key('line-view')),
+      matching: find.byType(Row),
+    );
+    final gutters = [
+      for (final row in tester.widgetList<Row>(rows).take(3))
+        ((row.children.first as SizedBox).child! as SelectionContainer).child
+            as Text,
+    ];
+    expect([for (final g in gutters) g.data], ['1', '', '']);
+
+    // Then re-indented, once.
+    for (var i = 0; i < 100 && !text().contains('\n'); i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+    }
+    expect(text(), startsWith('[\n'));
+    expect(text(), contains('"name": "item 39999"'));
   });
 
   testWidgets('the search button opens the find bar', (tester) async {

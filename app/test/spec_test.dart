@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:reqorb/editor/line_view.dart';
 import 'package:reqorb/editor/syntax.dart';
 import 'package:reqorb/main.dart';
 import 'package:reqorb/spec/api_spec.dart';

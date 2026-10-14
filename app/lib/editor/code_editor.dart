@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:reqorb/editor/code_controller.dart';
 import 'package:reqorb/editor/code_formatter.dart';
 import 'package:reqorb/editor/folding.dart';
+import 'package:reqorb/editor/line_view.dart';
 import 'package:reqorb/editor/syntax.dart';
 import 'package:reqorb/shared/theme.dart';
 
@@ -1213,6 +1214,9 @@ class _CodeViewState extends State<CodeView> {
 
   @override
   Widget build(BuildContext context) {
+    // Too long to lay out at once; nothing folds or is coloured at this
+    // length anyway.
+    if (widget.text.length > editLimit) return LineView(controller: _code);
     final shown = _shown;
     return CodeEditor(
       name: widget.name,

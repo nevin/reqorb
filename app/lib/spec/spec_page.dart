@@ -151,11 +151,6 @@ Future<String> _fetch(Uri url) async {
 
 enum _View { edit, split, preview }
 
-/// The longest spec, in characters, that can be edited here. An editor
-/// lays out all its text again on each change: at a megabyte that takes
-/// half a second, and at ten, ten seconds or more.
-const editLimit = 1024 * 1024;
-
 /// Why a long spec cannot be edited here, over the text that shows it.
 class _ReadOnlyNote extends StatelessWidget {
   const _ReadOnlyNote({required this.size});
