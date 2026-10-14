@@ -159,7 +159,19 @@ fn parse(text: &str, name_hint: &str, origin: Option<&url::Url>) -> Result<Impor
         .lines()
         .any(|l| l.starts_with("openapi:") || l.starts_with("swagger:"))
     {
-        let value: Value = serde_saphyr::from_str(text)
+        // The parser's own limits stop at a quarter of a million nodes, which
+        // a big API (GitHub's has 10 MB of YAML) passes. A node takes at
+        // least a byte to write out, so a limit of one per byte lets any
+        // document through while still stopping aliases that multiply a few
+        // lines into billions.
+        let most = text.len().max(250_000);
+        let options = serde_saphyr::options! {
+            budget: serde_saphyr::budget! {
+                max_nodes: most,
+                max_events: most * 2,
+            },
+        };
+        let value: Value = serde_saphyr::from_str_with_options(text, options)
             .map_err(|e| Error::Format(format!("invalid YAML: {e}")))?;
         if openapi::is_spec(&value) {
             return Ok(openapi_result(&value, name_hint, origin));

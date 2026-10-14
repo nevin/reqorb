@@ -293,3 +293,21 @@ paths:
     assert!(import(&bomb, "").is_err());
     assert!(started.elapsed() < std::time::Duration::from_secs(5));
 }
+
+#[test]
+fn big_yaml_openapi_comes_in() {
+    // Past the YAML parser's own limit of a quarter of a million nodes,
+    // as GitHub's API is.
+    let mut spec = String::from("openapi: 3.0.0\ninfo: {title: Big, version: '1'}\npaths:\n");
+    for i in 0..15_000 {
+        spec.push_str(&format!(
+            "  /things/{i}:\n    get:\n      summary: Thing {i}\n      \
+             responses:\n        '200':\n          description: ok\n          \
+             content:\n            application/json:\n              \
+             schema: {{type: object, properties: {{a: {{type: string}}, \
+             b: {{type: integer}}}}}}\n"
+        ));
+    }
+    let result = import(&spec, "").unwrap();
+    assert_eq!(result.collections[0].requests().len(), 15_000);
+}
