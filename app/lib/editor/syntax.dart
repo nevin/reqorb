@@ -7,6 +7,7 @@ enum CodeLanguage {
   graphql,
   xml,
   javascript,
+  yaml,
 
   /// One `key=value` or `key: value` to a line, as variables and bulk
   /// edited headers are written.
@@ -24,7 +25,8 @@ enum CodeLanguage {
 
   /// Whether this is code with brackets and quotes that come in pairs,
   /// rather than lines of plain words.
-  bool get bracketed => this != plain && this != pairs && this != checks;
+  bool get bracketed =>
+      this != plain && this != pairs && this != checks && this != yaml;
 
   /// The language a body of the given content type is written in.
   static CodeLanguage ofContentType(String type) {
@@ -33,6 +35,7 @@ enum CodeLanguage {
     if (t.contains('graphql')) return graphql;
     if (t.contains('xml') || t.contains('html')) return xml;
     if (t.contains('javascript') || t.contains('ecmascript')) return javascript;
+    if (t.contains('yaml')) return yaml;
     return plain;
   }
 
@@ -168,6 +171,7 @@ List<Token> tokenize(String text, CodeLanguage language) {
     CodeLanguage.graphql => _tokenizeGraphql(text),
     CodeLanguage.xml => _tokenizeXml(text),
     CodeLanguage.javascript => _tokenizeJavascript(text),
+    CodeLanguage.yaml => _tokenizeYaml(text),
     CodeLanguage.pairs => _tokenizePairs(text),
     CodeLanguage.checks => _tokenizeChecks(text),
     CodeLanguage.source => _tokenizeCode(text, _source),
@@ -268,6 +272,83 @@ List<Token> _tokenizeJavascript(String text) {
         ? TokenKind.number
         : TokenKind.keyword;
     tokens.add(Token(m.start, m.end, kind));
+  }
+  return tokens;
+}
+
+final _yaml = RegExp(
+  // A quoted string where a value or a key starts, so that the
+  // apostrophe in plain words opens none; a key where a colon follows it.
+  r'''((?<=(?:^|[:,\[{-])[ \t]*)(?:"(?:[^"\\\n]|\\.)*"?|'(?:[^'\n]|'')*'?))([ \t]*:(?=[ \t]|$))?'''
+  // A comment, at the start of a line or after a space.
+  r'|((?<=^|[ \t])#[^\n]*)'
+  // A plain key, at the start of a line or of an item in a list.
+  r'''|((?<=^[ \t]*(?:-[ \t]+)*)[^\s#"'{}\[\],:-][^\n:#]*?|(?<=^[ \t]*)-(?=\S)[^\n:#]*?)(?=[ \t]*:(?:[ \t]|$))'''
+  // A value that is a number or a literal, and nothing else.
+  r'|(?<=(?::|^[ \t]*-|^)[ \t]+)(true|false|null|~|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)(?=[ \t]*(?:#|$))',
+  multiLine: true,
+);
+
+/// Where `key: |` or `key: >` starts a block of text: from the next line
+/// to the last one indented further than the key.
+final _blockStart = RegExp(
+  r'^([ \t]*)(?:- )?[^\n#]*:[ \t]*[|>][-+0-9]*[ \t]*(?:#.*)?$',
+);
+
+/// The stretches of [text] that are blocks of text, which are not code.
+List<(int, int)> _yamlBlocks(String text) {
+  final blocks = <(int, int)>[];
+  int? indent;
+  var start = 0;
+  var offset = 0;
+  for (final line in text.split('\n')) {
+    final end = offset + line.length;
+    if (indent != null) {
+      final own = line.length - line.trimLeft().length;
+      if (line.trim().isNotEmpty && own <= indent) {
+        blocks.add((start, offset));
+        indent = null;
+      }
+    }
+    if (indent == null) {
+      if (_blockStart.firstMatch(line) case final m?) {
+        indent = m[1]!.length;
+        start = end + 1;
+      }
+    }
+    offset = end + 1;
+  }
+  if (indent != null) blocks.add((start, text.length));
+  return blocks;
+}
+
+List<Token> _tokenizeYaml(String text) {
+  final tokens = <Token>[];
+  final blocks = _yamlBlocks(text);
+  var b = 0;
+  for (final m in _yaml.allMatches(text)) {
+    while (b < blocks.length && blocks[b].$2 <= m.start) {
+      b++;
+    }
+    if (b < blocks.length && blocks[b].$1 <= m.start) continue;
+    if (m[1] case final string?) {
+      tokens.add(
+        Token(
+          m.start,
+          m.start + string.length,
+          m[2] != null ? TokenKind.key : TokenKind.string,
+        ),
+      );
+    } else if (m[3] != null) {
+      tokens.add(Token(m.start, m.end, TokenKind.comment));
+    } else if (m[4] != null) {
+      tokens.add(Token(m.start, m.end, TokenKind.key));
+    } else if (m[5] case final value?) {
+      final literal = RegExp(r'^(true|false|null|~)$').hasMatch(value);
+      tokens.add(
+        Token(m.start, m.end, literal ? TokenKind.keyword : TokenKind.number),
+      );
+    }
   }
   return tokens;
 }

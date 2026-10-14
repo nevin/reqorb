@@ -8,6 +8,7 @@ import 'package:reqorb/transfer/import_actions.dart';
 import 'package:reqorb/transfer/export_actions.dart';
 import 'package:reqorb/har/har_actions.dart';
 import 'package:reqorb/settings/settings_dialog.dart';
+import 'package:reqorb/spec/spec_page.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 import 'package:reqorb/shared/theme.dart';
 import 'package:reqorb/workspace/workspace_store.dart';
@@ -154,12 +155,6 @@ class _SidebarState extends State<Sidebar> {
                         value: () => openCollectionFolder(context, store),
                         child: const Text('Open collection folder…'),
                       ),
-                      const PopupMenuDivider(),
-                      PopupMenuItem(
-                        key: const Key('analyze-har'),
-                        value: () => analyzeHarFile(context, store),
-                        child: const Text('Analyse HAR file…'),
-                      ),
                     ],
                   ),
                 ],
@@ -249,6 +244,20 @@ class _SidebarState extends State<Sidebar> {
                     : 'History · ${store.history.length}',
               ),
               onTap: widget.onHistory,
+            ),
+            ListTile(
+              key: const Key('api-specs'),
+              dense: true,
+              leading: const Icon(Icons.description_outlined, size: 20),
+              title: const Text('API specs'),
+              onTap: () => showSpecs(context, store),
+            ),
+            ListTile(
+              key: const Key('har-analyser'),
+              dense: true,
+              leading: const Icon(Icons.insights, size: 20),
+              title: const Text('HAR analyser'),
+              onTap: () => analyzeHarFile(context, store),
             ),
             ListTile(
               key: const Key('settings'),

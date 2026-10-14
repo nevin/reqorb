@@ -9,6 +9,7 @@ import 'package:reqorb/editor/code_controller.dart';
 import 'package:reqorb/graphql/graphql_editor.dart';
 import 'package:reqorb/graphql/graphql_session.dart';
 import 'package:reqorb/graphql/schema_browser.dart';
+import 'package:reqorb/har/har_actions.dart';
 import 'package:reqorb/history/history_page.dart';
 import 'package:reqorb/palette/command_palette.dart';
 import 'package:reqorb/protocols/grpc_session.dart';
@@ -37,6 +38,7 @@ import 'package:reqorb/request/tests_editor.dart';
 import 'package:reqorb/response/response_view.dart';
 import 'package:reqorb/runner/collection_run.dart';
 import 'package:reqorb/runner/runner_dialog.dart';
+import 'package:reqorb/spec/spec_page.dart';
 import 'package:reqorb/settings/settings_dialog.dart';
 import 'package:reqorb/shared/messages.dart';
 import 'package:reqorb/shared/split_view.dart';
@@ -733,8 +735,26 @@ class _RequestPageState extends State<RequestPage> {
         () => importFromPaste(context, _store),
         detail: 'curl, JSON',
       ),
-      if (_store.session.isNotEmpty)
+      action(
+        'Open an API spec',
+        Icons.description_outlined,
+        () => showSpecs(context, _store),
+        detail: 'OpenAPI, Swagger',
+      ),
+      action(
+        'Analyse a HAR file',
+        Icons.insights,
+        () => analyzeHarFile(context, _store),
+        detail: 'timings, sizes, errors',
+      ),
+      if (_store.session.isNotEmpty) ...[
+        action(
+          'Analyse the session',
+          Icons.timeline,
+          () => analyzeSession(context, _store),
+        ),
         action('Clear the session', Icons.clear_all, _store.clearSession),
+      ],
     ]);
     return items;
   }
