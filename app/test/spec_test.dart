@@ -803,6 +803,43 @@ paths:
     expect(find.byKey(const Key('spec-link-S0')), findsOneWidget);
   });
 
+  testWidgets('a spec too long to edit is shown read-only', (tester) async {
+    tester.view.physicalSize = const Size(1600, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final padding = '# ${'x' * 98}\n' * (editLimit ~/ 100 + 1);
+    final lines = '\n'.allMatches(padding).length;
+    final text =
+        '${padding}openapi: 3.0.3\ninfo: {title: Big, version: "1"}\n'
+        'paths:\n  /a:\n    get:\n      responses: {}\n';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SpecPage(
+          name: 'big.yaml',
+          text: text,
+          onImport: (_, _, _) async {},
+        ),
+      ),
+    );
+    for (var i = 0; i < 100; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+      if (find.byKey(const Key('spec-reading')).evaluate().isEmpty) break;
+    }
+    // No editor: the text is shown a line at a time.
+    expect(find.byKey(const Key('spec-editor')), findsNothing);
+    expect(find.byKey(const Key('spec-read-only')), findsOneWidget);
+    expect(find.text('openapi: 3.0.3'), findsNothing);
+
+    // A problem's line, near the end, is brought into view.
+    expect(find.text('Line ${lines + 6}'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('spec-problem-line-0')));
+    await tester.pumpAndSettle();
+    expect(find.text('      responses: {}'), findsOneWidget);
+  });
+
   testWidgets('a long spec is read in the background', (tester) async {
     tester.view.physicalSize = const Size(1400, 1000);
     tester.view.devicePixelRatio = 1;

@@ -6,6 +6,7 @@ library;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ import 'package:flutter/services.dart';
 import 'package:reqorb/bridge/engine.dart';
 import 'package:reqorb/editor/code_controller.dart';
 import 'package:reqorb/editor/code_editor.dart';
+import 'package:reqorb/editor/line_view.dart';
 import 'package:reqorb/editor/syntax.dart';
 import 'package:reqorb/shared/messages.dart';
 import 'package:reqorb/shared/split_view.dart';
@@ -149,6 +151,49 @@ Future<String> _fetch(Uri url) async {
 
 enum _View { edit, split, preview }
 
+/// The longest spec, in characters, that can be edited here. An editor
+/// lays out all its text again on each change: at a megabyte that takes
+/// half a second, and at ten, ten seconds or more.
+const editLimit = 1024 * 1024;
+
+/// Why a long spec cannot be edited here, over the text that shows it.
+class _ReadOnlyNote extends StatelessWidget {
+  const _ReadOnlyNote({required this.size});
+
+  /// How long the text is, in characters.
+  final int size;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final megabytes = (size / (1024 * 1024)).toStringAsFixed(1);
+    return ColoredBox(
+      key: const Key('spec-read-only'),
+      color: scheme.secondaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: [
+            Icon(
+              Icons.lock_outline,
+              size: 16,
+              color: scheme.onSecondaryContainer,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Read-only: at $megabytes MB this spec is too large to '
+                'edit here. Save it to edit it in a code editor.',
+                style: TextStyle(color: scheme.onSecondaryContainer),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class SpecPage extends StatefulWidget {
   const SpecPage({
     super.key,
@@ -217,6 +262,10 @@ class _SpecPageState extends State<SpecPage> {
   bool get _changed => _name != null && _code.text != _saved;
 
   bool get _json => looksLikeJson(_code.text);
+
+  /// Whether the text is too long to edit here, and so is shown
+  /// read-only.
+  bool get _tooLong => _code.text.length > editLimit;
 
   void _load(String name, String text) {
     _reading?.cancel();
@@ -431,12 +480,20 @@ class _SpecPageState extends State<SpecPage> {
   }
 
   /// Re-indents JSON, or writes YAML out as JSON.
-  void _toJson() {
+  Future<void> _toJson() async {
     final spec = _spec;
     if (spec == null || !spec.readable) return;
-    final value = readTree(_code.text);
-    _code.text = const JsonEncoder.withIndent('  ').convert(value);
-    _edited(_code.text);
+    final text = _code.text;
+    String convert() =>
+        const JsonEncoder.withIndent('  ').convert(readTree(text));
+    // A long one would stall the page for seconds.
+    final json = text.length > readInBackgroundOver
+        ? await Isolate.run(convert, debugName: 'toJson')
+        : convert();
+    // Unless it was edited meanwhile.
+    if (!mounted || _code.text != text) return;
+    _code.text = json;
+    _edited(json);
   }
 
   @override
@@ -606,12 +663,20 @@ class _SpecPageState extends State<SpecPage> {
     builder: (context, constraints) {
       final wide = constraints.maxWidth >= 900;
       final view = _view ?? (wide ? _View.split : _View.preview);
-      final editor = CodeEditor(
-        name: 'spec-editor',
-        controller: _code,
-        language: _json ? CodeLanguage.json : CodeLanguage.yaml,
-        onChanged: _edited,
-      );
+      final editor = _tooLong
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _ReadOnlyNote(size: _code.text.length),
+                Expanded(child: LineView(controller: _code)),
+              ],
+            )
+          : CodeEditor(
+              name: 'spec-editor',
+              controller: _code,
+              language: _json ? CodeLanguage.json : CodeLanguage.yaml,
+              onChanged: _edited,
+            );
       final preview = _Preview(
         spec: _spec,
         onLine: _goToLine,
