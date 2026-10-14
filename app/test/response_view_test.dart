@@ -158,4 +158,40 @@ void main() {
     expect(find.byKey(const Key('body-pretty')), findsOneWidget);
     expect(find.byKey(const Key('body-preview')), findsNothing);
   });
+
+  testWidgets('elsewhere, the page can be opened in the browser', (
+    tester,
+  ) async {
+    await show(
+      tester,
+      headers: const [Header(name: 'content-type', value: 'text/html')],
+      body: '<html><body>hi</body></html>',
+    );
+    expect(find.byKey(const Key('body-open-browser')), findsOneWidget);
+  });
+
+  testWidgets('a body that is not a page has no browser button', (
+    tester,
+  ) async {
+    await show(
+      tester,
+      headers: const [Header(name: 'content-type', value: 'application/json')],
+      body: '{"a":1}',
+    );
+    expect(find.byKey(const Key('body-open-browser')), findsNothing);
+  });
+
+  test('a page for the browser runs no scripts, and keeps its doctype', () {
+    final page = pageForBrowser(
+      '<!DOCTYPE html><html><script>x()</script></html>',
+      'https://a.test/p?x=1&y="2"',
+    );
+    expect(page, startsWith('<!DOCTYPE html><meta http-equiv='));
+    expect(page, contains("script-src 'none'"));
+    expect(
+      page,
+      contains('<base href="https://a.test/p?x=1&amp;y=&quot;2&quot;">'),
+    );
+    expect(pageForBrowser('<p>hi</p>', null), endsWith("'none'\"><p>hi</p>"));
+  });
 }

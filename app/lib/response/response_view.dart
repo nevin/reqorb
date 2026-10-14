@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -256,7 +258,8 @@ class _LoadedState extends State<_Loaded> {
     final scheme = theme.colorScheme;
     final color = statusColor(response.status, scheme);
     final contentType = _contentType(response);
-    final canPreview = previewsHtml && _isHtml(contentType, response.body);
+    final isHtml = _isHtml(contentType, response.body);
+    final canPreview = previewsHtml && isHtml;
     // A page kept from a response that had one falls back to Pretty.
     final mode = _mode == _BodyMode.preview && !canPreview
         ? _BodyMode.pretty
@@ -318,6 +321,10 @@ class _LoadedState extends State<_Loaded> {
             format: _format,
             onFormat: (format) => setState(() => _format = format),
             onFind: () => _find.value++,
+            // Where the page cannot be shown here, a browser shows it.
+            onOpenInBrowser: isHtml && !previewsHtml
+                ? () => _openInBrowser(context, response.body, url)
+                : null,
           ),
           Expanded(
             child: mode == _BodyMode.preview
@@ -619,7 +626,11 @@ class _BodyBar extends StatelessWidget {
     required this.format,
     required this.onFormat,
     required this.onFind,
+    this.onOpenInBrowser,
   });
+
+  /// Shows the page in the browser; null where it is not offered.
+  final VoidCallback? onOpenInBrowser;
 
   final _BodyMode mode;
 
@@ -702,6 +713,14 @@ class _BodyBar extends StatelessWidget {
               ),
             ),
           const Spacer(),
+          if (onOpenInBrowser case final open?)
+            IconButton(
+              key: const Key('body-open-browser'),
+              tooltip: 'Open the page in the browser',
+              iconSize: 18,
+              icon: const Icon(Icons.open_in_browser),
+              onPressed: open,
+            ),
           if (mode != _BodyMode.preview)
             IconButton(
               key: const Key('body-find'),
@@ -733,6 +752,47 @@ bool _isHtml(String contentType, String body) {
 Future<void> openLink(Uri uri) async {
   if (uri.scheme != 'http' && uri.scheme != 'https') return;
   await launchUrl(uri, mode: LaunchMode.externalApplication);
+}
+
+/// Writes an HTML body to a file and opens it in the browser.
+Future<void> _openInBrowser(
+  BuildContext context,
+  String html,
+  String? url,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    final folder = await getTemporaryDirectory();
+    final file = File(
+      '${folder.path}${Platform.pathSeparator}'
+      'reqorb-preview-${DateTime.now().millisecondsSinceEpoch}.html',
+    );
+    await file.writeAsString(pageForBrowser(html, url));
+    if (!await launchUrl(Uri.file(file.path))) {
+      throw const FileSystemException('no browser took the page');
+    }
+  } catch (error) {
+    notify(messenger, 'Could not open the page: $error');
+  }
+}
+
+/// [html] made safe to open in a browser: scripts and plugins are
+/// blocked, as they are in the preview, and pictures and styles are found
+/// relative to [url], where the page came from.
+String pageForBrowser(String html, String? url) {
+  final guard = [
+    '<meta http-equiv="Content-Security-Policy" '
+        'content="script-src \'none\'; object-src \'none\'">',
+    if (url != null)
+      '<base href="${const HtmlEscape(HtmlEscapeMode.attribute).convert(url)}">',
+  ].join();
+  // After the doctype, if there is one, so the page keeps its mode; the
+  // browser moves what comes before <html> into the head.
+  final doctype = RegExp(r'^\s*<!doctype[^>]*>', caseSensitive: false);
+  if (doctype.firstMatch(html) case final match?) {
+    return html.replaceRange(match.end, match.end, guard);
+  }
+  return guard + html;
 }
 
 /// An HTML body shown as a page. It cannot run scripts or go anywhere
