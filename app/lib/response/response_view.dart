@@ -228,15 +228,6 @@ class _LoadedState extends State<_Loaded> {
   /// What the body is read as; null to go by its type and how it looks.
   CodeLanguage? _format;
 
-  /// Notified to open the search in the body.
-  final _find = ValueNotifier(0);
-
-  @override
-  void dispose() {
-    _find.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final _Loaded(
@@ -320,7 +311,6 @@ class _LoadedState extends State<_Loaded> {
             onMode: (mode) => setState(() => _mode = mode),
             format: _format,
             onFormat: (format) => setState(() => _format = format),
-            onFind: () => _find.value++,
             // Where the page cannot be shown here, a browser shows it.
             onOpenInBrowser: isHtml && !previewsHtml
                 ? () => _openInBrowser(context, response.body, url)
@@ -333,7 +323,6 @@ class _LoadedState extends State<_Loaded> {
                     name: 'responseBody',
                     text: body,
                     language: language,
-                    findRequests: _find,
                     onLink: openLink,
                   ),
           ),
@@ -616,8 +605,8 @@ class _LoadedState extends State<_Loaded> {
   }
 }
 
-/// Above the body: whether to show it as received, what to read it as,
-/// and a way into the search.
+/// Above the body: whether to show it as received or as a page, and what
+/// to read it as.
 class _BodyBar extends StatelessWidget {
   const _BodyBar({
     required this.mode,
@@ -625,7 +614,6 @@ class _BodyBar extends StatelessWidget {
     required this.onMode,
     required this.format,
     required this.onFormat,
-    required this.onFind,
     this.onOpenInBrowser,
   });
 
@@ -639,7 +627,6 @@ class _BodyBar extends StatelessWidget {
   final ValueChanged<_BodyMode> onMode;
   final CodeLanguage? format;
   final ValueChanged<CodeLanguage?> onFormat;
-  final VoidCallback onFind;
 
   static const _formats = {
     null: 'Auto',
@@ -720,14 +707,6 @@ class _BodyBar extends StatelessWidget {
               iconSize: 18,
               icon: const Icon(Icons.open_in_browser),
               onPressed: open,
-            ),
-          if (mode != _BodyMode.preview)
-            IconButton(
-              key: const Key('body-find'),
-              tooltip: 'Find in the body ($shortcutModifier F)',
-              iconSize: 18,
-              icon: const Icon(Icons.search),
-              onPressed: onFind,
             ),
         ],
       ),

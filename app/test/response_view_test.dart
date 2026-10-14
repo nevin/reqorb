@@ -101,7 +101,7 @@ void main() {
       body: '{"a":1}',
     );
     expect(find.byKey(const Key('responseBody-find-field')), findsNothing);
-    await tester.tap(find.byKey(const Key('body-find')));
+    await tester.tap(find.byKey(const Key('responseBody-find')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('responseBody-find-field')), findsOneWidget);
   });

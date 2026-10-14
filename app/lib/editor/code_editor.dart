@@ -53,15 +53,11 @@ class CodeEditor extends StatefulWidget {
     this.complete,
     this.folds,
     this.onFind,
-    this.findRequests,
     this.onChanged,
   });
 
   final String name;
   final CodeController controller;
-
-  /// Opens the search each time it notifies, for a button outside.
-  final Listenable? findRequests;
 
   /// Set when the text shown has parts folded away.
   final Folds? folds;
@@ -136,7 +132,6 @@ class _CodeEditorState extends State<CodeEditor> {
     _code.language = widget.language;
     _code.addListener(_changed);
     _focus.addListener(_focusChanged);
-    widget.findRequests?.addListener(_openFind);
   }
 
   @override
@@ -147,17 +142,12 @@ class _CodeEditorState extends State<CodeEditor> {
       _code.addListener(_changed);
       _lastText = _code.text;
     }
-    if (old.findRequests != widget.findRequests) {
-      old.findRequests?.removeListener(_openFind);
-      widget.findRequests?.addListener(_openFind);
-    }
     _code.language = widget.language;
   }
 
   @override
   void dispose() {
     _code.removeListener(_changed);
-    widget.findRequests?.removeListener(_openFind);
     // A search belongs to this view of the text, not to the text.
     _code.forgetMarks();
     _scroll.dispose();
@@ -1134,7 +1124,6 @@ class CodeView extends StatefulWidget {
     required this.name,
     required this.text,
     this.language,
-    this.findRequests,
     this.onLink,
   });
 
@@ -1144,9 +1133,6 @@ class CodeView extends StatefulWidget {
 
   /// Called with a web address in the text when it is clicked.
   final ValueChanged<Uri>? onLink;
-
-  /// Opens the search each time it notifies.
-  final Listenable? findRequests;
 
   @override
   State<CodeView> createState() => _CodeViewState();
@@ -1221,7 +1207,6 @@ class _CodeViewState extends State<CodeView> {
           ? null
           : (numbers: shown.numbers, state: shown.folds, toggle: _toggle),
       onFind: _unfold,
-      findRequests: widget.findRequests,
     );
   }
 }
