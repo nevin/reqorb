@@ -276,6 +276,9 @@ void main() {
     store.updateSettings(store.settings.copyWith(protectSecrets: false));
     addTearDown(() async {
       await server.close(force: true);
+      // A save still being written would put files back while the folder
+      // is being deleted.
+      await store.flush();
       await tmp.delete(recursive: true);
     });
   }

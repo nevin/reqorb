@@ -186,15 +186,21 @@ class WorkspaceStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Writes any pending change now.
+  /// Writes any pending change now, and waits for a save already under way.
   Future<void> flush() async {
     if (_saveTimer?.isActive ?? false) {
       _saveTimer!.cancel();
       await _save();
     }
+    await _saving;
   }
 
-  Future<void> _save() async {
+  // The save in progress, so that [flush] can wait for one the timer started.
+  Future<void>? _saving;
+
+  Future<void> _save() => _saving = _write();
+
+  Future<void> _write() async {
     try {
       final saving = _workspace;
       final why = await engine.saveWorkspace(path: path, workspace: saving);
