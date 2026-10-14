@@ -21,3 +21,5 @@ unimplemented = "deny"
 [profile.release]
 lto = "thin"
 codegen-units = 4
+# A panic's message is kept; the symbols only a debugger reads are not.
+strip = "symbols"

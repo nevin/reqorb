@@ -717,6 +717,24 @@ the display sleeps (`caffeinate -d` prevents that) and taps go astray if another
 takes focus, so do not use the machine while they run. They pass on CI's clean runner;
 prefer `flutter test` for everyday work.
 
+### Releasing
+
+Set the same version in `Cargo.toml` and `app/pubspec.yaml`, then push a tag for it:
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+`.github/workflows/release.yml` then builds the CLI for macOS (Apple silicon and
+Intel), Linux and Windows, and the macOS app, and publishes them as a GitHub release
+with a SHA-256 checksum for each and a Homebrew formula (`reqorb.rb`) to put in a tap.
+The app is signed with a Developer ID and notarized when the repository has the
+secrets the workflow lists at its top; without them it is signed ad hoc, and other Macs
+refuse to open it until it is allowed in **System Settings › Privacy & Security**.
+
+The same steps run locally: `scripts/package-cli.sh` and `scripts/package-macos.sh`
+write to `dist/`.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

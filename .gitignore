@@ -10,3 +10,4 @@
 # Local data that should not be shared
 .env
 *.env.local
+/dist/
