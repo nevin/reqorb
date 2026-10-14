@@ -104,6 +104,9 @@ The full set to run before pushing is in [CONTRIBUTING.md](../CONTRIBUTING.md#be
   reachable at `localhost`. `xcrun simctl ui booted appearance dark` switches the
   simulator to dark mode without touching the Mac.
 
+When something goes wrong that this page does not explain, see
+[Troubleshooting](troubleshooting.md).
+
 ## Formatting and lints
 
 - Rust: `cargo fmt`, and `cargo clippy` with warnings as errors.

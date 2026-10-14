@@ -123,6 +123,28 @@ reqorb grpc grpcb.in:9000 hello.HelloService/SayHello -d '{"greeting":"hi"}'
 
 `reqorb --help` and `reqorb <command> --help` list every option.
 
+### Exit codes
+
+Every command exits with one of three codes, so a script or CI job can tell a failing
+API from a broken command:
+
+| Code | Means |
+|---|---|
+| `0` | Everything passed |
+| `1` | It ran, but something it checked failed: see below |
+| `2` | It could not run: a wrong option, a file that cannot be read or parsed, a request that could not be sent |
+
+What counts as failing, for `1`:
+
+- **A request** (`reqorb GET …`, or `run` with one request): if it has tests, any test
+  failing; if it has none, a status of 400 or more, or GraphQL errors in the response.
+- **`run`** with several requests: any of them failing as above, or failing to send.
+  `--bail` stops at the first.
+- **`grpc`**: a status other than `OK`.
+- **`ws`**: an error on the connection.
+
+`import`, `export`, `code` and `analyze` exit with `0` or `2`.
+
 ## Variables and formats
 
 `{{name}}` is substituted in the URL, headers and body. Priority is `--var`, then the
@@ -675,6 +697,11 @@ and how changes are written. The guides in [docs/](docs/) go further:
 - [Extending reqorb](docs/extending.md): adding a format, a code language, an auth type,
   a setting or a bridge call
 - [Releasing](docs/releasing.md): versions, signing, and the app icon
+- [File formats](docs/file-formats.md): reqorb files and collection folders, field by
+  field
+- [Troubleshooting](docs/troubleshooting.md): common problems and their fixes
+
+[CHANGELOG.md](CHANGELOG.md) lists what changed in each release.
 
 ## License
 

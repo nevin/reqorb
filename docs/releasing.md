@@ -5,12 +5,19 @@
 1. **Set the version** in two places, to the same value:
    - `Cargo.toml`: `version` under `[workspace.package]`. All the crates share it.
    - `app/pubspec.yaml`: `version`. The part before any `+` must match.
-2. **Commit** the change and push it to `main`. Wait for CI to pass on that commit.
-3. **Tag** the commit and push the tag:
+2. **Update the changelog.** In `CHANGELOG.md`, rename **Unreleased** to the version and
+   the date (`## 0.2.0 – 2026-11-02`) and start a new, empty **Unreleased** above it.
+   Read the entries through as a user would; they become the release notes.
+3. **Commit** the changes and push them to `main`. Wait for CI to pass on that commit.
+4. **Tag** the commit and push the tag:
 
    ```bash
    git tag v0.2.0 && git push origin v0.2.0
    ```
+
+5. **Write the release notes.** The workflow creates the release with notes GitHub
+   generates from the commits. Replace them on GitHub with the version's changelog
+   entries, and say whether the macOS app is notarized.
 
 Pushing a tag that starts with `v` runs `.github/workflows/release.yml`:
 
@@ -19,7 +26,7 @@ Pushing a tag that starts with `v` runs `.github/workflows/release.yml`:
 | Tag matches the version | Fails the release if the tag, `Cargo.toml` and `pubspec.yaml` disagree |
 | CLI | Builds `reqorb` for macOS (Apple silicon and Intel), Linux (x86-64) and Windows (x86-64) with `scripts/package-cli.sh` |
 | macOS app | Builds a universal app, signs it, notarizes it when it can, and zips it with `scripts/package-macos.sh` |
-| Publish the release | Creates the GitHub release with every archive and a SHA-256 checksum for each |
+| Publish the release | Creates the GitHub release with every archive, a SHA-256 checksum for each, and notes generated from the commits |
 
 There are no iPad, Windows app or Linux app builds in the release yet.
 

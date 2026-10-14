@@ -11,6 +11,8 @@ fresh clone to a change that is ready to push. The guides in [docs/](docs/) go d
 | [Testing](docs/testing.md) | know which tests to write and run, and how the app is tested without its Rust library |
 | [Extending reqorb](docs/extending.md) | add an import or export format, a code language, an auth type, a setting or a bridge call |
 | [Releasing](docs/releasing.md) | cut a version, sign the macOS app, and change the app icon |
+| [File formats](docs/file-formats.md) | read or generate reqorb files and collection folders |
+| [Troubleshooting](docs/troubleshooting.md) | get past a failed build, a stalled test or locked credentials |
 
 ## Set up
 
@@ -56,6 +58,8 @@ end-to-end tests (`flutter test integration_test -d macos`) take over the screen
   and say why existing code cannot do the job.
 - **The repository stays lean.** No generated files beyond the bridge bindings, no
   editor settings, no tooling configuration that the build does not need.
+- **User-visible changes go in the changelog**, under **Unreleased** in
+  [CHANGELOG.md](CHANGELOG.md).
 - **Commits** are small and self-contained, with a subject line in the imperative ("Show
   big responses without freezing") and a body that explains why.
 
