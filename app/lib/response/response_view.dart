@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 import 'package:reqorb/editor/code_editor.dart';
 import 'package:reqorb/editor/syntax.dart';
@@ -133,6 +135,7 @@ class ResponseView extends StatelessWidget {
             captureProblems: sent?.captureProblems ?? const [],
             graphqlErrors: sent?.graphqlErrors ?? const [],
             console: sent?.console ?? const [],
+            url: sent?.exchanges.lastOrNull?.request.url,
             current: !sending,
             receiving: sending && receiving,
             stopped: stopped && !sending,
@@ -166,6 +169,7 @@ class _Loaded extends StatefulWidget {
     required this.console,
     required this.receiving,
     required this.stopped,
+    this.url,
   });
 
   /// Whether the response is still arriving.
@@ -191,6 +195,10 @@ class _Loaded extends StatefulWidget {
   final Response response;
   final List<String> unresolved;
 
+  /// Where the response came from, after any redirects; what a preview
+  /// finds its pictures and styles relative to.
+  final String? url;
+
   /// False while this is the previous response and a new one is on its way.
   final bool current;
 
@@ -207,10 +215,13 @@ typedef _Section = ({
   String what,
 });
 
+/// How the body is shown: re-indented and coloured, as received, or, for
+/// a web page, as a browser would show it.
+enum _BodyMode { pretty, raw, preview }
+
 class _LoadedState extends State<_Loaded> {
-  /// The body as received, rather than re-indented and coloured. Kept from
-  /// one response to the next, as is [_format].
-  bool _raw = false;
+  /// Kept from one response to the next, as is [_format].
+  _BodyMode _mode = _BodyMode.pretty;
 
   /// What the body is read as; null to go by its type and how it looks.
   CodeLanguage? _format;
@@ -239,15 +250,22 @@ class _LoadedState extends State<_Loaded> {
       :console,
       :receiving,
       :stopped,
+      :url,
     ) = widget;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final color = statusColor(response.status, scheme);
     final contentType = _contentType(response);
-    final language = _raw
+    final canPreview = previewsHtml && _isHtml(contentType, response.body);
+    // A page kept from a response that had one falls back to Pretty.
+    final mode = _mode == _BodyMode.preview && !canPreview
+        ? _BodyMode.pretty
+        : _mode;
+    final raw = mode == _BodyMode.raw;
+    final language = raw
         ? CodeLanguage.plain
         : _format ?? _languageOf(contentType, response.body);
-    final body = _raw || language != CodeLanguage.json
+    final body = raw || language != CodeLanguage.json
         ? response.body
         : _asJson(response.body) ?? response.body;
     final json = _asJson(response.body);
@@ -294,19 +312,23 @@ class _LoadedState extends State<_Loaded> {
       bodyView = Column(
         children: [
           _BodyBar(
-            raw: _raw,
-            onRaw: (raw) => setState(() => _raw = raw),
+            mode: mode,
+            canPreview: canPreview,
+            onMode: (mode) => setState(() => _mode = mode),
             format: _format,
             onFormat: (format) => setState(() => _format = format),
             onFind: () => _find.value++,
           ),
           Expanded(
-            child: CodeView(
-              name: 'responseBody',
-              text: body,
-              language: language,
-              findRequests: _find,
-            ),
+            child: mode == _BodyMode.preview
+                ? _HtmlPreview(html: response.body, url: url)
+                : CodeView(
+                    name: 'responseBody',
+                    text: body,
+                    language: language,
+                    findRequests: _find,
+                    onLink: openLink,
+                  ),
           ),
         ],
       );
@@ -591,15 +613,19 @@ class _LoadedState extends State<_Loaded> {
 /// and a way into the search.
 class _BodyBar extends StatelessWidget {
   const _BodyBar({
-    required this.raw,
-    required this.onRaw,
+    required this.mode,
+    required this.canPreview,
+    required this.onMode,
     required this.format,
     required this.onFormat,
     required this.onFind,
   });
 
-  final bool raw;
-  final ValueChanged<bool> onRaw;
+  final _BodyMode mode;
+
+  /// Whether the body is a page that can be shown as one.
+  final bool canPreview;
+  final ValueChanged<_BodyMode> onMode;
   final CodeLanguage? format;
   final ValueChanged<CodeLanguage?> onFormat;
   final VoidCallback onFind;
@@ -619,7 +645,7 @@ class _BodyBar extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
       child: Row(
         children: [
-          SegmentedButton<bool>(
+          SegmentedButton<_BodyMode>(
             key: const Key('body-mode'),
             showSelectedIcon: false,
             style: const ButtonStyle(
@@ -628,7 +654,7 @@ class _BodyBar extends StatelessWidget {
             ),
             segments: [
               ButtonSegment(
-                value: false,
+                value: _BodyMode.pretty,
                 label: Text(
                   'Pretty',
                   key: const Key('body-pretty'),
@@ -636,16 +662,25 @@ class _BodyBar extends StatelessWidget {
                 ),
               ),
               ButtonSegment(
-                value: true,
+                value: _BodyMode.raw,
                 label: Text('Raw', key: const Key('body-raw'), style: small),
               ),
+              if (canPreview)
+                ButtonSegment(
+                  value: _BodyMode.preview,
+                  label: Text(
+                    'Preview',
+                    key: const Key('body-preview'),
+                    style: small,
+                  ),
+                ),
             ],
-            selected: {raw},
-            onSelectionChanged: (picked) => onRaw(picked.first),
+            selected: {mode},
+            onSelectionChanged: (picked) => onMode(picked.first),
           ),
           const SizedBox(width: 8),
-          // A body shown as received is not read as anything.
-          if (!raw)
+          // A body shown as received, or as a page, is not read as code.
+          if (mode == _BodyMode.pretty)
             PopupMenuButton<CodeLanguage?>(
               key: const Key('body-format'),
               tooltip: 'Read the body as',
@@ -667,17 +702,94 @@ class _BodyBar extends StatelessWidget {
               ),
             ),
           const Spacer(),
-          IconButton(
-            key: const Key('body-find'),
-            tooltip: 'Find in the body ($shortcutModifier F)',
-            iconSize: 18,
-            icon: const Icon(Icons.search),
-            onPressed: onFind,
-          ),
+          if (mode != _BodyMode.preview)
+            IconButton(
+              key: const Key('body-find'),
+              tooltip: 'Find in the body ($shortcutModifier F)',
+              iconSize: 18,
+              icon: const Icon(Icons.search),
+              onPressed: onFind,
+            ),
         ],
       ),
     );
   }
+}
+
+/// Whether this platform can show a web page: macOS and iOS can, Windows
+/// and Linux cannot.
+bool get previewsHtml => WebViewPlatform.instance != null;
+
+/// Whether a body of this type is a web page, or looks like one when
+/// nobody said.
+bool _isHtml(String contentType, String body) {
+  if (contentType.contains('html')) return true;
+  if (contentType.isNotEmpty) return false;
+  final start = body.trimLeft().toLowerCase();
+  return start.startsWith('<!doctype html') || start.startsWith('<html');
+}
+
+/// Opens a web address from a response in the browser.
+Future<void> openLink(Uri uri) async {
+  if (uri.scheme != 'http' && uri.scheme != 'https') return;
+  await launchUrl(uri, mode: LaunchMode.externalApplication);
+}
+
+/// An HTML body shown as a page. It cannot run scripts or go anywhere
+/// else, since it came from a server that may not be trusted; it may still
+/// fetch its pictures and styles.
+class _HtmlPreview extends StatefulWidget {
+  const _HtmlPreview({required this.html, required this.url});
+
+  final String html;
+  final String? url;
+
+  @override
+  State<_HtmlPreview> createState() => _HtmlPreviewState();
+}
+
+class _HtmlPreviewState extends State<_HtmlPreview> {
+  /// True from asking for the page until it has loaded: the one
+  /// navigation allowed.
+  bool _loading = false;
+
+  late final _web = WebViewController()
+    ..setJavaScriptMode(JavaScriptMode.disabled)
+    ..setNavigationDelegate(
+      NavigationDelegate(
+        onNavigationRequest: (request) {
+          // Frames inside the page load as the page says.
+          if (!request.isMainFrame) return NavigationDecision.navigate;
+          if (!_loading) return NavigationDecision.prevent;
+          _loading = false;
+          return NavigationDecision.navigate;
+        },
+        onPageFinished: (_) => _loading = false,
+      ),
+    );
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(_HtmlPreview old) {
+    super.didUpdateWidget(old);
+    if (old.html != widget.html || old.url != widget.url) _load();
+  }
+
+  void _load() {
+    _loading = true;
+    _web.loadHtmlString(widget.html, baseUrl: widget.url);
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 8),
+    child: WebViewWidget(key: const Key('body-preview-page'), controller: _web),
+  );
 }
 
 /// The cookies the response set, one to a row with their attributes.

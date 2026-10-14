@@ -752,4 +752,39 @@ void main() {
     final body = tester.widget<TextField>(find.byKey(const Key('body')));
     expect(body.controller!.text, '{"at": "{{base_url}}');
   });
+
+  testWidgets('a web address in shown code opens when clicked', (tester) async {
+    final opened = <Uri>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CodeView(
+            name: 'shown',
+            text: '{"url": "https://httpbin.org/get", "n": 1}',
+            onLink: opened.add,
+          ),
+        ),
+      ),
+    );
+    final field = tester.widget<TextField>(find.byKey(const Key('shown')));
+    final code = field.controller! as CodeController;
+    expect(
+      [for (final (a, b, _) in code.links) code.text.substring(a, b)],
+      ['https://httpbin.org/get'],
+    );
+    code.links.single.$3.onTap!();
+    expect(opened, [Uri.parse('https://httpbin.org/get')]);
+  });
+
+  test('addresses end where the sentence or code around them does', () {
+    final code = CodeController(
+      text: 'See https://a.test/x. Or (http://b.test/y?q=1), not ftp://c.test',
+      onLink: (_) {},
+    );
+    expect(
+      [for (final (a, b, _) in code.links) code.text.substring(a, b)],
+      ['https://a.test/x', 'http://b.test/y?q=1'],
+    );
+    code.dispose();
+  });
 }

@@ -144,4 +144,18 @@ void main() {
     expect(cookie.value, 'b=c');
     expect(cookie.attributes, ['Secure', 'SameSite=Lax']);
   });
+
+  testWidgets('Preview is offered only where pages can be shown', (
+    tester,
+  ) async {
+    // Tests run without a web view, as Windows and Linux do.
+    await show(
+      tester,
+      headers: const [Header(name: 'content-type', value: 'text/html')],
+      body: '<html><body>hi</body></html>',
+    );
+    expect(previewsHtml, isFalse);
+    expect(find.byKey(const Key('body-pretty')), findsOneWidget);
+    expect(find.byKey(const Key('body-preview')), findsNothing);
+  });
 }

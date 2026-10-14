@@ -1135,11 +1135,15 @@ class CodeView extends StatefulWidget {
     required this.text,
     this.language,
     this.findRequests,
+    this.onLink,
   });
 
   final String name;
   final String text;
   final CodeLanguage? language;
+
+  /// Called with a web address in the text when it is clicked.
+  final ValueChanged<Uri>? onLink;
 
   /// Opens the search each time it notifies.
   final Listenable? findRequests;
@@ -1149,7 +1153,7 @@ class CodeView extends StatefulWidget {
 }
 
 class _CodeViewState extends State<CodeView> {
-  late final _code = CodeController(text: widget.text);
+  late final _code = CodeController(text: widget.text, onLink: widget.onLink);
   List<FoldRegion> _regions = const [];
   final _folded = <int>{};
   FoldedText? _shown;

@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:reqorb/editor/syntax.dart';
 
@@ -5,7 +6,11 @@ import 'package:reqorb/editor/syntax.dart';
 /// language, the bracket matching the one beside the caret, and whatever
 /// a search has found.
 class CodeController extends TextEditingController {
-  CodeController({super.text, this.language});
+  CodeController({super.text, this.language, this.onLink});
+
+  /// Called with a web address in the text when it is clicked; null to
+  /// leave addresses as text.
+  final ValueChanged<Uri>? onLink;
 
   /// What the text is written in; null to go by how it looks. Set by
   /// whatever shows the controller, as it builds; the colours follow on
@@ -53,6 +58,50 @@ class CodeController extends TextEditingController {
           : tokenize(text, language);
     }
     return _tokens;
+  }
+
+  String? _linked;
+  List<(int, int, TapGestureRecognizer)> _links = const [];
+
+  /// The web addresses in the text, each with what opens it. Worked out
+  /// once per text, as the tokens are.
+  List<(int, int, TapGestureRecognizer)> get links {
+    final text = this.text;
+    final onLink = this.onLink;
+    if (onLink == null || text.length > highlightLimit) return const [];
+    if (!identical(text, _linked)) {
+      _dropLinks();
+      _linked = text;
+      _links = [
+        for (final match in _address.allMatches(text))
+          if (Uri.tryParse(match[0]!) case final uri? when uri.host.isNotEmpty)
+            (
+              match.start,
+              match.end,
+              TapGestureRecognizer()..onTap = () => onLink(uri),
+            ),
+      ];
+    }
+    return _links;
+  }
+
+  /// An address up to a space or a quote, less the punctuation of the
+  /// sentence or code around it.
+  static final _address = RegExp(
+    r'''https?://[^\s"'<>`\\]*[^\s"'<>`\\.,;:!?)\]}]''',
+  );
+
+  void _dropLinks() {
+    for (final (_, _, recognizer) in _links) {
+      recognizer.dispose();
+    }
+    _links = const [];
+  }
+
+  @override
+  void dispose() {
+    _dropLinks();
+    super.dispose();
   }
 
   static const _open = '{[(';
@@ -165,7 +214,8 @@ class CodeController extends TextEditingController {
     }
 
     final tokens = this.tokens;
-    if (tokens.isEmpty && marks.isEmpty) {
+    final links = this.links;
+    if (tokens.isEmpty && marks.isEmpty && links.isEmpty) {
       return TextSpan(style: style, text: text);
     }
     if (marks.length > 1) marks.sort((a, b) => a.$1.compareTo(b.$1));
@@ -212,6 +262,62 @@ class CodeController extends TextEditingController {
       at = token.end;
     }
     if (at < text.length) add(at, text.length, null);
-    return TextSpan(style: style, children: spans);
+    return TextSpan(
+      style: style,
+      children: links.isEmpty ? spans : _withLinks(spans, links, scheme),
+    );
+  }
+
+  /// [spans] split where the [links] begin and end, the links underlined
+  /// and clickable.
+  static List<TextSpan> _withLinks(
+    List<TextSpan> spans,
+    List<(int, int, TapGestureRecognizer)> links,
+    ColorScheme scheme,
+  ) {
+    final out = <TextSpan>[];
+    final linkStyle = TextStyle(
+      decoration: TextDecoration.underline,
+      decorationColor: scheme.primary.withValues(alpha: 0.6),
+    );
+    var l = 0, offset = 0;
+    for (final span in spans) {
+      final text = span.text!;
+      final end = offset + text.length;
+      var at = offset;
+      while (at < end) {
+        while (l < links.length && links[l].$2 <= at) {
+          l++;
+        }
+        if (l >= links.length || links[l].$1 >= end) {
+          out.add(
+            TextSpan(text: text.substring(at - offset), style: span.style),
+          );
+          break;
+        }
+        final (start, stop, recognizer) = links[l];
+        if (start > at) {
+          out.add(
+            TextSpan(
+              text: text.substring(at - offset, start - offset),
+              style: span.style,
+            ),
+          );
+          at = start;
+        }
+        final until = stop < end ? stop : end;
+        out.add(
+          TextSpan(
+            text: text.substring(at - offset, until - offset),
+            style: span.style?.merge(linkStyle) ?? linkStyle,
+            recognizer: recognizer,
+            mouseCursor: SystemMouseCursors.click,
+          ),
+        );
+        at = until;
+      }
+      offset = end;
+    }
+    return out;
   }
 }
