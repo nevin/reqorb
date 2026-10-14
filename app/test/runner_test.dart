@@ -55,6 +55,7 @@ void main() {
         source: 'test',
         collections: [
           Collection(
+            untrustedScripts: false,
             name: 'Shop',
             variables: const [
               Variable(key: 'base', value: 'c', enabled: true, secret: false),

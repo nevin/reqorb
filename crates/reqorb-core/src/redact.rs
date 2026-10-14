@@ -538,6 +538,7 @@ mod tests {
                 }],
             }],
             link: None,
+            untrusted_scripts: false,
         };
         let redacted = redact_collection(&collection);
         assert_eq!(redacted.variables[0].value, "https://api.test");

@@ -384,8 +384,10 @@ A script can reach nothing but the request, the response and the variables: no f
 no network, no timers, so `pm.sendRequest`, `require`, `setTimeout` and `fetch` are not
 there, and an import says so when a script uses the first two. A script that runs for
 more than ten seconds is stopped. A script can read every variable, credentials
-included, so a Postman import says when the collection carries scripts: read them
-before sending if you do not know where it came from. Scripts are not run for WebSocket or gRPC requests, and Bruno
+included, so scripts that came from elsewhere (an import, a collection folder opened
+from disk, or one whose scripts changed in a pull) do not run until you allow them.
+The first send or run from such a collection shows its scripts and asks: allow them
+from now on, send without them this time, or cancel. Scripts are not run for WebSocket or gRPC requests, and Bruno
 and curl exports leave them out. In the CLI, `--pre-script` and `--post-script` take a
 script or `@file`.
 

@@ -515,6 +515,7 @@ class FakeEngine extends Engine {
     folderWrites[dir] = (folderWrites[dir] ?? 0) + 1;
     // The files hold neither the link nor any credentials.
     folderFiles[dir] = Collection(
+      untrustedScripts: false,
       name: collection.name,
       variables: collection.variables,
       items: collection.items,
@@ -530,6 +531,7 @@ class FakeEngine extends Engine {
     final read = folderFiles[dir];
     if (read == null) throw '$dir is not a reqorb collection';
     return Collection(
+      untrustedScripts: local?.untrustedScripts ?? false,
       name: read.name,
       variables: read.variables,
       items: read.items,

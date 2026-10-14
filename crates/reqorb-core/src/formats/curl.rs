@@ -178,6 +178,7 @@ pub(super) fn curl(text: &str, name_hint: &str) -> Result<ImportResult, Error> {
                 items: Vec::new(),
             }],
             link: None,
+            untrusted_scripts: false,
         }],
         environments: Vec::new(),
         warnings,

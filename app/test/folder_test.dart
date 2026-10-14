@@ -28,6 +28,7 @@ void main() {
   );
 
   Collection shop([List<Item>? items]) => Collection(
+    untrustedScripts: false,
     name: 'Shop',
     variables: const [],
     items: items ?? [leaf('Login', 'https://api.test/login')],
@@ -125,6 +126,7 @@ void main() {
   ) async {
     await open(tester);
     engine.folderFiles['/work/theirs'] = Collection(
+      untrustedScripts: false,
       name: 'Theirs',
       variables: const [],
       items: [leaf('Status', 'https://api.test/status')],
@@ -177,6 +179,7 @@ void main() {
     engine.saved = Workspace(
       collections: [
         Collection(
+          untrustedScripts: false,
           name: 'Shop',
           variables: const [],
           items: [leaf('Login', 'x')],

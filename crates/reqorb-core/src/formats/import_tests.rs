@@ -109,6 +109,8 @@ fn postman_scripts_come_in_and_go_back_out() {
     assert_eq!(result.warnings.len(), 2, "{:?}", result.warnings);
     assert!(result.warnings[0].contains("carry scripts, which run each time"));
     assert!(result.warnings[1].contains("pm.sendRequest"));
+    // They wait to be allowed, wherever they come from.
+    assert!(result.collections[0].untrusted_scripts);
 
     let exported = export_collection(collection, ExportFormat::Postman).unwrap();
     let again = import(&exported, "").unwrap();

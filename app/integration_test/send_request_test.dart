@@ -1790,6 +1790,7 @@ void main() {
         source: 'test',
         collections: [
           Collection(
+            untrustedScripts: false,
             name: 'Shop',
             variables: const [],
             items: [
@@ -1887,6 +1888,7 @@ void main() {
         source: 'test',
         collections: [
           Collection(
+            untrustedScripts: false,
             name: 'Chain',
             variables: [
               Variable(key: 'base', value: base, enabled: true, secret: false),

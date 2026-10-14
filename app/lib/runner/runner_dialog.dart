@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:reqorb/request/script_consent.dart';
 import 'package:reqorb/bridge/engine.dart';
 import 'package:reqorb/runner/collection_run.dart';
 import 'package:reqorb/shared/theme.dart';
@@ -32,12 +33,37 @@ Future<void> showRunner(
   required String name,
   required List<RunStep> steps,
   Future<DataFile?> Function() pickData = _pickDataFile,
-}) => showDialog<void>(
-  context: context,
-  barrierDismissible: false,
-  builder: (_) =>
-      RunnerDialog(store: store, name: name, steps: steps, pickData: pickData),
-);
+}) async {
+  // A collection's scripts that have not been allowed are asked about once,
+  // before the run, not at every request.
+  final scripted = steps.where((step) => hasScripts(step.request));
+  final collection = scripted.firstOrNull?.collection;
+  var running = steps;
+  if (collection != null && needsConsent(store, collection)) {
+    switch (await askToRunScripts(context, store, collection)) {
+      case ScriptChoice.cancel:
+        return;
+      case ScriptChoice.skip:
+        running = [
+          for (final step in steps)
+            RunStep(step.path, withoutScripts(step.request), step.collection),
+        ];
+      case ScriptChoice.allow:
+        break;
+    }
+    if (!context.mounted) return;
+  }
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => RunnerDialog(
+      store: store,
+      name: name,
+      steps: running,
+      pickData: pickData,
+    ),
+  );
+}
 
 class RunnerDialog extends StatefulWidget {
   const RunnerDialog({

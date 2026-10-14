@@ -278,6 +278,7 @@ void main() {
         source: 'har',
         collections: [
           Collection(
+            untrustedScripts: false,
             name: 'History',
             variables: const [],
             items: [

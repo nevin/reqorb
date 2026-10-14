@@ -16,6 +16,7 @@ import 'package:reqorb/protocols/ws_session.dart';
 import 'package:reqorb/request/environment_picker.dart';
 import 'package:reqorb/request/request_tab.dart';
 import 'package:reqorb/request/request_title.dart';
+import 'package:reqorb/request/script_consent.dart';
 import 'package:reqorb/request/tab_strip.dart';
 import 'package:reqorb/request/url_bar.dart';
 import 'package:reqorb/request/send_session.dart';
@@ -795,7 +796,22 @@ class _RequestPageState extends State<RequestPage> {
       showMessage(context, 'Enter a URL to send the request');
       return;
     }
-    await _http.send(request, _variables, name: _name ?? '');
+    var sending = request;
+    final origin = _origin;
+    if (hasScripts(request) &&
+        origin != null &&
+        needsConsent(_store, origin.collection)) {
+      switch (await askToRunScripts(context, _store, origin.collection)) {
+        case ScriptChoice.cancel:
+          return;
+        case ScriptChoice.skip:
+          sending = withoutScripts(request);
+        case ScriptChoice.allow:
+          break;
+      }
+      if (!mounted) return;
+    }
+    await _http.send(sending, _variables, name: _name ?? '');
   }
 
   void _cancel() => _http.cancel();

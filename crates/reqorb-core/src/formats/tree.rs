@@ -404,6 +404,14 @@ pub fn read_collection_dir(dir: &str, local: Option<&Collection>) -> Result<Coll
         variables: file.variables,
         items: read_items(root, &file.order)?,
         link: local.and_then(|local| local.link.clone()),
+        untrusted_scripts: false,
+    };
+    // Scripts that someone else may have written wait to be allowed: all of
+    // them in a folder opened afresh, and any that changed since this
+    // machine last saw them, after a pull say.
+    collection.untrusted_scripts = match local {
+        None => !collection.scripts().is_empty(),
+        Some(local) => local.untrusted_scripts || (collection.scripts() != local.scripts()),
     };
     if let Some(local) = local {
         restore_credentials(&mut collection, local);
@@ -458,6 +466,7 @@ mod tests {
                 path: "/somewhere".into(),
                 grant: "g".into(),
             }),
+            untrusted_scripts: false,
         }
     }
 
@@ -514,6 +523,46 @@ mod tests {
         std::fs::write(outside.path().join(FOLDER_FILE), r#"{"name":"Away"}"#).unwrap();
         let read = read_collection_dir(path, None).unwrap();
         assert!(read.items.iter().all(|item| item.name != "Away"));
+    }
+
+    #[test]
+    fn scripts_from_the_folder_wait_to_be_allowed_when_new_or_changed() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+        let mut shop = shop();
+        let login = shop.items[0].request.as_mut().unwrap();
+        login.post_script = Some("test('ok', () => {});".into());
+        write_collection_dir(path, &shop).unwrap();
+
+        // Opened afresh, as from a clone, nothing is known of them.
+        assert!(read_collection_dir(path, None).unwrap().untrusted_scripts);
+        // Read back over this machine's copy, unchanged, they stand allowed.
+        assert!(
+            !read_collection_dir(path, Some(&shop))
+                .unwrap()
+                .untrusted_scripts
+        );
+
+        // Changed on disk, by a pull say, they wait again.
+        let file = dir.path().join("Login.request.json");
+        let text = std::fs::read_to_string(&file).unwrap();
+        std::fs::write(&file, text.replace("test('ok'", "test('sly'")).unwrap();
+        assert!(
+            read_collection_dir(path, Some(&shop))
+                .unwrap()
+                .untrusted_scripts
+        );
+        // And a copy that was waiting goes on waiting.
+        let waiting = Collection {
+            untrusted_scripts: true,
+            ..shop.clone()
+        };
+        write_collection_dir(path, &shop).unwrap();
+        assert!(
+            read_collection_dir(path, Some(&waiting))
+                .unwrap()
+                .untrusted_scripts
+        );
     }
 
     #[test]

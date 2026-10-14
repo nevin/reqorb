@@ -57,6 +57,30 @@ pub(crate) fn import_from(
     name_hint: &str,
     origin: Option<&url::Url>,
 ) -> Result<ImportResult, Error> {
+    let mut result = parse(text, name_hint, origin)?;
+    // Scripts from elsewhere wait to be allowed before they run.
+    let scripted: usize = result
+        .collections
+        .iter_mut()
+        .map(|collection| {
+            let count = collection.scripts().len();
+            collection.untrusted_scripts = count > 0;
+            count
+        })
+        .sum();
+    if scripted > 0 {
+        result.warnings.insert(
+            0,
+            format!(
+                "{scripted} request(s) carry scripts, which run each time they are sent and can \
+                 read your variables, credentials included. reqorb asks before they first run."
+            ),
+        );
+    }
+    Ok(result)
+}
+
+fn parse(text: &str, name_hint: &str, origin: Option<&url::Url>) -> Result<ImportResult, Error> {
     let text = text.trim_start_matches('\u{feff}').trim();
     let name_hint = if name_hint.trim().is_empty() {
         "Imported"
@@ -234,6 +258,7 @@ fn http_only(collection: &Collection) -> Collection {
         variables: collection.variables.clone(),
         items: keep(&collection.items),
         link: None,
+        untrusted_scripts: false,
     }
 }
 

@@ -126,7 +126,12 @@ Future<void> runImport(
     result = ImportResult(
       source: result.source,
       collections: [
-        Collection(name: name, variables: found.variables, items: found.items),
+        Collection(
+          name: name,
+          variables: found.variables,
+          items: found.items,
+          untrustedScripts: found.untrustedScripts,
+        ),
       ],
       environments: result.environments,
       warnings: result.warnings,

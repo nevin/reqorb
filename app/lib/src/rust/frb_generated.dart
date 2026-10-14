@@ -1836,13 +1836,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Collection dco_decode_collection(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return Collection(
       name: dco_decode_String(arr[0]),
       variables: dco_decode_list_variable(arr[1]),
       items: dco_decode_list_item(arr[2]),
       link: dco_decode_opt_box_autoadd_folder_link(arr[3]),
+      untrustedScripts: dco_decode_bool(arr[4]),
     );
   }
 
@@ -3027,11 +3028,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_variables = sse_decode_list_variable(deserializer);
     var var_items = sse_decode_list_item(deserializer);
     var var_link = sse_decode_opt_box_autoadd_folder_link(deserializer);
+    var var_untrustedScripts = sse_decode_bool(deserializer);
     return Collection(
       name: var_name,
       variables: var_variables,
       items: var_items,
       link: var_link,
+      untrustedScripts: var_untrustedScripts,
     );
   }
 
@@ -4557,6 +4560,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_variable(self.variables, serializer);
     sse_encode_list_item(self.items, serializer);
     sse_encode_opt_box_autoadd_folder_link(self.link, serializer);
+    sse_encode_bool(self.untrustedScripts, serializer);
   }
 
   @protected

@@ -319,9 +319,32 @@ pub struct Collection {
     /// the machine it was set on, and is left out of every export.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link: Option<FolderLink>,
+    /// Its scripts came from elsewhere, an import or a folder, and have not
+    /// been allowed to run on this machine yet. They can read every
+    /// variable, credentials included.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub untrusted_scripts: bool,
 }
 
 impl Collection {
+    /// Every script in the collection, with the path of its request.
+    pub fn scripts(&self) -> Vec<(String, &str, &str)> {
+        self.requests()
+            .into_iter()
+            .filter(|(_, r)| {
+                crate::script::present(r.pre_script.as_deref())
+                    || crate::script::present(r.post_script.as_deref())
+            })
+            .map(|(path, r)| {
+                (
+                    path,
+                    r.pre_script.as_deref().unwrap_or(""),
+                    r.post_script.as_deref().unwrap_or(""),
+                )
+            })
+            .collect()
+    }
+
     /// Every request in the collection, depth first, with its `Folder/Name` path.
     pub fn requests(&self) -> Vec<(String, &Request)> {
         fn walk<'a>(items: &'a [Item], prefix: &str, out: &mut Vec<(String, &'a Request)>) {

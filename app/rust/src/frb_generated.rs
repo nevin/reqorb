@@ -1655,6 +1655,7 @@ const _: fn() = || {
         let _: Vec<crate::api::core::Variable> = Collection.variables;
         let _: Vec<crate::api::core::Item> = Collection.items;
         let _: Option<crate::api::core::FolderLink> = Collection.link;
+        let _: bool = Collection.untrusted_scripts;
     }
     {
         let Cookie = None::<crate::api::core::Cookie>.unwrap();
@@ -2167,11 +2168,13 @@ impl SseDecode for crate::api::core::Collection {
         let mut var_variables = <Vec<crate::api::core::Variable>>::sse_decode(deserializer);
         let mut var_items = <Vec<crate::api::core::Item>>::sse_decode(deserializer);
         let mut var_link = <Option<crate::api::core::FolderLink>>::sse_decode(deserializer);
+        let mut var_untrustedScripts = <bool>::sse_decode(deserializer);
         return crate::api::core::Collection {
             name: var_name,
             variables: var_variables,
             items: var_items,
             link: var_link,
+            untrusted_scripts: var_untrustedScripts,
         };
     }
 }
@@ -3843,6 +3846,7 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::Collection> 
             self.0.variables.into_into_dart().into_dart(),
             self.0.items.into_into_dart().into_dart(),
             self.0.link.into_into_dart().into_dart(),
+            self.0.untrusted_scripts.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -5189,6 +5193,7 @@ impl SseEncode for crate::api::core::Collection {
         <Vec<crate::api::core::Variable>>::sse_encode(self.variables, serializer);
         <Vec<crate::api::core::Item>>::sse_encode(self.items, serializer);
         <Option<crate::api::core::FolderLink>>::sse_encode(self.link, serializer);
+        <bool>::sse_encode(self.untrusted_scripts, serializer);
     }
 }
 

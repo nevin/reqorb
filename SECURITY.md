@@ -37,9 +37,9 @@ the files and folders the user chooses.
 
 ## What it does not protect against
 
-- Scripts in a collection you import can read your variables, credentials included, and
-  put them into the request being sent. Read the scripts of a collection from someone you
-  do not trust before you send its requests.
+- Scripts can read your variables, credentials included, and put them into the request
+  being sent. Scripts from an import or a folder are shown and wait for you to allow
+  them, but once allowed they run on every send. Read them before you do.
 - Unless a working directory is set, a request can send any file the app can read. An
   imported collection can name such a file.
 - With certificate verification turned off in Settings, connections can be intercepted.

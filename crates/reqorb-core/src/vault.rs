@@ -399,6 +399,7 @@ pub(crate) mod tests {
                     }],
                 }],
                 link: None,
+                untrusted_scripts: false,
             }],
             requests: vec![Item {
                 name: "Loose".into(),
