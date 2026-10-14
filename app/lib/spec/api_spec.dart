@@ -4,6 +4,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:isolate';
 
 import 'package:yaml/yaml.dart';
 
@@ -203,6 +204,15 @@ ApiSpec readSpec(String text) {
   }
   return _Reader(root, text, json ? 'json' : 'yaml').read();
 }
+
+/// How long a document can be, in characters, and still be read on the
+/// UI isolate: about 30 ms. Longer ones would stall typing.
+const readInBackgroundOver = 64 * 1024;
+
+/// [readSpec], on another isolate when [text] is long enough to need it.
+Future<ApiSpec> readSpecApart(String text) => text.length > readInBackgroundOver
+    ? Isolate.run(() => readSpec(text), debugName: 'readSpec')
+    : Future.value(readSpec(text));
 
 ApiSpec _unreadable(String message, int? line) => ApiSpec(
   format: '',

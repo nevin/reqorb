@@ -90,6 +90,12 @@ class _SpecPageState extends State<SpecPage> {
   ApiSpec? _spec;
   Timer? _reading;
 
+  /// Counts reads, so that one finishing after a later one is dropped.
+  int _reads = 0;
+
+  /// Whether a long document is being read in the background.
+  bool _readingApart = false;
+
   /// Chosen by the user; until then, by the width of the page.
   _View? _view;
   double _split = 0.5;
@@ -117,7 +123,28 @@ class _SpecPageState extends State<SpecPage> {
       _name = name;
       _saved = text;
       _code.text = text;
+      // Another document's preview would mislead while this one is read.
+      _spec = null;
+      _read(text);
+    });
+  }
+
+  /// Reads [text] into [_spec]: at once when it is short, and otherwise
+  /// on another isolate, keeping what was shown until it is done.
+  void _read(String text) {
+    final read = ++_reads;
+    if (text.length <= readInBackgroundOver) {
       _spec = readSpec(text);
+      _readingApart = false;
+      return;
+    }
+    _readingApart = true;
+    readSpecApart(text).then((spec) {
+      if (!mounted || read != _reads) return;
+      setState(() {
+        _spec = spec;
+        _readingApart = false;
+      });
     });
   }
 
@@ -125,7 +152,7 @@ class _SpecPageState extends State<SpecPage> {
   void _edited(String _) {
     _reading?.cancel();
     _reading = Timer(const Duration(milliseconds: 300), () {
-      if (mounted) setState(() => _spec = readSpec(_code.text));
+      if (mounted) setState(() => _read(_code.text));
     });
     // The title shows whether there are changes.
     setState(() {});
@@ -457,7 +484,7 @@ class _SpecPageState extends State<SpecPage> {
                       setState(() => _view = picked.first),
                 ),
                 const Spacer(),
-                _Status(spec: _spec),
+                _Status(spec: _spec, reading: _readingApart),
               ],
             ),
           ),
@@ -486,14 +513,34 @@ String _count(int n, String noun) => '$n $noun${n == 1 ? '' : 's'}';
 
 /// What kind of document it is, and whether anything is wrong with it.
 class _Status extends StatelessWidget {
-  const _Status({required this.spec});
+  const _Status({required this.spec, required this.reading});
 
   final ApiSpec? spec;
+
+  /// Whether a newer version of the text is being read.
+  final bool reading;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final spec = this.spec;
+    if (reading) {
+      return Row(
+        key: const Key('spec-reading'),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox.square(
+            dimension: 12,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Reading…',
+            style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
+          ),
+        ],
+      );
+    }
     if (spec == null) return const SizedBox.shrink();
     final problems = spec.problems.length;
     final webhooks = spec.webhooks.length;

@@ -447,4 +447,36 @@ components:
       expect(find.text('openapi.json'), findsOneWidget);
     });
   });
+
+  testWidgets('a long spec is read in the background', (tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final long =
+        '$specTemplate\n${'# ${'x' * 78}\n' * (readInBackgroundOver ~/ 80)}';
+    expect(long.length, greaterThan(readInBackgroundOver));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SpecPage(
+          name: 'long.yaml',
+          text: long,
+          onImport: (_, _, _) async {},
+        ),
+      ),
+    );
+    expect(find.byKey(const Key('spec-reading')), findsOneWidget);
+    expect(find.byKey(const Key('spec-api-title')), findsNothing);
+
+    // The isolate runs in real time, which tests otherwise fake.
+    for (var i = 0; i < 100; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+      if (find.byKey(const Key('spec-reading')).evaluate().isEmpty) break;
+    }
+    expect(find.byKey(const Key('spec-reading')), findsNothing);
+    expect(find.text('My API'), findsOneWidget);
+    expect(find.text('No problems'), findsOneWidget);
+  });
 }
