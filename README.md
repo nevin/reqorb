@@ -387,7 +387,7 @@ console.log('made', order.id);
 A script can reach nothing but the request, the response and the variables: no files,
 no network, no timers, so `pm.sendRequest`, `require`, `setTimeout` and `fetch` are not
 there, and an import says so when a script uses the first two. A script that runs for
-more than ten seconds is stopped. A script can read every variable, credentials
+more than ten seconds, or holds more than 512 MB of memory, is stopped. A script can read every variable, credentials
 included, so scripts that came from elsewhere (an import, a collection folder opened
 from disk, or one whose scripts changed in a pull) do not run until you allow them.
 The same goes for files such a collection would read from your disk and send. The
@@ -677,6 +677,8 @@ crates/reqorb-cli/src/      the `reqorb` command
   cli.rs                    every command, argument and option
   input.rs  output.rs       reading what the user gave; printing and writing files
   commands/                 one module per command
+crates/reqorb-alloc/        the allocator the CLI and app use, which holds a
+                            script to its memory limit
 app/lib/                    the Flutter UI, one folder per feature
   bridge/                   Engine: the one interface to the Rust library
   request/                  the main page, the request model, the send session, the

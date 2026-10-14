@@ -1,0 +1,19 @@
+[package]
+name = "reqorb-alloc"
+description = "The system allocator, holding a script's thread to a memory limit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+
+# The one crate that needs unsafe code, to be an allocator: each use says
+# why it is sound.
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"

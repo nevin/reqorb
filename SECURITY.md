@@ -30,8 +30,9 @@ neither `..` nor a link leads out of it.
 
 **Scripts** run in an embedded JavaScript engine with no access to files, the network,
 timers or the rest of the app. They see only the request, the response and the variables.
-They are stopped after ten seconds, and the send stops waiting for them even where the
-engine cannot interrupt them.
+They are stopped after ten seconds, or when they hold more than 512 MB of memory, and
+the send stops waiting for them even where the engine cannot interrupt them. A script
+stopped for memory keeps what it held until the app quits.
 
 **The macOS app** runs in the App Sandbox. It can make network connections and open only
 the files and folders the user chooses.

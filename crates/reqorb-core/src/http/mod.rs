@@ -77,7 +77,7 @@ pub async fn send_watched(
     // what it sets can be used by the variables in it.
     let (request, prepared) = if script::present(request.pre_script.as_deref()) {
         let (mut request, known) = (request.clone(), variables.to_vec());
-        script::apart(script::time_limit(), move || {
+        script::apart(script::time_limit(), script::MEMORY_LIMIT, move || {
             script::before(&mut request, &known).map(|done| (request, done))
         })
         .await
@@ -137,7 +137,7 @@ pub async fn send_watched(
     let known: Vec<Variable> = captured.iter().chain(variables).cloned().collect();
     let judged = if script::present(request.post_script.as_deref()) {
         let received = response.clone();
-        script::apart(script::time_limit(), move || {
+        script::apart(script::time_limit(), script::MEMORY_LIMIT, move || {
             script::after(&as_sent, &received, &known)
         })
         .await

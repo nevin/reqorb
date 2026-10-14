@@ -67,3 +67,9 @@ pub use vault::{
     KeyStore, Keychain, LOCKED, Loaded, check_keys, load_workspace, locked_secrets, save_workspace,
 };
 pub use ws::{WsEvent, WsEventKind, WsHandle, ws_connect};
+
+// Tests run with the allocator the programs use, which holds scripts to
+// their memory limit.
+#[cfg(test)]
+#[global_allocator]
+static ALLOCATOR: reqorb_alloc::Counting = reqorb_alloc::Counting;

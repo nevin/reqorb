@@ -10,6 +10,10 @@ use std::process::ExitCode;
 use clap::Parser;
 
 use crate::cli::{Cli, Command};
+
+/// The system allocator, which also holds scripts to their memory limit.
+#[global_allocator]
+static ALLOCATOR: reqorb_alloc::Counting = reqorb_alloc::Counting;
 use crate::commands::{analyze, code, export, grpc, import, run, send, ws};
 
 #[tokio::main]

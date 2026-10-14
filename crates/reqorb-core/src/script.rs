@@ -7,6 +7,8 @@
 //! written in JavaScript themselves (`script_prelude.js`).
 
 use std::future::Future;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::Poll;
 use std::time::{Duration, Instant};
 
@@ -25,6 +27,9 @@ const PRELUDE: &str = include_str!("script_prelude.js");
 const LOOP_LIMIT: u64 = 5_000_000;
 const RECURSION_LIMIT: usize = 400;
 const TIME_LIMIT: Duration = Duration::from_secs(10);
+/// How much memory a script may hold, its input included: room for a
+/// response of tens of megabytes to be parsed and worked on.
+pub(crate) const MEMORY_LIMIT: usize = 512 << 20;
 /// How many instructions run between looks at the clock.
 const BUDGET: u32 = 50_000;
 
@@ -279,25 +284,49 @@ pub(crate) fn present(script: Option<&str>) -> bool {
 /// engine calls back from its own, such as a `map` callback or a `toJSON`,
 /// where it cannot be interrupted. Waiting ends a little after the limit
 /// all the same, and a script stuck there is left to finish on its own.
+///
+/// The thread is also held to [`MEMORY_LIMIT`], in programs that use
+/// `reqorb_alloc`'s allocator: one that goes over it stops for good, and
+/// waiting ends at once.
 pub(crate) async fn apart<T: Send + 'static>(
     limit: Duration,
+    memory: usize,
     work: impl FnOnce() -> T + Send + 'static,
 ) -> Result<T, String> {
     let (done, finished) = tokio::sync::oneshot::channel();
+    let over = Arc::new(AtomicBool::new(false));
+    let flag = over.clone();
     std::thread::Builder::new()
         .name("reqorb-script".into())
         // The room the engine needs for scripts that nest deeply.
         .stack_size(8 * 1024 * 1024)
         .spawn(move || {
+            let _held = reqorb_alloc::limit(memory, flag);
             let _ = done.send(std::panic::catch_unwind(std::panic::AssertUnwindSafe(work)));
         })
         .map_err(|e| format!("could not be started: {e}"))?;
     let grace = Duration::from_secs(2).min(limit);
-    match tokio::time::timeout(limit + grace, finished).await {
-        Ok(Ok(Ok(value))) => Ok(value),
-        Ok(Ok(Err(panic))) => std::panic::resume_unwind(panic),
-        Ok(Err(_)) => Err("ended without a result".into()),
-        Err(_) => Err(out_of_time(limit)),
+    let deadline = tokio::time::Instant::now() + limit + grace;
+    let mut finished = std::pin::pin!(finished);
+    loop {
+        tokio::select! {
+            result = &mut finished => return match result {
+                Ok(Ok(value)) => Ok(value),
+                Ok(Err(panic)) => std::panic::resume_unwind(panic),
+                Err(_) => Err("ended without a result".into()),
+            },
+            () = tokio::time::sleep(Duration::from_millis(20)) => {
+                if over.load(Ordering::Acquire) {
+                    return Err(format!(
+                        "it used more than {} MB of memory and was stopped",
+                        memory >> 20
+                    ));
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    return Err(out_of_time(limit));
+                }
+            }
+        }
     }
 }
 
@@ -368,13 +397,54 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_script_that_takes_too_much_memory_is_stopped() {
+        let limit = 64 << 20;
+        for script in [
+            // Doubling a string reaches gigabytes in a handful of steps.
+            "let s = 'x'; for (let i = 0; i < 40; i++) s += s;",
+            "'x'.repeat(1e9)",
+            "const all = []; for (let i = 0; i < 1e7; i++) all.push({ i });",
+        ] {
+            let started = Instant::now();
+            let outcome = apart(TIME_LIMIT, limit, move || {
+                run(
+                    script,
+                    &mut Request::new("GET", "https://api.test"),
+                    None,
+                    &[],
+                    TIME_LIMIT,
+                )
+            })
+            .await;
+            assert_eq!(
+                outcome.unwrap_err(),
+                "it used more than 64 MB of memory and was stopped",
+                "{script}"
+            );
+            assert!(started.elapsed() < Duration::from_secs(8), "{script}");
+        }
+        // Within the limit, nothing is in the way.
+        let fine = apart(TIME_LIMIT, limit, || {
+            run(
+                "const a = 'x'.repeat(1e6);",
+                &mut Request::new("GET", "https://api.test"),
+                None,
+                &[],
+                TIME_LIMIT,
+            )
+        })
+        .await;
+        assert!(fine.unwrap().is_ok());
+    }
+
+    #[tokio::test]
     async fn waiting_ends_even_where_the_engine_cannot_stop_the_script() {
         // Each callback stays inside the loop limit, and the engine cannot
         // look at the clock inside `map`.
         let script = "[...Array(1e6)].map(() => { for (let i = 0; i < 4e6; i++) {} })";
         let started = Instant::now();
         let limit = Duration::from_millis(200);
-        let outcome = apart(limit, move || {
+        let outcome = apart(limit, MEMORY_LIMIT, move || {
             run(
                 script,
                 &mut Request::new("GET", "https://api.test"),

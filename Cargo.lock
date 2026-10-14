@@ -3043,11 +3043,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "reqorb-alloc"
+version = "0.1.0"
+
+[[package]]
 name = "reqorb-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "reqorb-alloc",
  "reqorb-core",
  "serde_json",
  "tempfile",
@@ -3077,6 +3082,7 @@ dependencies = [
  "prost-types",
  "protox",
  "psl",
+ "reqorb-alloc",
  "reqwest",
  "rustls",
  "rustls-platform-verifier",
@@ -3160,6 +3166,7 @@ version = "0.1.0"
 dependencies = [
  "flutter_rust_bridge",
  "libc",
+ "reqorb-alloc",
  "reqorb-core",
 ]
 

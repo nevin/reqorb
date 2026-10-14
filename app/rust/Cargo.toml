@@ -8,6 +8,7 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 flutter_rust_bridge = "=2.13.0"
+reqorb-alloc = { version = "0.1.0", path = "../../crates/reqorb-alloc" }
 reqorb-core = { version = "0.1.0", path = "../../crates/reqorb-core" }
 
 [lints.rust]
