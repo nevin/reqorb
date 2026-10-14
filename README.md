@@ -166,7 +166,8 @@ the same controls as flags: `-k`, `--no-follow`, `--max-size MB`, `-x/--proxy UR
 
 Every HTTP request you send is recorded with its response and kept between launches.
 **History** in the sidebar lists them newest first, grouped by day; search by address,
-method, status or name. Opening one puts the request back in the editor as it was
+method, status or name, or turn on **Bodies** to search headers and bodies as well, with
+a line from each match shown under it ("which response had this ID?"). Opening one puts the request back in the editor as it was
 written, `{{variables}}` and authorization included, beside the response it got, without
 sending anything. The same view can analyse the whole history as a HAR report, or clear
 it.

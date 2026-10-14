@@ -28,6 +28,40 @@ Exchange _exchange(
 );
 
 void main() {
+  test('a search can look into headers and bodies', () {
+    HistoryEntry entry(String body) => HistoryEntry(
+      exchange: Exchange(
+        startedMs: 0,
+        request: _request('https://api.test/orders'),
+        response: response(
+          status: 201,
+          body:
+              '{"id": "ord_7Kq2", "note": "${'x' * 80}"} trailing ${'y' * 80}',
+        ),
+      ),
+      name: 'Create order',
+      cut: false,
+    );
+    final created = entry('');
+    // The address, method, status and name, as before.
+    expect(matchHistory(created, ['create', '201'], bodies: false), (
+      matches: true,
+      snippet: null,
+    ));
+    // In the body only when asked, with where it was found.
+    expect(matchHistory(created, ['ord_7kq2'], bodies: false).matches, isFalse);
+    final found = matchHistory(created, ['orders', 'ord_7kq2'], bodies: true);
+    expect(found.matches, isTrue);
+    expect(found.snippet, contains('{"id": "ord_7Kq2"'));
+    expect(found.snippet, endsWith('…'));
+    expect(found.snippet!.length, lessThan(130));
+    // Every word has to be somewhere.
+    expect(
+      matchHistory(created, ['ord_7kq2', 'absent'], bodies: true).matches,
+      isFalse,
+    );
+  });
+
   test('requests are listed under the day they were sent', () {
     final now = DateTime(2026, 3, 10, 0, 30);
     expect(dayOf(DateTime(2026, 3, 10, 0, 5), now), 'Today');
@@ -207,6 +241,15 @@ void main() {
       await tester.enterText(find.byKey(const Key('history-search')), 'zzz');
       await tester.pumpAndSettle();
       expect(find.text('No request matches'), findsOneWidget);
+      // A word only in a response body is found once bodies are searched.
+      await tester.enterText(find.byKey(const Key('history-search')), 'from');
+      await tester.pumpAndSettle();
+      expect(find.text('No request matches'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('history-bodies')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('history-snippet')), findsNWidgets(2));
+      await tester.tap(find.byKey(const Key('history-bodies')));
+      await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const Key('history-search')), 'users');
       await tester.pumpAndSettle();
 

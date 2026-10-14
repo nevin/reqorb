@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:reqorb/bridge/engine.dart';
 import 'package:reqorb/har/har_actions.dart';
@@ -32,6 +34,67 @@ String _clock(DateTime time) {
   return '${two(time.hour)}:${two(time.minute)}:${two(time.second)}';
 }
 
+/// What a search found in one entry of history: whether it matched, and,
+/// when the words were found in what was sent or received rather than in
+/// the address, a little of the text around the first of them.
+typedef HistoryMatch = ({bool matches, String? snippet});
+
+/// The text searched in each entry, lower-cased once and kept, as bodies
+/// can be large and are searched again at every key.
+final _addressText = Expando<String>();
+final _contentText = Expando<String>();
+
+String _address(HistoryEntry entry) => _addressText[entry] ??=
+    '${entry.exchange.request.method} ${entry.exchange.request.url} '
+            '${entry.exchange.response.status} ${entry.name}'
+        .toLowerCase();
+
+/// The headers and bodies, as they are shown, in one text.
+String _content(HistoryEntry entry) {
+  final request = entry.exchange.request;
+  final response = entry.exchange.response;
+  return [
+    for (final h in request.headers) '${h.name}: ${h.value}',
+    request.body ?? '',
+    for (final h in response.headers) '${h.name}: ${h.value}',
+    response.body,
+  ].join('\n');
+}
+
+/// Whether [entry] has every one of [words], which are lower case: in its
+/// address, method, status or name, and with [bodies], in its headers and
+/// bodies too.
+HistoryMatch matchHistory(
+  HistoryEntry entry,
+  List<String> words, {
+  required bool bodies,
+}) {
+  final address = _address(entry);
+  final outside = [
+    for (final w in words)
+      if (!address.contains(w)) w,
+  ];
+  if (outside.isEmpty) return (matches: true, snippet: null);
+  if (!bodies) return (matches: false, snippet: null);
+  final content = _contentText[entry] ??= _content(entry).toLowerCase();
+  if (!outside.every(content.contains)) return (matches: false, snippet: null);
+  // Shown from the text as it was, at the place found in its lower case,
+  // which has the same length for all but a few scripts.
+  final original = _content(entry);
+  final at = content.indexOf(outside.first);
+  final start = (at - 40).clamp(0, original.length);
+  final end = (at + outside.first.length + 60).clamp(0, original.length);
+  final around = original
+      .substring(start, end)
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  return (
+    matches: true,
+    snippet:
+        '${start > 0 ? '…' : ''}$around${end < original.length ? '…' : ''}',
+  );
+}
+
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key, required this.store});
 
@@ -44,28 +107,41 @@ class HistoryPage extends StatefulWidget {
 class _HistoryPageState extends State<HistoryPage> {
   final _search = TextEditingController();
 
+  /// Whether the search looks into headers and bodies as well.
+  bool _bodies = false;
+
+  /// Waits for typing to pause before searching bodies again.
+  Timer? _typing;
+
   WorkspaceStore get _store => widget.store;
 
   @override
   void dispose() {
+    _typing?.cancel();
     _search.dispose();
     super.dispose();
   }
 
   /// The entries matching every word typed, newest first.
-  List<HistoryEntry> _matching() {
+  List<(HistoryEntry, String?)> _matching() {
     final words = _search.text.toLowerCase().split(' ')
       ..removeWhere((w) => w.isEmpty);
     return [
       for (final entry in _store.history.reversed)
-        if (words.every(
-          '${entry.exchange.request.method} ${entry.exchange.request.url} '
-                  '${entry.exchange.response.status} ${entry.name}'
-              .toLowerCase()
-              .contains,
+        if (matchHistory(entry, words, bodies: _bodies) case (
+          matches: true,
+          :final snippet,
         ))
-          entry,
+          (entry, snippet),
     ];
+  }
+
+  void _searchChanged() {
+    _typing?.cancel();
+    if (!_bodies) return setState(() {});
+    _typing = Timer(const Duration(milliseconds: 150), () {
+      if (mounted) setState(() {});
+    });
   }
 
   Future<void> _clear() async {
@@ -106,7 +182,7 @@ class _HistoryPageState extends State<HistoryPage> {
         // A heading goes above the first request of each day.
         final rows = <Widget>[];
         String? heading;
-        for (final (index, entry) in entries.indexed) {
+        for (final (index, (entry, snippet)) in entries.indexed) {
           final sent = DateTime.fromMillisecondsSinceEpoch(
             entry.exchange.startedMs,
           );
@@ -130,6 +206,7 @@ class _HistoryPageState extends State<HistoryPage> {
               key: Key('history-row-$index'),
               entry: entry,
               sent: sent,
+              snippet: snippet,
               onOpen: () => Navigator.of(context).pop(entry),
             ),
           );
@@ -175,16 +252,32 @@ class _HistoryPageState extends State<HistoryPage> {
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                child: TextField(
-                  key: const Key('history-search'),
-                  controller: _search,
-                  autocorrect: false,
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    prefixIcon: Icon(Icons.search, size: 18),
-                    hintText: 'Search by address, method, status or name',
-                  ),
-                  onChanged: (_) => setState(() {}),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        key: const Key('history-search'),
+                        controller: _search,
+                        autocorrect: false,
+                        decoration: InputDecoration(
+                          isDense: true,
+                          prefixIcon: const Icon(Icons.search, size: 18),
+                          hintText: _bodies
+                              ? 'Search addresses, headers and bodies'
+                              : 'Search by address, method, status or name',
+                        ),
+                        onChanged: (_) => _searchChanged(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FilterChip(
+                      key: const Key('history-bodies'),
+                      label: const Text('Bodies'),
+                      tooltip: 'Search headers and bodies too',
+                      selected: _bodies,
+                      onSelected: (on) => setState(() => _bodies = on),
+                    ),
+                  ],
                 ),
               ),
               if (unreadable > 0)
@@ -235,11 +328,15 @@ class _HistoryRow extends StatelessWidget {
     required this.entry,
     required this.sent,
     required this.onOpen,
+    this.snippet,
   });
 
   final HistoryEntry entry;
   final DateTime sent;
   final VoidCallback onOpen;
+
+  /// Where a search matched, when it was in a header or body.
+  final String? snippet;
 
   @override
   Widget build(BuildContext context) {
@@ -299,6 +396,17 @@ class _HistoryRow extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: muted,
                   ),
+                  if (snippet case final snippet?)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        snippet,
+                        key: const Key('history-snippet'),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: small.copyWith(color: scheme.onSurfaceVariant),
+                      ),
+                    ),
                 ],
               ),
             ),
