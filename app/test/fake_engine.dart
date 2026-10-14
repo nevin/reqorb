@@ -553,6 +553,28 @@ class FakeEngine extends Engine {
     folderVersions[dir] = (folderVersions[dir] ?? 0) + 1;
   }
 
+  /// The environments kept in each folder, as the files hold them.
+  final folderEnvironments = <String, List<Environment>>{};
+
+  @override
+  Future<void> writeEnvironmentsDir({
+    required String dir,
+    required List<Environment> environments,
+  }) async {
+    if (folderFailure case final failure?) throw failure;
+    folderEnvironments[dir] = environments;
+    folderVersions[dir] = (folderVersions[dir] ?? 0) + 1;
+  }
+
+  @override
+  Future<List<Environment>> readEnvironmentsDir({
+    required String dir,
+    required List<Environment> local,
+  }) async => [
+    for (final e in folderEnvironments[dir] ?? const <Environment>[])
+      Environment(name: e.name, variables: e.variables, folder: dir),
+  ];
+
   @override
   Future<String> collectionDirStamp({required String dir}) async =>
       '${folderVersions[dir] ?? 0}';

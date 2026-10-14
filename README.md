@@ -303,8 +303,12 @@ shop/
   written over what is there until it reads cleanly again; your changes are still
   saved in the workspace.
 - **Stop keeping in folder** leaves the files where they are.
+- **Environments** can go with the collection: choose its folder under **Kept in** in
+  **Manage environments**. Each is written to `environments/<name>.env.json` with its
+  credentials blank, as for requests, and is read back, added or removed when the
+  folder changes. Unlinking the collection keeps them in the workspace.
 
-Environments, standalone requests, cookies and history are not kept in folders. A
+Standalone requests, cookies and history are not kept in folders. A
 request that is renamed and given a new address in the same pull comes back without its
 credentials. The CLI reads such a folder wherever it reads a collection file, and
 writes one with `reqorb export … -f folder -o <dir>`.

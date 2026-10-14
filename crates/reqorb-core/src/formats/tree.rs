@@ -22,12 +22,15 @@ use sha2::{Digest, Sha256};
 
 use crate::auth::auth_fields;
 use crate::redact::is_sensitive;
-use crate::{Collection, Error, Item, Request, Variable};
+use crate::{Collection, Environment, Error, Item, Request, Variable};
 
 const COLLECTION_FILE: &str = "collection.json";
 const FOLDER_FILE: &str = "folder.json";
 const REQUEST_SUFFIX: &str = ".request.json";
 const VERSION: u32 = 1;
+/// Where environments kept with the collection go, one file each.
+const ENVIRONMENT_DIR: &str = "environments";
+const ENVIRONMENT_SUFFIX: &str = ".env.json";
 
 #[derive(Serialize, Deserialize)]
 struct CollectionFile {
@@ -45,6 +48,13 @@ struct FolderFile {
     name: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     order: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct EnvironmentFile {
+    name: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    variables: Vec<Variable>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -382,6 +392,7 @@ pub fn collection_dir_stamp(dir: &str) -> Result<String, Error> {
     let root = Path::new(dir);
     let (mut files, mut folders) = (Vec::new(), Vec::new());
     owned(root, &mut files, &mut folders);
+    files.extend(environment_files(&root.join(ENVIRONMENT_DIR)));
     files.sort();
     let mut hash = Sha256::new();
     for path in files {
@@ -392,6 +403,115 @@ pub fn collection_dir_stamp(dir: &str) -> Result<String, Error> {
         hash.update([0]);
     }
     Ok(hex::encode(hash.finalize()))
+}
+
+// ----------------------------------------------------------- environments
+
+fn is_link(path: &Path) -> bool {
+    std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink())
+}
+
+fn is_credential(variable: &Variable) -> bool {
+    variable.secret || is_sensitive(&variable.key)
+}
+
+/// The environment files in `dir`, leaving out links and anything else.
+fn environment_files(dir: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut found: Vec<PathBuf> = entries
+        .flatten()
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
+        .filter(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            !name.starts_with('.') && name.ends_with(ENVIRONMENT_SUFFIX)
+        })
+        .map(|entry| entry.path())
+        .collect();
+    found.sort();
+    found
+}
+
+/// Writes `environments` beside the collection kept in `dir`, one file
+/// each in its `environments` folder, without the values of their
+/// credentials. Files of environments no longer kept there are removed.
+pub fn write_environments_dir(dir: &str, environments: &[Environment]) -> Result<(), Error> {
+    let root = Path::new(dir).join(ENVIRONMENT_DIR);
+    if is_link(&root) {
+        return Err(io(
+            "write into",
+            &root,
+            "it is a link, and reqorb writes only into real folders",
+        ));
+    }
+    let mut taken = BTreeSet::new();
+    let mut files = BTreeMap::new();
+    for environment in environments {
+        let mut variables = environment.variables.clone();
+        for variable in variables.iter_mut().filter(|v| is_credential(v)) {
+            if !is_reference(&variable.value) {
+                variable.value.clear();
+            }
+        }
+        let stem = file_name(&environment.name, &mut taken);
+        files.insert(
+            root.join(format!("{stem}{ENVIRONMENT_SUFFIX}")),
+            pretty(&EnvironmentFile {
+                name: environment.name.clone(),
+                variables,
+            }),
+        );
+    }
+    let stale = environment_files(&root);
+    if !files.is_empty() {
+        std::fs::create_dir_all(&root).map_err(|e| io("create", &root, e))?;
+    }
+    for (path, text) in &files {
+        if !is_link(path) && std::fs::read_to_string(path).is_ok_and(|current| &current == text) {
+            continue;
+        }
+        crate::files::replace_file(path, text.as_bytes(), false)
+            .map_err(|e| io("write", path, e))?;
+    }
+    for path in stale.iter().filter(|path| !files.contains_key(*path)) {
+        std::fs::remove_file(path).map_err(|e| io("remove", path, e))?;
+    }
+    if files.is_empty() {
+        // Gone only if nothing else of the user's is in it.
+        let _ = std::fs::remove_dir(&root);
+    }
+    Ok(())
+}
+
+/// The environments kept beside the collection in `dir`. Credentials,
+/// which the files do not hold, are taken from `local`, this machine's
+/// environments of the same names.
+pub fn read_environments_dir(dir: &str, local: &[Environment]) -> Result<Vec<Environment>, Error> {
+    let root = Path::new(dir).join(ENVIRONMENT_DIR);
+    if is_link(&root) {
+        return Ok(Vec::new());
+    }
+    let mut out = Vec::new();
+    for path in environment_files(&root) {
+        let file: EnvironmentFile = read_json(&path)?;
+        let mine = local.iter().find(|e| e.name == file.name);
+        let mut variables = file.variables;
+        for variable in variables.iter_mut().filter(|v| is_credential(v)) {
+            if variable.value.is_empty()
+                && let Some(kept) =
+                    mine.and_then(|e| e.variables.iter().find(|v| v.key == variable.key))
+            {
+                variable.value.clone_from(&kept.value);
+            }
+        }
+        out.push(Environment {
+            name: file.name,
+            variables,
+            folder: Some(dir.to_string()),
+        });
+    }
+    Ok(out)
 }
 
 /// Whether `dir` holds a collection written by [`write_collection_dir`].
@@ -603,6 +723,53 @@ mod tests {
         assert_ne!(added, changed);
         std::fs::remove_file(dir.path().join("New.request.json")).unwrap();
         assert_eq!(collection_dir_stamp(path).unwrap(), changed);
+    }
+
+    #[test]
+    fn environments_are_kept_beside_the_collection_without_credentials() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+        write_collection_dir(path, &shop()).unwrap();
+        let before = collection_dir_stamp(path).unwrap();
+        let staging = Environment {
+            name: "Staging: EU".into(),
+            variables: vec![
+                Variable::new("base", "https://eu.test"),
+                Variable::new("api_key", "k-123"),
+                Variable::new("token", "{{shared_token}}"),
+            ],
+            folder: None,
+        };
+        let local = Environment {
+            name: "Local".into(),
+            variables: vec![Variable::new("base", "http://localhost")],
+            folder: None,
+        };
+        write_environments_dir(path, &[staging.clone(), local.clone()]).unwrap();
+        let text =
+            std::fs::read_to_string(dir.path().join("environments/Staging_ EU.env.json")).unwrap();
+        assert!(text.contains("https://eu.test") && text.contains("{{shared_token}}"));
+        assert!(!text.contains("k-123"), "{text}");
+        // They are part of what the folder holds.
+        assert_ne!(collection_dir_stamp(path).unwrap(), before);
+
+        // Read back with this machine's copies, they come back whole.
+        let read = read_environments_dir(path, std::slice::from_ref(&staging)).unwrap();
+        let mut expected = vec![local.clone(), staging.clone()];
+        for environment in &mut expected {
+            environment.folder = Some(path.to_string());
+        }
+        assert_eq!(read, expected);
+        // Elsewhere the credential is empty, waiting to be filled in.
+        let fresh = read_environments_dir(path, &[]).unwrap();
+        assert_eq!(fresh[1].variables[1].value, "");
+
+        // One no longer kept there is removed; with none, so is the folder.
+        write_environments_dir(path, &[local]).unwrap();
+        assert_eq!(read_environments_dir(path, &[]).unwrap().len(), 1);
+        write_environments_dir(path, &[]).unwrap();
+        assert!(!dir.path().join("environments").exists());
+        assert_eq!(collection_dir_stamp(path).unwrap(), before);
     }
 
     #[test]

@@ -293,6 +293,7 @@ pub struct _Variable {
 pub struct _Environment {
     pub name: String,
     pub variables: Vec<Variable>,
+    pub folder: Option<String>,
 }
 
 #[frb(mirror(Item))]
@@ -946,6 +947,21 @@ pub async fn read_collection_dir(
 #[frb(sync)]
 pub fn is_collection_dir(dir: String) -> bool {
     reqorb_core::is_collection_dir(&dir)
+}
+
+/// Writes environments beside the collection kept in `dir`, without the
+/// values of their credentials.
+pub fn write_environments_dir(dir: String, environments: Vec<Environment>) -> Result<(), String> {
+    reqorb_core::write_environments_dir(&dir, &environments).map_err(|e| e.to_string())
+}
+
+/// The environments kept beside the collection in `dir`, with credentials
+/// filled in from `local`.
+pub fn read_environments_dir(
+    dir: String,
+    local: Vec<Environment>,
+) -> Result<Vec<Environment>, String> {
+    reqorb_core::read_environments_dir(&dir, &local).map_err(|e| e.to_string())
 }
 
 /// A fingerprint of a collection folder's files, which changes when they do.

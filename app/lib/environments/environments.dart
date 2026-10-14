@@ -100,6 +100,7 @@ class _EnvironmentsPageState extends State<EnvironmentsPage> {
       Environment(
         name: nameOk ? name : current.name,
         variables: textToVariables(_variables.text),
+        folder: current.folder,
       ),
     );
   }
@@ -216,6 +217,56 @@ class _EnvironmentsPageState extends State<EnvironmentsPage> {
     );
   }
 
+  /// Where the environment is kept: in the workspace, or beside one of the
+  /// collections kept in a folder, to be shared with it.
+  List<Widget> _keptIn(BuildContext context, Environment current) {
+    final linked = [
+      for (final (i, c) in _store.collections.indexed)
+        if (c.link != null) (i, c),
+    ];
+    if (linked.isEmpty && current.folder == null) return const [];
+    final known = linked.any((l) => l.$2.link!.path == current.folder);
+    return [
+      const SizedBox(height: 12),
+      // A field of its own for each environment and place, as a form field
+      // keeps the value it started with.
+      KeyedSubtree(
+        key: ValueKey((_index, current.folder)),
+        child: DropdownButtonFormField<String?>(
+          key: const Key('env-kept-in'),
+          initialValue: current.folder,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: 'Kept in',
+            helperText:
+                'Kept in a collection’s folder, it is shared with the '
+                'collection, credentials left out.',
+          ),
+          items: [
+            const DropdownMenuItem(value: null, child: Text('This workspace')),
+            for (final (_, c) in linked)
+              DropdownMenuItem(
+                value: c.link!.path,
+                child: Text(
+                  'The folder of ${c.name}',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            if (current.folder != null && !known)
+              DropdownMenuItem(
+                value: current.folder,
+                child: const Text('A folder no longer open'),
+              ),
+          ],
+          onChanged: (folder) => setState(() {
+            final at = linked.where((l) => l.$2.link!.path == folder);
+            _store.keepEnvironmentWith(_index, at.firstOrNull?.$1);
+          }),
+        ),
+      ),
+    ];
+  }
+
   Widget _editor(
     BuildContext context,
     List<Environment> environments, {
@@ -309,6 +360,7 @@ class _EnvironmentsPageState extends State<EnvironmentsPage> {
                 ),
                 onChanged: (_) => _edited(),
               ),
+              ..._keptIn(context, current),
               const SizedBox(height: 12),
               Expanded(
                 child: Column(

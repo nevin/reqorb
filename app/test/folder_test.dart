@@ -27,6 +27,9 @@ void main() {
     items: const [],
   );
 
+  Variable variable(String key, String value) =>
+      Variable(key: key, value: value, enabled: true, secret: false);
+
   Collection shop([List<Item>? items]) => Collection(
     unreviewed: false,
     name: 'Shop',
@@ -179,6 +182,48 @@ void main() {
     expect(store.collections.single.name, 'Shop');
     expect(find.text('Theirs'), findsOneWidget);
     expect(store.folderConflicts, isEmpty);
+  });
+
+  testWidgets('environments kept with a collection travel with its folder', (
+    tester,
+  ) async {
+    await open(tester);
+    picker.next = '/work/shop';
+    await menu(tester, 'link-collection');
+    await saved(tester);
+    store.addEnvironment();
+    store.updateEnvironment(
+      0,
+      Environment(name: 'Staging', variables: [variable('base', 'stg')]),
+    );
+    store.keepEnvironmentWith(0, 0);
+    await saved(tester);
+    expect(engine.folderEnvironments['/work/shop']!.single.name, 'Staging');
+    expect(store.environments.single.folder, '/work/shop');
+
+    // A pull adds one and drops the other.
+    engine.folderEnvironments['/work/shop'] = [
+      Environment(name: 'Prod', variables: [variable('base', 'prd')]),
+    ];
+    engine.folderVersions['/work/shop'] = 99;
+    await store.checkFolders();
+    await saved(tester);
+    expect([for (final e in store.environments) e.name], ['Prod']);
+    expect(store.environments.single.folder, '/work/shop');
+
+    // Kept in the workspace again, it leaves the folder.
+    store.keepEnvironmentWith(0, null);
+    await saved(tester);
+    expect(engine.folderEnvironments['/work/shop'], isEmpty);
+    expect(store.environments.single.folder, isNull);
+
+    // Unlinking the collection leaves its environments in the workspace.
+    store.keepEnvironmentWith(0, 0);
+    await saved(tester);
+    await menu(tester, 'unlink-collection');
+    await saved(tester);
+    expect(store.environments.single.name, 'Prod');
+    expect(store.environments.single.folder, isNull);
   });
 
   testWidgets('opens a collection that someone else keeps in a folder', (

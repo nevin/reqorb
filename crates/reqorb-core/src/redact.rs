@@ -549,6 +549,7 @@ mod tests {
         );
 
         let environment = Environment {
+            folder: None,
             name: "dev".into(),
             variables: vec![Variable::new("token", "t"), Variable::new("host", "h")],
         };

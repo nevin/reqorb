@@ -215,6 +215,19 @@ abstract class Engine {
   /// Whether the folder at [dir] holds a collection written by reqorb.
   bool isCollectionDir({required String dir});
 
+  /// Writes [environments] beside the collection kept in [dir].
+  Future<void> writeEnvironmentsDir({
+    required String dir,
+    required List<Environment> environments,
+  });
+
+  /// The environments kept beside the collection in [dir], their
+  /// credentials filled in from [local].
+  Future<List<Environment>> readEnvironmentsDir({
+    required String dir,
+    required List<Environment> local,
+  });
+
   /// A fingerprint of the collection files in [dir], which changes when
   /// any of them is changed, added or removed.
   Future<String> collectionDirStamp({required String dir});
@@ -486,6 +499,18 @@ class RustEngine extends Engine {
 
   @override
   bool isCollectionDir({required String dir}) => rust.isCollectionDir(dir: dir);
+
+  @override
+  Future<void> writeEnvironmentsDir({
+    required String dir,
+    required List<Environment> environments,
+  }) => rust.writeEnvironmentsDir(dir: dir, environments: environments);
+
+  @override
+  Future<List<Environment>> readEnvironmentsDir({
+    required String dir,
+    required List<Environment> local,
+  }) => rust.readEnvironmentsDir(dir: dir, local: local);
 
   @override
   Future<String> collectionDirStamp({required String dir}) =>

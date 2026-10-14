@@ -850,6 +850,7 @@ fn workspace_round_trips_through_disk() {
             items: Vec::new(),
         }],
         environments: vec![Environment {
+            folder: None,
             name: "Dev".into(),
             variables: vec![Variable::new("base", "http://localhost")],
         }],

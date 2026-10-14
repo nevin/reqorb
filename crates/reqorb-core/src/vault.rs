@@ -423,6 +423,7 @@ pub(crate) mod tests {
                 items: Vec::new(),
             }],
             environments: vec![Environment {
+                folder: None,
                 name: "dev".into(),
                 variables: vec![plain, token, marked, {
                     let mut empty = Variable::new("unset", "");

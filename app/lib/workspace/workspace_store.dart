@@ -185,7 +185,7 @@ class WorkspaceStore extends ChangeNotifier {
     try {
       final saving = _workspace;
       final why = await engine.saveWorkspace(path: path, workspace: saving);
-      await _writeLinked(saving.collections);
+      await _writeLinked(saving);
       // Entering a locked credential again replaces it, so the count of
       // those still locked can only be known by looking.
       final locked = lockedSecrets == 0
@@ -428,6 +428,71 @@ class WorkspaceStore extends ChangeNotifier {
   /// only one that has changed is written again.
   final _written = <String, Collection>{};
 
+  /// The environments kept in each linked folder, as last written there or
+  /// read from it.
+  final _writtenEnvironments = <String, List<Environment>>{};
+
+  /// The environments kept in the folder at [dir].
+  List<Environment> keptIn(String dir, [List<Environment>? from]) => [
+    for (final e in from ?? environments)
+      if (e.folder == dir) e,
+  ];
+
+  static bool _sameEnvironments(List<Environment>? a, List<Environment> b) =>
+      a != null &&
+      a.length == b.length &&
+      [
+        for (var i = 0; i < a.length; i++)
+          a[i].name == b[i].name &&
+              a[i].folder == b[i].folder &&
+              listEquals(a[i].variables, b[i].variables),
+      ].every((same) => same);
+
+  /// Takes up the environments read from the folder at [dir]: each replaces
+  /// the one of its name here, new ones are added, and those that were kept
+  /// there but are gone from it, as after a pull, are removed.
+  void _takeEnvironments(String dir, List<Environment> read) {
+    final names = {for (final e in read) e.name};
+    final byName = {for (final e in read) e.name: e};
+    final out = <Environment>[];
+    for (final e in environments) {
+      if (byName.remove(e.name) case final replaced?) {
+        out.add(replaced);
+      } else if (e.folder != dir || names.contains(e.name)) {
+        out.add(e);
+      }
+    }
+    out.addAll(byName.values);
+    _writtenEnvironments[dir] = read;
+    if (!_sameEnvironments(environments, out)) {
+      final active = activeEnvironment;
+      _set(
+        environments: out,
+        activeEnvironment: active != null && !out.any((e) => e.name == active)
+            ? () => null
+            : null,
+      );
+    }
+  }
+
+  /// Keeps the environment at [index] in the folder of the collection at
+  /// [collection], beside its requests; with null, no longer in any.
+  void keepEnvironmentWith(int index, int? collection) {
+    final environment = environments[index];
+    final folder = collection == null
+        ? null
+        : collections[collection].link?.path;
+    if (folder == environment.folder) return;
+    updateEnvironment(
+      index,
+      Environment(
+        name: environment.name,
+        variables: environment.variables,
+        folder: folder,
+      ),
+    );
+  }
+
   /// Each linked folder's fingerprint when it was last read or written, to
   /// tell when its files have changed since, as by a pull.
   final _stamps = <String, String>{};
@@ -488,6 +553,7 @@ class WorkspaceStore extends ChangeNotifier {
       return '$e';
     }
     _written[dir] = linked;
+    _writtenEnvironments[dir] = const [];
     await _stamp(dir);
     folderProblems.remove(dir);
     _set(collections: [...collections]..[index] = linked);
@@ -501,12 +567,20 @@ class WorkspaceStore extends ChangeNotifier {
     final dir = collections[index].link?.path;
     if (dir == null) return;
     _written.remove(dir);
+    _writtenEnvironments.remove(dir);
     _stamps.remove(dir);
     folderConflicts.remove(dir);
     folderProblems.remove(dir);
     _set(
       collections: [...collections]
         ..[index] = _linked(collections[index], null),
+      // Its environments stay, kept in the workspace from now on.
+      environments: [
+        for (final e in environments)
+          e.folder == dir
+              ? Environment(name: e.name, variables: e.variables)
+              : e,
+      ],
     );
   }
 
@@ -520,6 +594,10 @@ class WorkspaceStore extends ChangeNotifier {
     if (link == null) return null;
     try {
       final read = await engine.readCollectionDir(dir: link.path, local: local);
+      final kept = await engine.readEnvironmentsDir(
+        dir: link.path,
+        local: environments,
+      );
       await _stamp(link.path);
       folderProblems.remove(link.path);
       folderConflicts.remove(link.path);
@@ -527,6 +605,7 @@ class WorkspaceStore extends ChangeNotifier {
       if (at < 0) return null;
       // As read, it is also what the folder holds.
       _written[link.path] = read;
+      _takeEnvironments(link.path, kept);
       if (read != local) {
         _set(collections: [...collections]..[at] = read);
       } else {
@@ -548,9 +627,14 @@ class WorkspaceStore extends ChangeNotifier {
     }
     try {
       final read = await engine.readCollectionDir(dir: dir);
+      final kept = await engine.readEnvironmentsDir(
+        dir: dir,
+        local: environments,
+      );
       final linked = _linked(read, FolderLink(path: dir, grant: grant));
       _written[dir] = linked;
       await _stamp(dir);
+      _takeEnvironments(dir, kept);
       _set(collections: [...collections, linked]);
       return null;
     } catch (e) {
@@ -583,11 +667,18 @@ class WorkspaceStore extends ChangeNotifier {
   }
 
   /// Writes every linked collection that has changed to its folder.
-  Future<void> _writeLinked(List<Collection> saving) async {
+  Future<void> _writeLinked(Workspace saving) async {
     var changed = false;
-    for (final collection in saving) {
+    for (final collection in saving.collections) {
       final dir = collection.link?.path;
-      if (dir == null || identical(_written[dir], collection)) continue;
+      if (dir == null) continue;
+      final kept = keptIn(dir, saving.environments);
+      final sameCollection = identical(_written[dir], collection);
+      final sameEnvironments = _sameEnvironments(
+        _writtenEnvironments[dir],
+        kept,
+      );
+      if (sameCollection && sameEnvironments) continue;
       // One that could not be read is not written over what is there.
       if (folderProblems.containsKey(dir) && !_written.containsKey(dir)) {
         continue;
@@ -601,8 +692,14 @@ class WorkspaceStore extends ChangeNotifier {
         continue;
       }
       try {
-        await engine.writeCollectionDir(dir: dir, collection: collection);
-        _written[dir] = collection;
+        if (!sameCollection) {
+          await engine.writeCollectionDir(dir: dir, collection: collection);
+          _written[dir] = collection;
+        }
+        if (!sameEnvironments) {
+          await engine.writeEnvironmentsDir(dir: dir, environments: kept);
+          _writtenEnvironments[dir] = kept;
+        }
         await _stamp(dir);
         changed = folderProblems.remove(dir) != null || changed;
       } catch (e) {
@@ -620,14 +717,17 @@ class WorkspaceStore extends ChangeNotifier {
     final collection = collections[index];
     final dir = collection.link?.path;
     if (dir == null) return null;
+    final kept = keptIn(dir);
     try {
       await engine.writeCollectionDir(dir: dir, collection: collection);
+      await engine.writeEnvironmentsDir(dir: dir, environments: kept);
     } catch (e) {
       folderProblems[dir] = '$e';
       notifyListeners();
       return '$e';
     }
     _written[dir] = collection;
+    _writtenEnvironments[dir] = kept;
     await _stamp(dir);
     folderConflicts.remove(dir);
     folderProblems.remove(dir);
@@ -647,7 +747,10 @@ class WorkspaceStore extends ChangeNotifier {
       // The list may have changed while the disk was looked at.
       final at = collections.indexOf(collection);
       if (at < 0) continue;
-      if (_written[dir] == collection) {
+      final unchangedHere =
+          _written[dir] == collection &&
+          _sameEnvironments(_writtenEnvironments[dir], keptIn(dir));
+      if (unchangedHere) {
         await reloadCollection(at);
       } else {
         folderConflicts.add(dir);

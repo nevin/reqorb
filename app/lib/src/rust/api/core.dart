@@ -274,6 +274,26 @@ Future<Collection> readCollectionDir({
 bool isCollectionDir({required String dir}) =>
     RustLib.instance.api.crateApiCoreIsCollectionDir(dir: dir);
 
+/// Writes environments beside the collection kept in `dir`, without the
+/// values of their credentials.
+Future<void> writeEnvironmentsDir({
+  required String dir,
+  required List<Environment> environments,
+}) => RustLib.instance.api.crateApiCoreWriteEnvironmentsDir(
+  dir: dir,
+  environments: environments,
+);
+
+/// The environments kept beside the collection in `dir`, with credentials
+/// filled in from `local`.
+Future<List<Environment>> readEnvironmentsDir({
+  required String dir,
+  required List<Environment> local,
+}) => RustLib.instance.api.crateApiCoreReadEnvironmentsDir(
+  dir: dir,
+  local: local,
+);
+
 /// A fingerprint of a collection folder's files, which changes when they do.
 Future<String> collectionDirStamp({required String dir}) =>
     RustLib.instance.api.crateApiCoreCollectionDirStamp(dir: dir);
@@ -596,11 +616,12 @@ enum DisabledTls { none, tls12, tls13 }
 class Environment {
   final String name;
   final List<Variable> variables;
+  final String? folder;
 
-  const Environment({required this.name, required this.variables});
+  const Environment({required this.name, required this.variables, this.folder});
 
   @override
-  int get hashCode => name.hashCode ^ variables.hashCode;
+  int get hashCode => name.hashCode ^ variables.hashCode ^ folder.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -608,7 +629,8 @@ class Environment {
       other is Environment &&
           runtimeType == other.runtimeType &&
           name == other.name &&
-          variables == other.variables;
+          variables == other.variables &&
+          folder == other.folder;
 }
 
 class Exchange {

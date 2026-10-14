@@ -24,7 +24,8 @@ pub use curl::to_curl;
 pub use har::{import_har, to_har};
 pub use native::export_native;
 pub use tree::{
-    collection_dir_stamp, is_collection_dir, read_collection_dir, write_collection_dir,
+    collection_dir_stamp, is_collection_dir, read_collection_dir, read_environments_dir,
+    write_collection_dir, write_environments_dir,
 };
 
 use self::bruno::bruno_collection;
@@ -137,6 +138,7 @@ fn parse(text: &str, name_hint: &str, origin: Option<&url::Url>) -> Result<Impor
                 source: "postman-environment".into(),
                 collections: Vec::new(),
                 environments: vec![Environment {
+                    folder: None,
                     name: str_field(&value, "name").unwrap_or(name_hint).to_string(),
                     variables: postman_variables(&value["values"]),
                 }],
@@ -173,6 +175,7 @@ fn parse(text: &str, name_hint: &str, origin: Option<&url::Url>) -> Result<Impor
             source: "dotenv".into(),
             collections: Vec::new(),
             environments: vec![Environment {
+                folder: None,
                 name: name_hint.to_string(),
                 variables,
             }],

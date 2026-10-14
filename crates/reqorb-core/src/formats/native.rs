@@ -31,6 +31,12 @@ pub fn export_native(collections: &[Collection], environments: &[Environment]) -
                 ..collection.clone()
             })
             .collect(),
-        environments: environments.to_vec(),
+        environments: environments
+            .iter()
+            .map(|environment| Environment {
+                folder: None,
+                ..environment.clone()
+            })
+            .collect(),
     })
 }

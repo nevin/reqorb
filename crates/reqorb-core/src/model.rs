@@ -284,6 +284,11 @@ pub struct Environment {
     pub name: String,
     #[serde(default)]
     pub variables: Vec<Variable>,
+    /// The collection folder it is kept in, beside that collection's
+    /// requests, if it is. Like a collection's link, this belongs to the
+    /// machine it was set on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
 }
 
 /// A saved request, or a folder when `request` is `None`.

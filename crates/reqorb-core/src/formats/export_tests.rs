@@ -44,6 +44,7 @@ pub(super) fn sample() -> Collection {
 
 fn sample_env() -> Environment {
     Environment {
+        folder: None,
         name: "Staging".into(),
         variables: vec![
             Variable::new("base", "https://staging.test"),

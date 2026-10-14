@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 491324124;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 378899969;
 
 // Section: executor
 
@@ -1260,6 +1260,40 @@ fn wire__crate__api__core__read_collection_dir_impl(
         },
     )
 }
+fn wire__crate__api__core__read_environments_dir_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "read_environments_dir",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_dir = <String>::sse_decode(&mut deserializer);
+            let api_local = <Vec<crate::api::core::Environment>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::core::read_environments_dir(api_dir, api_local)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__core__redact_collection_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -1551,6 +1585,42 @@ fn wire__crate__api__core__write_collection_dir_impl(
         },
     )
 }
+fn wire__crate__api__core__write_environments_dir_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "write_environments_dir",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_dir = <String>::sse_decode(&mut deserializer);
+            let api_environments =
+                <Vec<crate::api::core::Environment>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok =
+                        crate::api::core::write_environments_dir(api_dir, api_environments)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__core__ws_close_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -1711,6 +1781,7 @@ const _: fn() = || {
         let Environment = None::<crate::api::core::Environment>.unwrap();
         let _: String = Environment.name;
         let _: Vec<crate::api::core::Variable> = Environment.variables;
+        let _: Option<String> = Environment.folder;
     }
     {
         let Exchange = None::<crate::api::core::Exchange>.unwrap();
@@ -2268,9 +2339,11 @@ impl SseDecode for crate::api::core::Environment {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_name = <String>::sse_decode(deserializer);
         let mut var_variables = <Vec<crate::api::core::Variable>>::sse_decode(deserializer);
+        let mut var_folder = <Option<String>>::sse_decode(deserializer);
         return crate::api::core::Environment {
             name: var_name,
             variables: var_variables,
+            folder: var_folder,
         };
     }
 }
@@ -3608,11 +3681,15 @@ fn pde_ffi_dispatcher_primary_impl(
         32 => wire__crate__api__core__load_history_impl(port, ptr, rust_vec_len, data_len),
         33 => wire__crate__api__core__load_workspace_impl(port, ptr, rust_vec_len, data_len),
         36 => wire__crate__api__core__read_collection_dir_impl(port, ptr, rust_vec_len, data_len),
-        41 => wire__crate__api__core__save_workspace_impl(port, ptr, rust_vec_len, data_len),
-        42 => wire__crate__api__core__send_request_impl(port, ptr, rust_vec_len, data_len),
-        43 => wire__crate__api__core__send_request_watched_impl(port, ptr, rust_vec_len, data_len),
-        44 => wire__crate__api__core__write_collection_dir_impl(port, ptr, rust_vec_len, data_len),
-        46 => wire__crate__api__core__ws_open_impl(port, ptr, rust_vec_len, data_len),
+        37 => wire__crate__api__core__read_environments_dir_impl(port, ptr, rust_vec_len, data_len),
+        42 => wire__crate__api__core__save_workspace_impl(port, ptr, rust_vec_len, data_len),
+        43 => wire__crate__api__core__send_request_impl(port, ptr, rust_vec_len, data_len),
+        44 => wire__crate__api__core__send_request_watched_impl(port, ptr, rust_vec_len, data_len),
+        45 => wire__crate__api__core__write_collection_dir_impl(port, ptr, rust_vec_len, data_len),
+        46 => {
+            wire__crate__api__core__write_environments_dir_impl(port, ptr, rust_vec_len, data_len)
+        }
+        48 => wire__crate__api__core__ws_open_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -3642,12 +3719,12 @@ fn pde_ffi_dispatcher_sync_impl(
         30 => wire__crate__api__core__is_collection_dir_impl(ptr, rust_vec_len, data_len),
         34 => wire__crate__api__core__locked_secrets_impl(ptr, rust_vec_len, data_len),
         35 => wire__crate__api__core__parse_run_data_impl(ptr, rust_vec_len, data_len),
-        37 => wire__crate__api__core__redact_collection_impl(ptr, rust_vec_len, data_len),
-        38 => wire__crate__api__core__redact_environment_impl(ptr, rust_vec_len, data_len),
-        39 => wire__crate__api__core__redact_exchanges_impl(ptr, rust_vec_len, data_len),
-        40 => wire__crate__api__core__redact_text_impl(ptr, rust_vec_len, data_len),
-        45 => wire__crate__api__core__ws_close_impl(ptr, rust_vec_len, data_len),
-        47 => wire__crate__api__core__ws_send_impl(ptr, rust_vec_len, data_len),
+        38 => wire__crate__api__core__redact_collection_impl(ptr, rust_vec_len, data_len),
+        39 => wire__crate__api__core__redact_environment_impl(ptr, rust_vec_len, data_len),
+        40 => wire__crate__api__core__redact_exchanges_impl(ptr, rust_vec_len, data_len),
+        41 => wire__crate__api__core__redact_text_impl(ptr, rust_vec_len, data_len),
+        47 => wire__crate__api__core__ws_close_impl(ptr, rust_vec_len, data_len),
+        49 => wire__crate__api__core__ws_send_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -3973,6 +4050,7 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::Environment>
         [
             self.0.name.into_into_dart().into_dart(),
             self.0.variables.into_into_dart().into_dart(),
+            self.0.folder.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -5276,6 +5354,7 @@ impl SseEncode for crate::api::core::Environment {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.name, serializer);
         <Vec<crate::api::core::Variable>>::sse_encode(self.variables, serializer);
+        <Option<String>>::sse_encode(self.folder, serializer);
     }
 }
 
