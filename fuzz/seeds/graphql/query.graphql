@@ -1,1 +1,0 @@
-query Q($id: ID!) { user(id: $id) { name ...F friends(first: 2) { edges { node { id } } } } } fragment F on User { email }

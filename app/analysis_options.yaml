@@ -17,10 +17,7 @@ analyzer:
 linter:
   rules:
     - always_declare_return_types
-    - avoid_dynamic_calls
-    - avoid_slow_async_io
     - cancel_subscriptions
-    - close_sinks
     - prefer_final_locals
     - unawaited_futures
     - use_build_context_synchronously

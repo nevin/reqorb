@@ -725,11 +725,7 @@ cd app && flutter test                               # the app against a stand-i
 cd app && caffeinate -d flutter test integration_test -d macos   # the real app, end to end
 cd app && flutter_rust_bridge_codegen generate       # after changing app/rust/src/api
 scripts/coverage.sh                                  # how much the tests cover; fails below the floor
-cd fuzz && cargo +nightly fuzz run import corpus/import seeds/import   # or har, run_data, graphql
 ```
-
-The parsers that read files from elsewhere are fuzzed for a few minutes a week
-(`.github/workflows/fuzz.yml`); `fuzz/seeds` holds the inputs they start from.
 
 GitHub Actions runs all of these on every push (`.github/workflows/ci.yml`), and a
 failure in any of them, the end-to-end job included, fails the run.
@@ -749,8 +745,7 @@ git tag v0.2.0 && git push origin v0.2.0
 
 `.github/workflows/release.yml` then builds the CLI for macOS (Apple silicon and
 Intel), Linux and Windows, and the macOS app, and publishes them as a GitHub release
-with a SHA-256 checksum for each and a Homebrew formula (`reqorb.rb`) to put in a tap.
-The app is signed with a Developer ID and notarized when the repository has the
+with a SHA-256 checksum for each. The app is signed with a Developer ID and notarized when the repository has the
 secrets the workflow lists at its top; without them it is signed ad hoc, and other Macs
 refuse to open it until it is allowed in **System Settings › Privacy & Security**.
 
