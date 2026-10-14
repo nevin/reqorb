@@ -202,8 +202,9 @@ readable, and an unchanged workspace saves to an unchanged file.
   is stopped before it is sent, and saving does not destroy them.
 - **Switching it off:** **Settings › General › Security › Encrypt saved credentials**.
   The next save writes everything as plain text.
-- **Where it works:** macOS and iPad. On Linux and Windows reqorb cannot use the
-  keychain yet; Settings says so, and credentials are saved as plain text.
+- **Where it works:** the Keychain on macOS and iPad, the Credential Manager on
+  Windows, and the Secret Service (GNOME Keyring or KWallet) on Linux. Where none is
+  running, Settings says so, and credentials are saved as plain text.
 - **What it does not cover:** credentials typed into a URL or a request body, and files
   you export; use **Redact** for those.
 - **The file itself** is readable by your user only, and is written whole or not at

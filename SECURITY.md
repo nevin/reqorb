@@ -14,8 +14,9 @@ cookies, a proxy password) is encrypted with XChaCha20-Poly1305 before it is wri
 key is made on first use and kept only in the system keychain. On load, only those fields
 are decrypted, so an encrypted value copied anywhere else stays encrypted. The workspace
 and history files are written whole or not at all and are readable by their owner only.
-On systems without a supported keychain, credentials are saved unencrypted and the app
-says so.
+The keychain is the macOS or iOS Keychain, the Windows Credential Manager, or the
+Secret Service on Linux. Where none can be used, credentials are saved unencrypted and
+the app says so.
 
 **Collections kept as folders** leave credentials out of the files. Reading or writing a
 folder never follows a symbolic link, so a cloned repository cannot point a request file

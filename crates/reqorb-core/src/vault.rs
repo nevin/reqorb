@@ -34,10 +34,17 @@ pub trait KeyStore: Send + Sync {
     fn save(&self, key: &[u8]) -> Result<(), String>;
 }
 
-/// The system keychain: Keychain Services on macOS and iOS.
+/// The system keychain: Keychain Services on macOS and iOS, the Credential
+/// Manager on Windows, and the Secret Service (GNOME Keyring, KWallet) on
+/// Linux.
 pub struct Keychain;
 
-#[cfg(any(target_os = "macos", target_os = "ios"))]
+#[cfg(any(
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "windows",
+    target_os = "linux"
+))]
 mod system {
     use std::sync::LazyLock;
 
@@ -49,6 +56,10 @@ mod system {
         let store = apple_native_keyring_store::keychain::Store::new();
         #[cfg(target_os = "ios")]
         let store = apple_native_keyring_store::protected::Store::new();
+        #[cfg(target_os = "windows")]
+        let store = windows_native_keyring_store::Store::new();
+        #[cfg(target_os = "linux")]
+        let store = zbus_secret_service_keyring_store::Store::new();
         keyring_core::set_default_store(store.map_err(|e| e.to_string())?);
         Ok(())
     });
@@ -71,7 +82,12 @@ mod system {
     }
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+#[cfg(not(any(
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "windows",
+    target_os = "linux"
+)))]
 mod system {
     const WHY: &str = "reqorb cannot use this system's keychain yet";
 
