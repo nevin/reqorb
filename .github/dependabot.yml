@@ -10,6 +10,9 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+    # Pinned in app/rust/Cargo.toml until backtrace builds for iOS with it.
+    ignore:
+      - dependency-name: libc
 
   - package-ecosystem: pub
     directory: /app

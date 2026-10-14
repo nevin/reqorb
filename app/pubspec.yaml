@@ -9,7 +9,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.8
   rust_lib_reqorb:
     path: rust_builder
   flutter_rust_bridge: 2.13.0

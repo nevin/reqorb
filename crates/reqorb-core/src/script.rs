@@ -403,7 +403,9 @@ mod tests {
             // Doubling a string reaches gigabytes in a handful of steps.
             "let s = 'x'; for (let i = 0; i < 40; i++) s += s;",
             "'x'.repeat(1e9)",
-            "const all = []; for (let i = 0; i < 1e7; i++) all.push({ i });",
+            // Many allocations, each big enough that slow machines get to
+            // the limit well before the time limit.
+            "const k = 'x'.repeat(1e3), all = []; for (let i = 0; i < 1e7; i++) all.push({ i, s: k + i });",
         ] {
             let started = Instant::now();
             let outcome = apart(TIME_LIMIT, limit, move || {
