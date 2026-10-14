@@ -182,8 +182,16 @@ const _methods = [
 ApiSpec readSpec(String text) {
   final json = looksLikeJson(text);
   Object? root;
+  YamlNode? tree;
   try {
-    root = readTree(text);
+    if (json) {
+      root = jsonDecode(text);
+    } else {
+      final value = loadYaml(text);
+      // Kept, as it knows the line each part of the document is on.
+      if (value is YamlNode) tree = value;
+      root = _plain(value);
+    }
   } on YamlException catch (e) {
     return _unreadable(
       'Not valid YAML: ${e.message}',
@@ -202,7 +210,7 @@ ApiSpec readSpec(String text) {
       null,
     );
   }
-  return _Reader(root, text, json ? 'json' : 'yaml').read();
+  return _Reader(root, text, json ? 'json' : 'yaml', tree).read();
 }
 
 /// How long a document can be, in characters, and still be read on the
@@ -242,7 +250,7 @@ Object? _plain(Object? node) => switch (node) {
 };
 
 class _Reader {
-  _Reader(this.root, this.text, this.format);
+  _Reader(this.root, this.text, this.format, this._tree);
 
   final Map<String, Object?> root;
   final String text;
@@ -251,19 +259,65 @@ class _Reader {
 
   bool get _swagger => root['swagger'] != null;
 
-  void _problem(String message, [String? near]) {
-    // A broken reference is met as often as it is used; once says it.
-    if (problems.any((p) => p.message == message)) return;
-    problems.add((message: message, line: near == null ? null : _lineOf(near)));
+  /// The document as YAML nodes, which know their lines. JSON is read
+  /// this way too, but only once a problem needs a line: JSON is YAML,
+  /// but YAML is slower to read.
+  YamlNode? _tree;
+  bool _treeTried = false;
+  YamlNode? get _nodes {
+    if (_tree == null && !_treeTried) {
+      _treeTried = true;
+      try {
+        if (loadYamlNode(text) case final YamlMap map) _tree = map;
+      } catch (_) {
+        // Lines are a help, not a need.
+      }
+    }
+    return _tree;
   }
 
-  /// The first line that mentions [key] as a key, to point a problem at.
-  int? _lineOf(String key) {
-    final quoted = RegExp(
-      '^\\s*["\']?${RegExp.escape(key)}["\']?\\s*:',
+  /// Notes a problem with the part of the document [at], a path of keys
+  /// and indexes such as `['paths', '/pets', 'get']`, or with the first
+  /// use of [ref].
+  void _problem(String message, {List<Object>? at, String? ref}) {
+    // A broken reference is met as often as it is used; once says it.
+    if (problems.any((p) => p.message == message)) return;
+    final line = at != null
+        ? _lineAt(at)
+        : ref != null
+        ? _lineOfRef(ref)
+        : null;
+    problems.add((message: message, line: line));
+  }
+
+  /// The line [path] is on, or as far along it as the document goes.
+  int? _lineAt(List<Object> path) {
+    var node = _nodes;
+    int? line;
+    for (final step in path) {
+      if (node is YamlMap) {
+        final key = node.nodes.keys.whereType<YamlNode>().where(
+          (key) => '${key.value}' == '$step',
+        );
+        if (key.isEmpty) break;
+        line = key.first.span.start.line + 1;
+        node = node.nodes[key.first];
+      } else if (node is YamlList && step is int && step < node.length) {
+        node = node.nodes[step];
+        line = node.span.start.line + 1;
+      } else {
+        break;
+      }
+    }
+    return line;
+  }
+
+  /// The line of the first `$ref` to [ref].
+  int? _lineOfRef(String ref) {
+    final match = RegExp(
+      '${RegExp.escape(ref)}(?=["\'\\s,}]|\$)',
       multiLine: true,
-    );
-    final match = quoted.firstMatch(text);
+    ).firstMatch(text);
     if (match == null) return null;
     return '\n'.allMatches(text.substring(0, match.start)).length + 1;
   }
@@ -280,7 +334,7 @@ class _Reader {
       at = at is Map<String, Object?> ? at[key] : null;
     }
     if (at == null) {
-      _problem('Nothing at $ref', ref.split('/').last);
+      _problem('Nothing at $ref', ref: ref);
       return const {};
     }
     return _resolve(at, depth + 1);
@@ -337,10 +391,10 @@ class _Reader {
         : const <String, Object?>{};
     if (root['info'] == null) _problem('Has no "info"');
     if (info.isNotEmpty && _string(info['title']).isEmpty) {
-      _problem('The info has no title', 'info');
+      _problem('The info has no title', at: ['info', 'title']);
     }
     if (info.isNotEmpty && info['version'] == null) {
-      _problem('The info has no version', 'info');
+      _problem('The info has no version', at: ['info']);
     }
     final paths = root['paths'];
     final webhooks = root['webhooks'];
@@ -543,14 +597,15 @@ class _Reader {
     }
     return [
       if (root['servers'] case final List<Object?> servers)
-        for (final server in servers)
+        for (final (i, server) in servers.indexed)
           if (server is Map<String, Object?> && server['url'] is String)
-            _serverUrl(server),
+            _serverUrl(server, ['servers', i]),
     ];
   }
 
   /// A server's URL with each `{variable}` in it set to its default.
-  String _serverUrl(Map<String, Object?> server) {
+  /// [at] is where the server is in the document.
+  String _serverUrl(Map<String, Object?> server, List<Object> at) {
     final url = server['url'] as String;
     final variables = server['variables'] is Map<String, Object?>
         ? server['variables'] as Map<String, Object?>
@@ -566,7 +621,7 @@ class _Reader {
           variable == null
               ? 'The server $url does not define its variable "$name"'
               : 'The server variable "$name" has no default',
-          name,
+          at: [...at, 'variables', name],
         );
         return match[0]!;
       }
@@ -591,10 +646,14 @@ class _Reader {
         final where = webhooks
             ? 'The webhook $path (${method.toUpperCase()})'
             : '${method.toUpperCase()} $path';
+        final at = [webhooks ? 'webhooks' : 'paths', path, method];
         final parameters = _merge(shared, _parameters(op['parameters']));
         final id = _string(op['operationId']);
         if (id.isNotEmpty && !ids.add(id)) {
-          _problem('$where repeats the operationId "$id"', id);
+          _problem(
+            '$where repeats the operationId "$id"',
+            at: [...at, 'operationId'],
+          );
         }
         for (final name
             in webhooks
@@ -607,12 +666,14 @@ class _Reader {
             _problem(
               '$where does not declare its path parameter '
               '"${name[1]}"',
-              path,
+              at: at,
             );
           }
         }
         final responses = _responses(op);
-        if (responses.isEmpty) _problem('$where lists no responses', path);
+        if (responses.isEmpty) {
+          _problem('$where lists no responses', at: [...at, 'responses']);
+        }
         operations.add(
           SpecOperation(
             method: method.toUpperCase(),

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:reqorb/editor/syntax.dart';
@@ -34,6 +35,29 @@ class CodeController extends TextEditingController {
     _current = current;
     notifyListeners();
   }
+
+  /// Asks whatever shows the text to select [line], counted from 1, and
+  /// scroll it into view.
+  void goToLine(int line) {
+    final lines = text.split('\n');
+    final index = (line - 1).clamp(0, lines.length - 1);
+    var start = 0;
+    for (var i = 0; i < index; i++) {
+      start += lines[i].length + 1;
+    }
+    selection = TextSelection(
+      baseOffset: start,
+      extentOffset: start + lines[index].length,
+    );
+    // Through null, so that asking for the same line again is heard.
+    _lineSought
+      ..value = null
+      ..value = start;
+  }
+
+  /// The offset [goToLine] last asked to be shown, for the editor.
+  ValueListenable<int?> get lineSought => _lineSought;
+  final _lineSought = ValueNotifier<int?>(null);
 
   /// Drops what a search marked without telling anyone, for when whatever
   /// showed the search has gone.
@@ -101,6 +125,7 @@ class CodeController extends TextEditingController {
   @override
   void dispose() {
     _dropLinks();
+    _lineSought.dispose();
     super.dispose();
   }
 

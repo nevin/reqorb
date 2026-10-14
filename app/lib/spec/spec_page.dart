@@ -265,6 +265,21 @@ class _SpecPageState extends State<SpecPage> {
     if (mounted) setState(() => _saved = text);
   }
 
+  /// Shows [line] in the editor, bringing the editor out if only the
+  /// preview is showing.
+  void _goToLine(int line) {
+    final wide = MediaQuery.sizeOf(context).width >= 900;
+    if (_view != _View.edit && !(_view != _View.preview && wide)) {
+      setState(() => _view = wide ? _View.split : _View.edit);
+    }
+    // Once the editor is built, if it was not.
+    WidgetsBinding.instance
+      ..addPostFrameCallback((_) {
+        if (mounted) _code.goToLine(line);
+      })
+      ..scheduleFrame();
+  }
+
   /// Re-indents JSON, or writes YAML out as JSON.
   void _toJson() {
     final spec = _spec;
@@ -447,7 +462,7 @@ class _SpecPageState extends State<SpecPage> {
         language: _json ? CodeLanguage.json : CodeLanguage.yaml,
         onChanged: _edited,
       );
-      final preview = _Preview(spec: _spec);
+      final preview = _Preview(spec: _spec, onLine: _goToLine);
       return Column(
         children: [
           Padding(
@@ -483,8 +498,15 @@ class _SpecPageState extends State<SpecPage> {
                   onSelectionChanged: (picked) =>
                       setState(() => _view = picked.first),
                 ),
-                const Spacer(),
-                _Status(spec: _spec, reading: _readingApart),
+                const SizedBox(width: 12),
+                // On a narrow page what kind of document it is gives way,
+                // but not whether it has problems.
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: _Status(spec: _spec, reading: _readingApart),
+                  ),
+                ),
               ],
             ),
           ),
@@ -550,15 +572,20 @@ class _Status extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (spec.specVersion.isNotEmpty)
-          Text(
-            [
-              spec.specVersion,
-              spec.format.toUpperCase(),
-              // A document of webhooks alone need not say it has no paths.
-              if (paths > 0 || webhooks == 0) _count(paths, 'operation'),
-              if (webhooks > 0) _count(webhooks, 'webhook'),
-            ].join(' · '),
-            style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
+          Flexible(
+            child: Text(
+              [
+                spec.specVersion,
+                spec.format.toUpperCase(),
+                // A document of webhooks alone need not say it has no
+                // paths.
+                if (paths > 0 || webhooks == 0) _count(paths, 'operation'),
+                if (webhooks > 0) _count(webhooks, 'webhook'),
+              ].join(' · '),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
+            ),
           ),
         const SizedBox(width: 12),
         Icon(
@@ -585,9 +612,12 @@ class _Status extends StatelessWidget {
 /// The API as documentation: its details, its problems, and its
 /// operations by tag.
 class _Preview extends StatefulWidget {
-  const _Preview({required this.spec});
+  const _Preview({required this.spec, required this.onLine});
 
   final ApiSpec? spec;
+
+  /// Shows a line of the text in the editor.
+  final ValueChanged<int> onLine;
 
   @override
   State<_Preview> createState() => _PreviewState();
@@ -784,7 +814,7 @@ class _PreviewState extends State<_Preview> {
       add(
         () => Padding(
           padding: const EdgeInsets.only(bottom: 12),
-          child: _Problems(problems: spec.problems),
+          child: _Problems(problems: spec.problems, onLine: widget.onLine),
         ),
       );
     }
@@ -926,9 +956,12 @@ class _Chip extends StatelessWidget {
 }
 
 class _Problems extends StatelessWidget {
-  const _Problems({required this.problems});
+  const _Problems({required this.problems, required this.onLine});
 
   final List<SpecProblem> problems;
+
+  /// Shows a line of the text, for a problem that knows its line.
+  final ValueChanged<int> onLine;
 
   @override
   Widget build(BuildContext context) {
@@ -944,7 +977,7 @@ class _Problems extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (final problem in problems)
+            for (final (i, problem) in problems.indexed)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 2),
                 child: Row(
@@ -954,12 +987,25 @@ class _Problems extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        problem.line == null
-                            ? problem.message
-                            : '${problem.message}  (line ${problem.line})',
+                        problem.message,
                         style: TextStyle(color: scheme.onErrorContainer),
                       ),
                     ),
+                    if (problem.line case final line?)
+                      InkWell(
+                        key: Key('spec-problem-line-$i'),
+                        onTap: () => onLine(line),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Text(
+                            'Line $line',
+                            style: TextStyle(
+                              color: scheme.onErrorContainer,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),

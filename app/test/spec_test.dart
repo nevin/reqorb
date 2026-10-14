@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reqorb/editor/syntax.dart';
@@ -275,6 +277,55 @@ components:
       expect(spec.problems.map((p) => p.message), [
         'Nothing at #/components/schemas/Gone',
       ]);
+      // Where it is first used.
+      expect(spec.problems.single.line, 6);
+    });
+
+    test('a problem is on the line of the part it is about', () {
+      // `get` and `operationId: list` come up twice before the ones at
+      // fault, which a search for the key would find instead.
+      const yaml = '''
+openapi: 3.0.3
+info: {title: A, version: "1"}
+servers:
+  - url: https://a.test
+  - url: https://{region}.a.test
+paths:
+  /a:
+    get:
+      operationId: list
+      responses: {"200": {description: ok}}
+  /b/{id}:
+    get:
+      operationId: list
+      responses: {}
+''';
+      final lines = {
+        for (final p in readSpec(yaml).problems) p.message: p.line,
+      };
+      expect(lines, {
+        'The server https://{region}.a.test does not define its variable '
+                '"region"':
+            5,
+        'GET /b/{id} repeats the operationId "list"': 13,
+        'GET /b/{id} does not declare its path parameter "id"': 12,
+        'GET /b/{id} lists no responses': 14,
+      });
+
+      // JSON, which is read without lines, is read again to find them.
+      final json = const JsonEncoder.withIndent('  ').convert(readTree(yaml));
+      final jsonLines = {
+        for (final p in readSpec(json).problems) p.message: p.line,
+      };
+      final textLines = json.split('\n');
+      expect(
+        textLines[jsonLines['GET /b/{id} repeats the operationId "list"']! - 1],
+        contains('"operationId": "list"'),
+      );
+      expect(
+        textLines[jsonLines['GET /b/{id} lists no responses']! - 1],
+        contains('"responses": {}'),
+      );
     });
 
     test('a document that cannot be read says on which line', () {
@@ -446,6 +497,40 @@ components:
       expect(find.text('Remote'), findsOneWidget);
       expect(find.text('openapi.json'), findsOneWidget);
     });
+  });
+
+  testWidgets('a problem opens its line in the editor', (tester) async {
+    // Narrow, so that only the preview shows.
+    tester.view.physicalSize = const Size(700, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    const text = '''
+openapi: 3.0.3
+info: {title: A, version: "1"}
+paths:
+  /a:
+    get:
+      responses: {}
+''';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SpecPage(
+          name: 'a.yaml',
+          text: text,
+          onImport: (_, _, _) async {},
+        ),
+      ),
+    );
+    expect(find.byKey(const Key('spec-editor')), findsNothing);
+    expect(find.text('Line 6'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('spec-problem-line-0')));
+    await tester.pumpAndSettle();
+    final editor = tester.widget<TextField>(
+      find.byKey(const Key('spec-editor')),
+    );
+    final selection = editor.controller!.selection;
+    expect(selection.textInside(text), '      responses: {}');
   });
 
   testWidgets('a type opens a schema far down a long list', (tester) async {

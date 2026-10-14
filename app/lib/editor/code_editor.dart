@@ -131,6 +131,7 @@ class _CodeEditorState extends State<CodeEditor> {
     super.initState();
     _code.language = widget.language;
     _code.addListener(_changed);
+    _code.lineSought.addListener(_goToLine);
     _focus.addListener(_focusChanged);
   }
 
@@ -139,7 +140,9 @@ class _CodeEditorState extends State<CodeEditor> {
     super.didUpdateWidget(old);
     if (old.controller != widget.controller) {
       old.controller.removeListener(_changed);
+      old.controller.lineSought.removeListener(_goToLine);
       _code.addListener(_changed);
+      _code.lineSought.addListener(_goToLine);
       _lastText = _code.text;
     }
     _code.language = widget.language;
@@ -148,6 +151,7 @@ class _CodeEditorState extends State<CodeEditor> {
   @override
   void dispose() {
     _code.removeListener(_changed);
+    _code.lineSought.removeListener(_goToLine);
     // A search belongs to this view of the text, not to the text.
     _code.forgetMarks();
     _scroll.dispose();
@@ -175,6 +179,18 @@ class _CodeEditorState extends State<CodeEditor> {
 
     _field.currentContext?.visitChildElements(visit);
     return _editableState = found;
+  }
+
+  /// Shows the line [CodeController.goToLine] selected, with the focus
+  /// here so that the selection shows.
+  void _goToLine() {
+    final offset = _code.lineSought.value;
+    if (offset == null) return;
+    _focus.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _editable()?.bringIntoView(TextPosition(offset: offset));
+    });
   }
 
   void _focusChanged() {
