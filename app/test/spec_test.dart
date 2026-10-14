@@ -30,10 +30,79 @@ void main() {
       expect(list.parameters.single.name, 'limit');
       expect(list.parameters.single.type, 'integer');
       expect(list.responses.single.content.single.schema, 'array of Item');
-      expect(spec.operations[1].body.single, (
-        type: 'application/json',
-        schema: 'Item',
-      ));
+      final body = spec.operations[1].body.single;
+      expect((body.type, body.schema), ('application/json', 'Item'));
+    });
+
+    test('examples: given, or made up from the schema', () {
+      final spec = readSpec(r'''
+openapi: 3.1.0
+info: {title: A, version: "1"}
+paths:
+  /pets:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Pet"}
+          application/xml:
+            schema: {$ref: "#/components/schemas/Pet"}
+      responses:
+        "201":
+          description: made
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Pet"}
+        "400":
+          description: bad
+          content:
+            application/json:
+              examples:
+                missing: {value: {error: name is needed}}
+components:
+  schemas:
+    Pet:
+      allOf:
+        - $ref: "#/components/schemas/Named"
+        - type: object
+          properties:
+            id: {type: integer, readOnly: true}
+            secret: {type: string, writeOnly: true}
+            kind: {type: string, enum: [dog, cat]}
+            born: {type: [string, "null"], format: date}
+            tags: {type: array, items: {type: string}}
+            parent: {$ref: "#/components/schemas/Pet"}
+    Named:
+      properties:
+        name: {type: string, example: Rex}
+''');
+      final op = spec.operations.single;
+      Object? example(SpecContent content, {required bool request}) =>
+          switch (exampleOf(spec, content, request: request)) {
+            final json? => jsonDecode(json),
+            null => null,
+          };
+      // What the client sends leaves out what only the server writes, and
+      // a schema inside itself is not opened again, but left out.
+      expect(example(op.body.first, request: true), {
+        'name': 'Rex',
+        'secret': 'string',
+        'kind': 'dog',
+        'born': '2024-01-01',
+        'tags': ['string'],
+      });
+      expect(example(op.responses.first.content.single, request: false), {
+        'name': 'Rex',
+        'id': 0,
+        'kind': 'dog',
+        'born': '2024-01-01',
+        'tags': ['string'],
+      });
+      expect(example(op.responses.last.content.single, request: false), {
+        'error': 'name is needed',
+      });
+      // Not JSON.
+      expect(exampleOf(spec, op.body.last, request: true), isNull);
     });
 
     test('a Swagger 2 document in JSON', () {
@@ -497,6 +566,42 @@ paths:
       expect(find.text('Remote'), findsOneWidget);
       expect(find.text('openapi.json'), findsOneWidget);
     });
+  });
+
+  testWidgets('an open operation shows example bodies', (tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SpecPage(
+          name: 'openapi.yaml',
+          text: specTemplate,
+          onImport: (_, _, _) async {},
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const Key('spec-view-preview')));
+    await tester.pumpAndSettle();
+    // Not made until the operation is opened.
+    expect(
+      find.byKey(const Key('spec-example-body-POST-/items')),
+      findsNothing,
+    );
+
+    await tester.tap(find.byKey(const Key('spec-op-POST-/items')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('spec-example-body-POST-/items')),
+      findsOneWidget,
+    );
+    final shown = tester
+        .widget<TextField>(
+          find.byKey(const Key('spec-example-body-POST-/items-code')),
+        )
+        .controller!
+        .text;
+    expect(jsonDecode(shown), isA<Map<String, Object?>>());
   });
 
   testWidgets('a problem opens its line in the editor', (tester) async {

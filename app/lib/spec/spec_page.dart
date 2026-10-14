@@ -765,8 +765,13 @@ class _PreviewState extends State<_Preview> {
     void add(Widget Function() build, [String? id]) =>
         items.add((id: id, build: build));
     void addOperation(SpecOperation op, String id) => add(
-      () =>
-          _Operation(key: _key(id), op: op, opener: _opener(id), links: links),
+      () => _Operation(
+        key: _key(id),
+        spec: spec,
+        op: op,
+        opener: _opener(id),
+        links: links,
+      ),
       id,
     );
 
@@ -1198,11 +1203,14 @@ class _Schema extends StatelessWidget {
 class _Operation extends StatelessWidget {
   const _Operation({
     super.key,
+    required this.spec,
     required this.op,
     required this.opener,
     required this.links,
   });
 
+  /// The spec [op] is in, which its examples are made from.
+  final ApiSpec spec;
   final SpecOperation op;
   final ExpansibleController opener;
   final _Links links;
@@ -1246,8 +1254,26 @@ class _Operation extends StatelessWidget {
           ),
         );
 
+    // Made only once the card is open, as only then are its children
+    // built.
+    Map<String, String> examples(
+      Iterable<(String, SpecContent)> labelled, {
+      required bool request,
+    }) {
+      final out = <String, String>{};
+      for (final (label, content) in labelled) {
+        if (out.containsKey(label)) continue;
+        if (exampleOf(spec, content, request: request) case final json?) {
+          out[label] = json;
+        }
+      }
+      return out;
+    }
+
+    final name = '${op.method}-${op.path}';
+
     return Card(
-      key: Key('spec-op-${op.method}-${op.path}'),
+      key: Key('spec-op-$name'),
       margin: const EdgeInsets.symmetric(vertical: 3),
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -1316,6 +1342,12 @@ class _Operation extends StatelessWidget {
           if (op.body.isNotEmpty)
             section('Request body', [
               for (final c in op.body) row(c.type, c.schema, ''),
+              _Example(
+                key: Key('spec-example-body-$name'),
+                examples: examples([
+                  for (final c in op.body) (c.type, c),
+                ], request: true),
+              ),
             ]),
           if (op.responses.isNotEmpty)
             section('Responses', [
@@ -1330,7 +1362,117 @@ class _Operation extends StatelessWidget {
                     null => null,
                   },
                 ),
+              _Example(
+                key: Key('spec-example-responses-$name'),
+                // One for each status: the first content type that has one.
+                examples: {
+                  for (final r in op.responses)
+                    ...examples([
+                      for (final c in r.content) (r.status, c),
+                    ], request: false),
+                },
+              ),
             ]),
+        ],
+      ),
+    );
+  }
+}
+
+/// Examples of a body, with a chip for each when there are several, as
+/// for each status of a response.
+class _Example extends StatefulWidget {
+  const _Example({super.key, required this.examples});
+
+  /// Each example's JSON, by what it is for, such as `200`.
+  final Map<String, String> examples;
+
+  @override
+  State<_Example> createState() => _ExampleState();
+}
+
+class _ExampleState extends State<_Example> {
+  String? _picked;
+
+  @override
+  Widget build(BuildContext context) {
+    final examples = widget.examples;
+    if (examples.isEmpty) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    // A success first, as that is what one usually wants to see.
+    final first = examples.keys.firstWhere(
+      (label) => label.startsWith('2'),
+      orElse: () => examples.keys.first,
+    );
+    final picked = examples.containsKey(_picked) ? _picked! : first;
+    final json = examples[picked]!;
+    final lines = '\n'.allMatches(json).length + 1;
+    final key = (widget.key as ValueKey<String>?)?.value ?? 'spec-example';
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'Example',
+                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+              ),
+              const SizedBox(width: 8),
+              if (examples.length > 1)
+                Expanded(
+                  child: Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    children: [
+                      for (final label in examples.keys)
+                        ChoiceChip(
+                          key: Key('$key-$label'),
+                          label: Text(label, style: mono),
+                          visualDensity: VisualDensity.compact,
+                          selected: label == picked,
+                          onSelected: (_) => setState(() => _picked = label),
+                        ),
+                    ],
+                  ),
+                )
+              else
+                const Spacer(),
+              IconButton(
+                key: Key('$key-copy'),
+                tooltip: 'Copy example',
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.copy, size: 16),
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: json));
+                  if (context.mounted) showMessage(context, 'Example copied');
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border.all(color: scheme.outlineVariant),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: SizedBox(
+                // Its own height, so that one swipe scrolls the page
+                // rather than the example, up to about 20 lines; past that
+                // it scrolls.
+                height: (lines * 19.0 + 28).clamp(60, 420),
+                child: CodeView(
+                  key: ValueKey(picked),
+                  name: '$key-code',
+                  text: json,
+                  language: CodeLanguage.json,
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );

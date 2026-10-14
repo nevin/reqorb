@@ -20,8 +20,14 @@ typedef SpecParameter = ({
   String description,
 });
 
-/// What a request body or a response carries, for one content type.
-typedef SpecContent = ({String type, String schema});
+/// What a request body or a response carries, for one content type:
+/// the type, its schema in a few words, and the document's media type
+/// object for it, in OpenAPI 3's shape, to make an example from.
+typedef SpecContent = ({
+  String type,
+  String schema,
+  Map<String, Object?> media,
+});
 
 /// One response an operation may give.
 typedef SpecResponse = ({
@@ -110,6 +116,7 @@ class ApiSpec {
     required this.problems,
     this.schemas = const [],
     this.security = const [],
+    this.document = const {},
   });
 
   /// `json` or `yaml`: what the text was written in.
@@ -125,6 +132,10 @@ class ApiSpec {
   final List<SpecProblem> problems;
   final List<SpecSchema> schemas;
   final List<SpecSecurity> security;
+
+  /// The document as plain maps and lists, for what is worked out only
+  /// when it is wanted, such as examples.
+  final Map<String, Object?> document;
 
   /// Whether the text could be read at all; when not, [problems] says why.
   bool get readable => format.isNotEmpty;
@@ -425,6 +436,7 @@ class _Reader {
       problems: problems,
       schemas: _schemas(),
       security: _security(),
+      document: root,
     );
   }
 
@@ -711,8 +723,10 @@ class _Reader {
     ...own,
   ];
 
-  /// Swagger 2 keeps a body's schema on its `body` parameter.
+  /// Swagger 2 keeps a body's schema on its `body` parameter: in a few
+  /// words, and as written.
   final _bodySchemas = <String, String>{};
+  final _bodyNodes = <String, Object?>{};
 
   List<SpecParameter> _parameters(Object? list) {
     if (list is! List<Object?>) return const [];
@@ -721,7 +735,10 @@ class _Reader {
       final p = _resolve(node);
       final name = _string(p['name']);
       final location = _string(p['in']);
-      if (location == 'body') _bodySchemas[name] = _schema(p['schema']);
+      if (location == 'body') {
+        _bodySchemas[name] = _schema(p['schema']);
+        _bodyNodes[name] = p['schema'];
+      }
       out.add((
         name: name,
         location: location,
@@ -738,7 +755,11 @@ class _Reader {
     if (node is! Map<String, Object?>) return const [];
     return [
       for (final MapEntry(key: type, :value) in node.entries)
-        (type: type, schema: _schema(_resolve(value)['schema'])),
+        (
+          type: type,
+          schema: _schema(_resolve(value)['schema']),
+          media: _resolve(value),
+        ),
     ];
   }
 
@@ -757,7 +778,10 @@ class _Reader {
     for (final p in parameters) {
       if (p.location == 'body') {
         final schema = _bodySchemas[p.name] ?? '';
-        return [for (final type in types) (type: type, schema: schema)];
+        return [
+          for (final type in types)
+            (type: type, schema: schema, media: {'schema': _bodyNodes[p.name]}),
+        ];
       }
     }
     final fields = [
@@ -772,6 +796,7 @@ class _Reader {
           orElse: () => 'application/x-www-form-urlencoded',
         ),
         schema: 'fields: ${fields.join(', ')}',
+        media: const {},
       ),
     ];
   }
@@ -787,6 +812,7 @@ class _Reader {
           final List<SpecContent> content;
           if (_swagger) {
             final schema = _schema(response['schema']);
+            final examples = _map(response['examples']);
             content = schema.isEmpty
                 ? const []
                 : [
@@ -794,7 +820,15 @@ class _Reader {
                         in produces is List<Object?>
                             ? [for (final t in produces) '$t']
                             : ['application/json'])
-                      (type: type, schema: schema),
+                      (
+                        type: type,
+                        schema: schema,
+                        media: {
+                          'schema': response['schema'],
+                          if (examples.containsKey(type))
+                            'example': examples[type],
+                        },
+                      ),
                   ];
           } else {
             content = _content(response['content']);
@@ -807,6 +841,155 @@ class _Reader {
         }(),
     ];
   }
+}
+
+/// An example of what [content] carries, as indented JSON: the one the
+/// document gives, or else one made up from its schema. Fields only the
+/// server writes are left out of a [request], and those only the client
+/// writes out of a response. Null for content that is not JSON, or
+/// whose schema says too little to make one from.
+String? exampleOf(ApiSpec spec, SpecContent content, {required bool request}) {
+  final type = content.type.toLowerCase();
+  if (!type.contains('json') && type != '*/*') return null;
+  final examples = _Examples(spec.document, request: request);
+  final media = content.media;
+  Object? value;
+  if (media.containsKey('example')) {
+    value = media['example'];
+  } else if (media['examples'] case final Map<String, Object?> named
+      when named.isNotEmpty) {
+    value = examples.follow(named.values.first)['value'];
+  } else {
+    value = examples.of(media['schema']);
+  }
+  return value == null
+      ? null
+      : const JsonEncoder.withIndent('  ').convert(value);
+}
+
+/// Makes up values that schemas allow.
+class _Examples {
+  _Examples(this.root, {required this.request});
+
+  final Map<String, Object?> root;
+  final bool request;
+
+  /// How far into nested objects an example goes.
+  static const _deepest = 8;
+
+  /// [node], or what it refers to when it is a local `$ref`.
+  Map<String, Object?> follow(Object? node, [int depth = 0]) {
+    if (node is! Map<String, Object?>) return const {};
+    final ref = node[r'$ref'];
+    if (ref is! String || !ref.startsWith('#/') || depth > 20) return node;
+    Object? at = root;
+    for (final part in ref.substring(2).split('/')) {
+      final key = part.replaceAll('~1', '/').replaceAll('~0', '~');
+      at = at is Map<String, Object?> ? at[key] : null;
+    }
+    return follow(at, depth + 1);
+  }
+
+  /// A value [node] allows, or null for none. [within] holds the schemas
+  /// this one is inside, so that one that contains itself stops.
+  Object? of(Object? node, [Set<String> within = const {}, int depth = 0]) {
+    if (node is! Map<String, Object?> || depth > _deepest) return null;
+    if (node[r'$ref'] case final String ref) {
+      if (within.contains(ref)) return null;
+      return of(follow(node), {...within, ref}, depth);
+    }
+    if (node.containsKey('example')) return node['example'];
+    // OpenAPI 3.1 schemas list their examples.
+    if (node['examples'] case final List<Object?> listed
+        when listed.isNotEmpty) {
+      return listed.first;
+    }
+    if (node.containsKey('const')) return node['const'];
+    if (node.containsKey('default')) return node['default'];
+    if (node['enum'] case final List<Object?> values when values.isNotEmpty) {
+      return values.first;
+    }
+    for (final choice in const ['oneOf', 'anyOf']) {
+      if (node[choice] case final List<Object?> options
+          when options.isNotEmpty) {
+        return of(options.first, within, depth);
+      }
+    }
+    if (node['allOf'] case final List<Object?> parts) {
+      final merged = <String, Object?>{};
+      for (final part in parts) {
+        if (of(part, within, depth) case final Map<String, Object?> value) {
+          merged.addAll(value);
+        }
+      }
+      if (_object(node, within, depth) case final Map<String, Object?> own) {
+        merged.addAll(own);
+      }
+      return merged;
+    }
+    final type = switch (node['type']) {
+      // OpenAPI 3.1 writes a nullable type as a list with `null` in it.
+      final List<Object?> types => types.firstWhere(
+        (t) => t != 'null',
+        orElse: () => null,
+      ),
+      final Object type => type,
+      null =>
+        node['properties'] != null
+            ? 'object'
+            : node['items'] != null
+            ? 'array'
+            : null,
+    };
+    return switch (type) {
+      'object' => _object(node, within, depth) ?? <String, Object?>{},
+      'array' => [?of(node['items'], within, depth + 1)],
+      'string' => _string(node),
+      'integer' => node['minimum'] ?? 0,
+      'number' => node['minimum'] ?? 0.0,
+      'boolean' => true,
+      _ => null,
+    };
+  }
+
+  /// The fields of an object [node], each with a value.
+  Map<String, Object?>? _object(
+    Map<String, Object?> node,
+    Set<String> within,
+    int depth,
+  ) {
+    final properties = node['properties'];
+    final more = node['additionalProperties'];
+    if (properties is! Map<String, Object?>) {
+      if (more is! Map<String, Object?>) return null;
+      return {'key': of(more, within, depth + 1)};
+    }
+    return {
+      for (final MapEntry(key: name, :value) in properties.entries)
+        // A field with nothing to show, such as one that would repeat
+        // a schema it is inside, is left out rather than sent as null.
+        if (_belongs(follow(value))) name: ?of(value, within, depth + 1),
+    };
+  }
+
+  /// Whether a field goes in this direction.
+  bool _belongs(Map<String, Object?> field) =>
+      !(request ? field['readOnly'] == true : field['writeOnly'] == true);
+
+  String _string(Map<String, Object?> node) => switch (node['format']) {
+    'date-time' => '2024-01-01T00:00:00Z',
+    'date' => '2024-01-01',
+    'time' => '00:00:00',
+    'email' => 'user@example.com',
+    'uuid' => '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+    'uri' || 'url' => 'https://example.com',
+    'hostname' => 'example.com',
+    'ipv4' => '192.0.2.1',
+    'ipv6' => '2001:db8::1',
+    'byte' => 'c3RyaW5n',
+    'password' => '********',
+    _ => 'string',
+  };
 }
 
 /// A small OpenAPI 3 document to start a new one from.
