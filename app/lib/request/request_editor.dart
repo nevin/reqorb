@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:reqorb/shared/overflow_tab_bar.dart';
 import 'package:reqorb/editor/code_controller.dart';
 import 'package:reqorb/request/key_value_editor.dart';
 
@@ -88,53 +89,42 @@ class RequestEditor extends StatelessWidget {
               listenable: edits,
               builder: (context, _) {
                 final has = badges();
-                return TabBar(
-                  // Tabs sit together at the start instead of stretching out.
-                  isScrollable: true,
-                  tabAlignment: TabAlignment.start,
+                return OverflowTabBar(
                   tabs: [
-                    Tab(
+                    (
                       key: const Key('params-tab'),
-                      height: 40,
-                      child: TabLabel('Params', count: has.params),
+                      label: TabLabel('Params', count: has.params),
                     ),
-                    Tab(
+                    (
                       key: const Key('headers-tab'),
-                      height: 40,
-                      child: TabLabel('Headers', count: has.headers),
+                      label: TabLabel('Headers', count: has.headers),
                     ),
-                    Tab(
+                    (
                       key: const Key('body-tab'),
-                      height: 40,
-                      child: TabLabel(
+                      label: TabLabel(
                         message == null ? 'Body' : 'Message',
                         set: has.body,
                       ),
                     ),
-                    Tab(
+                    (
                       key: const Key('auth-tab'),
-                      height: 40,
-                      child: TabLabel('Auth', set: has.auth),
+                      label: TabLabel('Auth', set: has.auth),
                     ),
-                    Tab(
+                    (
                       key: const Key('cookies-tab'),
-                      height: 40,
-                      child: TabLabel('Cookies', count: has.cookies),
+                      label: TabLabel('Cookies', count: has.cookies),
                     ),
-                    Tab(
+                    (
                       key: const Key('request-settings-tab'),
-                      height: 40,
-                      child: TabLabel('Settings', set: has.settings),
+                      label: TabLabel('Settings', set: has.settings),
                     ),
-                    Tab(
+                    (
                       key: const Key('tests-tab'),
-                      height: 40,
-                      child: TabLabel('Tests', count: has.tests),
+                      label: TabLabel('Tests', count: has.tests),
                     ),
-                    Tab(
+                    (
                       key: const Key('scripts-tab'),
-                      height: 40,
-                      child: TabLabel('Scripts', set: has.scripts),
+                      label: TabLabel('Scripts', set: has.scripts),
                     ),
                   ],
                 );

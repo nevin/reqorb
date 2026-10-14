@@ -88,6 +88,26 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
   });
 
+  testWidgets('sections that do not fit can still be reached', (tester) async {
+    // The response below the request leaves room for every section.
+    await open(tester, size: const Size(1400, 900));
+    store.updateSettings(store.settings.copyWith(layout: Layout.stacked));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('more-tabs')), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+
+    // Too narrow: the last of them are out of sight, and a button says so.
+    await open(tester, size: const Size(560, 900));
+    expect(find.byKey(const Key('more-tabs')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('more-tabs')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Scripts').last);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('pre-script')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pump(const Duration(milliseconds: 400));
+  });
+
   testWidgets('a long sidebar shows that it scrolls', (tester) async {
     await open(tester);
     for (var i = 0; i < 60; i++) {
