@@ -724,6 +724,7 @@ cd app && flutter analyze
 cd app && flutter test                               # the app against a stand-in engine, no window needed
 cd app && caffeinate -d flutter test integration_test -d macos   # the real app, end to end
 cd app && flutter_rust_bridge_codegen generate       # after changing app/rust/src/api
+scripts/coverage.sh                                  # how much the tests cover; fails below the floor
 ```
 
 GitHub Actions runs all of these on every push (`.github/workflows/ci.yml`), and a
