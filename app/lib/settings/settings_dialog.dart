@@ -706,6 +706,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     final actions = [
       ('Send, connect or call', '$key$enter'),
       ('Stop a send or a call', '$key.'),
+      ('Put back what was just deleted', '${key}Z'),
       ('Save the request', '${key}S'),
       ('New request', '${key}N'),
       ('Close request', '${key}W'),

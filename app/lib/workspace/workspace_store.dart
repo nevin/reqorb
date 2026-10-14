@@ -132,10 +132,23 @@ class WorkspaceStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void clearSession() {
+  /// Forgets this session's exchanges and captured variables, and returns
+  /// how to bring them back.
+  VoidCallback clearSession() {
+    final (session, captured) = (_session, _captured);
     _session = const [];
     _captured = const [];
     notifyListeners();
+    return () {
+      // Anything sent since comes after what was there.
+      _session = [...session, ..._session];
+      _captured = [
+        ..._captured,
+        for (final v in captured)
+          if (!_captured.any((c) => c.key == v.key)) v,
+      ];
+      notifyListeners();
+    };
   }
 
   /// Variables captured from responses this session, newest first. They take

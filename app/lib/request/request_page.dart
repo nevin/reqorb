@@ -937,6 +937,8 @@ class _RequestPageState extends State<RequestPage> {
                 (LogicalKeyboardKey.keyK, () => _openPalette(toggle)),
                 (LogicalKeyboardKey.keyP, () => _openPalette(toggle)),
                 (LogicalKeyboardKey.period, _stopRunning),
+                // Reached only outside text fields, which undo typing.
+                (LogicalKeyboardKey.keyZ, undoLast),
                 // The ninth is the last, however many there are.
                 for (final (i, digit) in _digits.indexed)
                   (digit, () => _selectPlace(i == 8 ? _tabs.length - 1 : i)),

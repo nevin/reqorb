@@ -455,7 +455,9 @@ is reused. A dot marks a tab with unsaved changes to a saved request; closing it
 whether to save them. `⌘N` opens a tab and `⌘W` closes one (`Ctrl` elsewhere).
 `⌘1` to `⌘8` go to a tab by its place and `⌘9` to the last; `Ctrl-Tab` and
 `Ctrl-Shift-Tab` (or `⌘⇧]` and `⌘⇧[`) go to the next and previous. `⌘.` stops a send
-or a call that is under way.
+or a call that is under way. Deleting a request, folder, collection or environment, or
+clearing the session, offers **Undo** until the next message replaces it; `⌘Z` outside a
+text field does the same.
 
 `⌘K` (or the magnifier beside the environment) opens a box that finds things by a few
 letters of their name, in order: `crord` finds "Create order". It lists open tabs,

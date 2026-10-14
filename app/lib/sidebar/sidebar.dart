@@ -229,7 +229,11 @@ class _SidebarState extends State<Sidebar> {
                     ),
                     PopupMenuItem(
                       key: const Key('session-clear'),
-                      value: store.clearSession,
+                      value: () => showUndo(
+                        context,
+                        'Cleared the session',
+                        store.clearSession(),
+                      ),
                       child: const Text('Clear session'),
                     ),
                   ],
