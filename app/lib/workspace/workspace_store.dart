@@ -1030,6 +1030,7 @@ extension SettingsCopy on Settings {
     bool? allowOutsideWorkingDir,
     bool? protectSecrets,
     int? historyLimit,
+    int? splitPercent,
   }) => Settings(
     theme: theme ?? this.theme,
     httpMode: httpMode ?? this.httpMode,
@@ -1050,5 +1051,6 @@ extension SettingsCopy on Settings {
         allowOutsideWorkingDir ?? this.allowOutsideWorkingDir,
     protectSecrets: protectSecrets ?? this.protectSecrets,
     historyLimit: historyLimit ?? this.historyLimit,
+    splitPercent: splitPercent ?? this.splitPercent,
   );
 }

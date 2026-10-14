@@ -109,6 +109,7 @@ pub struct _Settings {
     pub allow_outside_working_dir: bool,
     pub protect_secrets: bool,
     pub history_limit: u32,
+    pub split_percent: u32,
 }
 
 #[frb(mirror(DirAccess))]

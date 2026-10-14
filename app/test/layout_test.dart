@@ -62,6 +62,30 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.getCenter(handle).dy, closeTo(before, 2));
     expect(tester.takeException(), isNull);
+    // Lets the settings it saved be written.
+    await tester.pump(const Duration(milliseconds: 400));
+  });
+
+  testWidgets('the divider stays where it was left, from one launch to the '
+      'next', (tester) async {
+    await open(tester, size: const Size(1000, 900));
+    final handle = find.byKey(const Key('split-handle'));
+    final before = tester.getCenter(handle).dy;
+    await tester.drag(handle, const Offset(0, 150));
+    await tester.pumpAndSettle();
+    final left = tester.getCenter(handle).dy;
+    expect(store.settings.splitPercent, greaterThan(40));
+
+    // A new start, with the settings as they were saved.
+    final settings = store.settings;
+    store = WorkspaceStore('unused.json', engine: FakeEngine());
+    store.updateSettings(settings);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(ReqorbApp(store: store));
+    await tester.pumpAndSettle();
+    expect(tester.getCenter(handle).dy, closeTo(left, 6));
+    expect(tester.getCenter(handle).dy, isNot(closeTo(before, 50)));
+    await tester.pump(const Duration(milliseconds: 400));
   });
 
   testWidgets('a long sidebar shows that it scrolls', (tester) async {

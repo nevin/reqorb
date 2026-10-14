@@ -2027,6 +2027,7 @@ const _: fn() = || {
         let _: bool = Settings.allow_outside_working_dir;
         let _: bool = Settings.protect_secrets;
         let _: u32 = Settings.history_limit;
+        let _: u32 = Settings.split_percent;
     }
     {
         let TestResult = None::<crate::api::core::TestResult>.unwrap();
@@ -3510,6 +3511,7 @@ impl SseDecode for crate::api::core::Settings {
         let mut var_allowOutsideWorkingDir = <bool>::sse_decode(deserializer);
         let mut var_protectSecrets = <bool>::sse_decode(deserializer);
         let mut var_historyLimit = <u32>::sse_decode(deserializer);
+        let mut var_splitPercent = <u32>::sse_decode(deserializer);
         return crate::api::core::Settings {
             theme: var_theme,
             http_mode: var_httpMode,
@@ -3529,6 +3531,7 @@ impl SseDecode for crate::api::core::Settings {
             allow_outside_working_dir: var_allowOutsideWorkingDir,
             protect_secrets: var_protectSecrets,
             history_limit: var_historyLimit,
+            split_percent: var_splitPercent,
         };
     }
 }
@@ -4974,6 +4977,7 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::Settings> {
                 .into_dart(),
             self.0.protect_secrets.into_into_dart().into_dart(),
             self.0.history_limit.into_into_dart().into_dart(),
+            self.0.split_percent.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -6257,6 +6261,7 @@ impl SseEncode for crate::api::core::Settings {
         <bool>::sse_encode(self.allow_outside_working_dir, serializer);
         <bool>::sse_encode(self.protect_secrets, serializer);
         <u32>::sse_encode(self.history_limit, serializer);
+        <u32>::sse_encode(self.split_percent, serializer);
     }
 }
 

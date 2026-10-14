@@ -22,6 +22,7 @@ class SplitView extends StatefulWidget {
     required this.axis,
     required this.fraction,
     required this.onChanged,
+    this.onChangeEnd,
     required this.first,
     required this.second,
   });
@@ -31,6 +32,9 @@ class SplitView extends StatefulWidget {
   /// Share of the space given to [first].
   final double fraction;
   final ValueChanged<double> onChanged;
+
+  /// Called with where the divider was left, once a drag ends.
+  final ValueChanged<double>? onChangeEnd;
   final Widget first;
   final Widget second;
 
@@ -42,6 +46,9 @@ class _SplitViewState extends State<SplitView> {
   /// Whether the pointer is over the divider, or dragging it.
   bool _hover = false;
   bool _dragging = false;
+
+  /// Where the current drag has taken the divider.
+  double? _moved;
 
   // A finger needs more to take hold of than a pointer does.
   static final _handle = isDesktop ? 11.0 : 22.0;
@@ -103,14 +110,25 @@ class _SplitViewState extends State<SplitView> {
                   key: const Key('split-handle'),
                   behavior: HitTestBehavior.opaque,
                   onPanStart: (_) => setState(() => _dragging = true),
-                  onPanEnd: (_) => setState(() => _dragging = false),
+                  onPanEnd: (_) {
+                    setState(() => _dragging = false);
+                    // The last move may not have been built yet.
+                    widget.onChangeEnd?.call(_moved ?? widget.fraction);
+                    _moved = null;
+                  },
                   onPanCancel: () => setState(() => _dragging = false),
                   onPanUpdate: (drag) {
                     if (total <= 0) return;
                     final moved = horizontal ? drag.delta.dx : drag.delta.dy;
-                    widget.onChanged(((size + moved) / total).clamp(0.1, 0.9));
+                    // From where the last move left it, built or not.
+                    final from = (_moved ?? widget.fraction) * total;
+                    _moved = ((from + moved) / total).clamp(0.1, 0.9);
+                    widget.onChanged(_moved!);
                   },
-                  onDoubleTap: () => widget.onChanged(0.4),
+                  onDoubleTap: () {
+                    widget.onChanged(0.4);
+                    widget.onChangeEnd?.call(0.4);
+                  },
                   child: SizedBox(
                     width: horizontal ? _handle : null,
                     height: horizontal ? null : _handle,

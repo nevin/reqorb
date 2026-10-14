@@ -1722,6 +1722,7 @@ class Settings {
   final bool allowOutsideWorkingDir;
   final bool protectSecrets;
   final int historyLimit;
+  final int splitPercent;
 
   const Settings({
     required this.theme,
@@ -1742,6 +1743,7 @@ class Settings {
     required this.allowOutsideWorkingDir,
     required this.protectSecrets,
     required this.historyLimit,
+    required this.splitPercent,
   });
 
   @override
@@ -1763,7 +1765,8 @@ class Settings {
       workingDirGrant.hashCode ^
       allowOutsideWorkingDir.hashCode ^
       protectSecrets.hashCode ^
-      historyLimit.hashCode;
+      historyLimit.hashCode ^
+      splitPercent.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1787,7 +1790,8 @@ class Settings {
           workingDirGrant == other.workingDirGrant &&
           allowOutsideWorkingDir == other.allowOutsideWorkingDir &&
           protectSecrets == other.protectSecrets &&
-          historyLimit == other.historyLimit;
+          historyLimit == other.historyLimit &&
+          splitPercent == other.splitPercent;
 }
 
 class TestResult {

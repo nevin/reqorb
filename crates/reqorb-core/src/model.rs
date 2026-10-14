@@ -499,6 +499,9 @@ pub struct Settings {
     /// How many sent requests are kept, with their responses, from one
     /// launch to the next; 0 keeps none.
     pub history_limit: u32,
+    /// How much of the space the request takes, in percent, beside or
+    /// above the response, as the divider between them was left.
+    pub split_percent: u32,
 }
 
 impl Default for Settings {
@@ -522,6 +525,7 @@ impl Default for Settings {
             allow_outside_working_dir: false,
             protect_secrets: true,
             history_limit: 500,
+            split_percent: 40,
         }
     }
 }

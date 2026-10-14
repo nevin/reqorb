@@ -109,7 +109,9 @@ class _RequestPageState extends State<RequestPage> {
   bool _sidebarCollapsed = false;
 
   /// Share of the space the request editor takes; the response has the rest.
-  double _split = 0.4;
+  /// Where the divider is while it is being dragged; otherwise where the
+  /// settings say it was left.
+  double? _split;
 
   final _urlFocus = FocusNode();
 
@@ -1322,8 +1324,14 @@ class _RequestPageState extends State<RequestPage> {
           child: LayoutBuilder(
             builder: (context, constraints) => SplitView(
               axis: responseAxis(_store.settings.layout, constraints.maxWidth),
-              fraction: _split,
+              fraction: _split ?? _store.settings.splitPercent / 100,
               onChanged: (fraction) => setState(() => _split = fraction),
+              // Kept once the drag ends, for the next launch.
+              onChangeEnd: (fraction) => _store.updateSettings(
+                _store.settings.copyWith(
+                  splitPercent: (fraction * 100).round().clamp(10, 90),
+                ),
+              ),
               first: request,
               second: response,
             ),

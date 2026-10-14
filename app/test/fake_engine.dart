@@ -346,6 +346,7 @@ class FakeEngine extends Engine {
     allowOutsideWorkingDir: false,
     protectSecrets: true,
     historyLimit: 500,
+    splitPercent: 40,
   );
 
   @override
