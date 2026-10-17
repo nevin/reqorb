@@ -57,6 +57,7 @@ The workspace forbids `unsafe` code and denies `dbg!`, `todo!` and `unimplemente
 | `redact`, `analyze`, `data` | Removing credentials from exports; the HAR report; the data file of a collection run |
 | `vault`, `history` | What is kept on disk: the workspace with its credentials encrypted, and the requests sent |
 | `files` | Checking that a working directory can be read and written |
+| `document/` | Text of any size, up to about a gigabyte, for the editor. The original bytes are read from memory or a file a page at a time (`source.rs`); a background thread counts newlines every 4 KB (`index.rs`); edits are a piece table over the original and an append-only buffer, so undo copies no text (`text.rs`); search runs over a snapshot a megabyte at a time (`search.rs`). Lines over 2 KB are shown over several rows, and columns are counted in UTF-16 units, as Dart counts them |
 
 ## The CLI
 
