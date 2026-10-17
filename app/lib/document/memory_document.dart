@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:reqorb/document/json_scan.dart';
 import 'package:reqorb/document/text_document.dart';
 
 /// A document held whole in Dart, which works as the Rust engine's does
@@ -380,6 +381,43 @@ class MemoryDocument implements TextDocument {
       done: true,
       count: found.length,
     );
+  }
+
+  @override
+  Uint8List bytes(int start, int end) {
+    final from = start.clamp(0, _bytes.length);
+    return Uint8List.fromList(
+      _bytes.sublist(from, end.clamp(from, _bytes.length)),
+    );
+  }
+
+  @override
+  Future<DocJsonNode> jsonRoot() async => jsonRootOf(_bytes);
+
+  @override
+  Future<DocJsonPage> jsonChildren(
+    int at, {
+    int? from,
+    int count = 200,
+  }) async => jsonChildrenOf(_bytes, at, from, count);
+
+  @override
+  Stream<DocFormatUpdate> formatJson({String? indent}) async* {
+    final total = _bytes.length;
+    try {
+      final formatted = formatJsonBytes(_bytes, indent);
+      final dir = await Directory.systemTemp.createTemp('reqorb_format');
+      final file = File('${dir.path}/formatted.json');
+      await file.writeAsBytes(formatted);
+      yield DocFormatUpdate(
+        read: total,
+        total: total,
+        done: true,
+        path: file.path,
+      );
+    } on String catch (e) {
+      yield DocFormatUpdate(read: 0, total: total, done: true, error: e);
+    }
   }
 
   @override

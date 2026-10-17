@@ -32,6 +32,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int dco_decode_CastedPrimitive_u_64(dynamic raw);
 
   @protected
+  RustStreamSink<DocFormatUpdate> dco_decode_StreamSink_doc_format_update_Sse(
+    dynamic raw,
+  );
+
+  @protected
   RustStreamSink<DocSearchUpdate> dco_decode_StreamSink_doc_search_update_Sse(
     dynamic raw,
   );
@@ -142,7 +147,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   DisabledTls dco_decode_disabled_tls(dynamic raw);
 
   @protected
+  DocFormatUpdate dco_decode_doc_format_update(dynamic raw);
+
+  @protected
   DocInfo dco_decode_doc_info(dynamic raw);
+
+  @protected
+  DocJsonKind dco_decode_doc_json_kind(dynamic raw);
+
+  @protected
+  DocJsonNode dco_decode_doc_json_node(dynamic raw);
+
+  @protected
+  DocJsonPage dco_decode_doc_json_page(dynamic raw);
 
   @protected
   DocPosition dco_decode_doc_position(dynamic raw);
@@ -274,6 +291,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<Cookie> dco_decode_list_cookie(dynamic raw);
 
   @protected
+  List<DocJsonNode> dco_decode_list_doc_json_node(dynamic raw);
+
+  @protected
   List<DocRow> dco_decode_list_doc_row(dynamic raw);
 
   @protected
@@ -329,6 +349,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   Uint32List dco_decode_list_prim_u_32_strict(dynamic raw);
+
+  @protected
+  List<int> dco_decode_list_prim_u_8_loose(dynamic raw);
 
   @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
@@ -454,6 +477,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int sse_decode_CastedPrimitive_u_64(SseDeserializer deserializer);
 
   @protected
+  RustStreamSink<DocFormatUpdate> sse_decode_StreamSink_doc_format_update_Sse(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   RustStreamSink<DocSearchUpdate> sse_decode_StreamSink_doc_search_update_Sse(
     SseDeserializer deserializer,
   );
@@ -576,7 +604,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   DisabledTls sse_decode_disabled_tls(SseDeserializer deserializer);
 
   @protected
+  DocFormatUpdate sse_decode_doc_format_update(SseDeserializer deserializer);
+
+  @protected
   DocInfo sse_decode_doc_info(SseDeserializer deserializer);
+
+  @protected
+  DocJsonKind sse_decode_doc_json_kind(SseDeserializer deserializer);
+
+  @protected
+  DocJsonNode sse_decode_doc_json_node(SseDeserializer deserializer);
+
+  @protected
+  DocJsonPage sse_decode_doc_json_page(SseDeserializer deserializer);
 
   @protected
   DocPosition sse_decode_doc_position(SseDeserializer deserializer);
@@ -708,6 +748,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<Cookie> sse_decode_list_cookie(SseDeserializer deserializer);
 
   @protected
+  List<DocJsonNode> sse_decode_list_doc_json_node(SseDeserializer deserializer);
+
+  @protected
   List<DocRow> sse_decode_list_doc_row(SseDeserializer deserializer);
 
   @protected
@@ -769,6 +812,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   Uint32List sse_decode_list_prim_u_32_strict(SseDeserializer deserializer);
+
+  @protected
+  List<int> sse_decode_list_prim_u_8_loose(SseDeserializer deserializer);
 
   @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
@@ -905,6 +951,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_CastedPrimitive_u_64(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_StreamSink_doc_format_update_Sse(
+    RustStreamSink<DocFormatUpdate> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_StreamSink_doc_search_update_Sse(
@@ -1063,7 +1115,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_disabled_tls(DisabledTls self, SseSerializer serializer);
 
   @protected
+  void sse_encode_doc_format_update(
+    DocFormatUpdate self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_doc_info(DocInfo self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_doc_json_kind(DocJsonKind self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_doc_json_node(DocJsonNode self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_doc_json_page(DocJsonPage self, SseSerializer serializer);
 
   @protected
   void sse_encode_doc_position(DocPosition self, SseSerializer serializer);
@@ -1213,6 +1280,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_list_cookie(List<Cookie> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_doc_json_node(
+    List<DocJsonNode> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_doc_row(List<DocRow> self, SseSerializer serializer);
 
   @protected
@@ -1301,6 +1374,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     Uint32List self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_list_prim_u_8_loose(List<int> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_prim_u_8_strict(

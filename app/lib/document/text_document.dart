@@ -2,10 +2,22 @@
 /// how it is shown in rows, and changing, undoing, searching and saving it.
 library;
 
+import 'dart:typed_data';
+
 import 'package:reqorb/src/rust/api/document.dart';
 
 export 'package:reqorb/src/rust/api/document.dart'
-    show DocInfo, DocPosition, DocQuery, DocRow, DocSearchUpdate, DocSpan;
+    show
+        DocFormatUpdate,
+        DocInfo,
+        DocJsonKind,
+        DocJsonNode,
+        DocJsonPage,
+        DocPosition,
+        DocQuery,
+        DocRow,
+        DocSearchUpdate,
+        DocSpan;
 
 /// The most bytes of a line shown in one row. Longer lines go on over
 /// several rows, so that a megabyte of JSON on one line can be shown.
@@ -43,6 +55,23 @@ abstract class TextDocument {
 
   /// Bytes [start] to [end] as text.
   String text(int start, int end);
+
+  /// Bytes [start] to [end] as they are, for showing in hexadecimal.
+  Uint8List bytes(int start, int end);
+
+  /// The JSON value at the top of the text. Reads all of it, to find
+  /// where it ends; throws if it is not JSON.
+  Future<DocJsonNode> jsonRoot();
+
+  /// Up to [count] children of the JSON object or array at byte [at]:
+  /// from its first, or from [from], where a page before left off. Reads
+  /// only as much as they take up.
+  Future<DocJsonPage> jsonChildren(int at, {int? from, int count = 200});
+
+  /// Writes the text, which is JSON, to a new temporary file: indented by
+  /// [indent], or minified without one. Reports how far it has read, and
+  /// at the end the file, or why it could not; cancelling stops it.
+  Stream<DocFormatUpdate> formatJson({String? indent});
 
   /// Puts [text] in place of bytes [start] to [end]. With [typing], text
   /// that carries straight on from the last edit joins it as one step of

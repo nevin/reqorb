@@ -58,7 +58,7 @@ The workspace forbids `unsafe` code and denies `dbg!`, `todo!` and `unimplemente
 | `vault`, `history` | What is kept on disk: the workspace with its credentials encrypted, and the requests sent |
 | `files` | Checking that a working directory can be read and written |
 | `spill.rs` | Response bodies over 16 MB, written to a temporary file as they arrive; the `Response` keeps the first megabyte as text and the file's path in `body_file`. Tests, captures and HAR export read the file back when it is under 256 MB; scripts get the first megabyte past that. Only the last 8 files are kept, history keeps none, and the app deletes them all when it starts |
-| `document/` | Text of any size, up to about a gigabyte, for the editor. The original bytes are read from memory or a file a page at a time (`source.rs`); a background thread counts newlines every 4 KB (`index.rs`); edits are a piece table over the original and an append-only buffer, so undo copies no text (`text.rs`); search runs over a snapshot a megabyte at a time (`search.rs`). Lines over 2 KB are shown over several rows, and columns are counted in UTF-16 units, as Dart counts them. Saving writes beside the file and renames it into place; where only the file itself may be written, as in the macOS sandbox, it first keeps a copy of the original to read from and then writes over the file |
+| `document/` | Text of any size, up to about a gigabyte, for the editor. The original bytes are read from memory or a file a page at a time (`source.rs`); a background thread counts newlines every 4 KB (`index.rs`); edits are a piece table over the original and an append-only buffer, so undo copies no text (`text.rs`); search runs over a snapshot a megabyte at a time (`search.rs`). Lines over 2 KB are shown over several rows, and columns are counted in UTF-16 units, as Dart counts them. `json.rs` lists the children of one object or array at a time, reading only as far as they go, and writes the whole of a document's JSON out again indented or minified, a megabyte at a time. Saving writes beside the file and renames it into place; where only the file itself may be written, as in the macOS sandbox, it first keeps a copy of the original to read from and then writes over the file |
 
 ## The CLI
 
@@ -151,7 +151,7 @@ The `app/lib/` folders are features:
 | `request/` | The main page, the request model, the send session, the request editors and the code dialog |
 | `response/` | The response pane, server-sent events |
 | `protocols/` | WebSocket and gRPC sessions and views |
-| `editor/` | The code editor: colouring, typing aids, find and replace, folding, completion; and `DocumentView`, which shows a document of any size a screenful at a time |
+| `editor/` | The code editor: colouring, typing aids, find and replace, folding, completion; `DocumentView`, which shows a document of any size a screenful at a time; `HexView`, its bytes; and `JsonTreeView`, its JSON as a tree opened a level at a time |
 | `document/` | `TextDocument`, text of any size held by the Rust engine (`RustDocument` in `bridge/`), and `MemoryDocument`, the same held in Dart for tests; `caret.dart` moves through one by character and word |
 | `files/` | **Open file…**: a file of any size to edit and save |
 | `graphql/` | The GraphQL editor, schema browser and schema session |

@@ -39,9 +39,9 @@ pub fn clean_spilled() {
     let _ = fs::remove_dir_all(spill_dir());
 }
 
-/// A new file for a body, after deleting all but the most recent of the
-/// others.
-fn create() -> io::Result<(File, PathBuf)> {
+/// A new file in [`spill_dir`], for a body or for a document written out
+/// again, after deleting all but the most recent of the others.
+pub fn new_spill_file() -> io::Result<(File, PathBuf)> {
     static NEXT: AtomicU64 = AtomicU64::new(0);
     let dir = spill_dir();
     fs::create_dir_all(&dir)?;
@@ -81,7 +81,7 @@ impl BodySink {
         }
         self.bytes.extend_from_slice(chunk);
         if self.len > SPILL_BYTES {
-            let (mut file, path) = create().map_err(failed)?;
+            let (mut file, path) = new_spill_file().map_err(failed)?;
             file.write_all(&self.bytes).map_err(failed)?;
             self.bytes.truncate(PREVIEW_BYTES);
             self.bytes.shrink_to_fit();

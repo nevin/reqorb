@@ -273,13 +273,23 @@ void main() {
         ),
       ),
     );
-    for (var i = 0; i < 10; i++) {
+    // Opened, and re-indented: files read and written outside the clock.
+    for (var i = 0; i < 40 && find.text('  "row": 0').evaluate().isEmpty; i++) {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 10)),
       );
       await tester.pump();
     }
     expect(find.byKey(const Key('response-from-file')), findsOneWidget);
+    // Pretty is the JSON re-indented, into a file of its own.
+    expect(find.text('  "row": 0'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('body-raw')));
+    for (var i = 0; i < 10; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+    }
     expect(find.text('{"row": 0}'), findsOneWidget);
     // All of it is there, not only what was held.
     await tester.tap(find.text('{"row": 0}'));
@@ -307,5 +317,63 @@ void main() {
     }
     expect(copied, lines);
     await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('JSON can be explored as a tree', (tester) async {
+    await show(
+      tester,
+      headers: const [Header(name: 'content-type', value: 'application/json')],
+      body: '{"a": [1, 2], "b": "x"}',
+    );
+    await tester.tap(find.byKey(const Key('body-tree')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    expect(find.textContaining('"a": […]'), findsOneWidget);
+    expect(find.text('"b": "x"'), findsOneWidget);
+    await tester.tap(find.textContaining('"a": […]'));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    expect(find.text('1: 2'), findsOneWidget);
+    expect(find.textContaining('2 items'), findsOneWidget);
+  });
+
+  testWidgets('a binary body can be shown as bytes', (tester) async {
+    tester.view.physicalSize = const Size(1000, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final sent = sentWith(
+      Response(
+        status: 200,
+        statusText: 'OK',
+        httpVersion: 'HTTP/1.1',
+        headers: const [
+          Header(name: 'content-type', value: 'application/octet-stream'),
+        ],
+        body: '',
+        bytes: Uint8List.fromList([0, 1, 0x41, 0xff]),
+        sizeBytes: 4,
+        elapsedMs: 12,
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ResponseView(
+            sent: sent,
+            error: null,
+            errorTitle: '',
+            sending: false,
+            sessionSize: 1,
+            onExportSession: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const Key('binary-hex')));
+    await tester.pump();
+    expect(find.textContaining('00 01 41 ff'), findsOneWidget);
+    expect(find.textContaining('..A.'), findsOneWidget);
   });
 }

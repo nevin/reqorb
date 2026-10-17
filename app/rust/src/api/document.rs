@@ -49,6 +49,12 @@ pub fn doc_from_text(text: String) -> u32 {
     keep(Document::from_text(&text))
 }
 
+/// A new document holding `bytes`, which need not be text.
+#[frb(sync)]
+pub fn doc_from_bytes(bytes: Vec<u8>) -> u32 {
+    keep(Document::from_bytes(bytes))
+}
+
 /// Opens a file. Its first page is ready when this returns; the rest of
 /// its lines are found in the background, as [`doc_info`] tells.
 pub fn doc_open(path: String) -> Result<u32, String> {
@@ -187,6 +193,12 @@ pub fn doc_line_of(id: u32, offset: u64) -> u64 {
     with(id, 0, |doc| doc.line_of(offset))
 }
 
+/// Bytes `start..end` as they are, for showing in hexadecimal.
+#[frb(sync)]
+pub fn doc_bytes(id: u32, start: u64, end: u64) -> Vec<u8> {
+    with(id, Vec::new(), |doc| doc.bytes(start, end))
+}
+
 /// Bytes `start..end` as text.
 #[frb(sync)]
 pub fn doc_text(id: u32, start: u64, end: u64) -> String {
@@ -264,7 +276,7 @@ pub struct DocSearchUpdate {
     pub error: Option<String>,
 }
 
-static SEARCHES: LazyLock<Mutex<HashMap<u32, Arc<AtomicBool>>>> = LazyLock::new(Default::default);
+static JOBS: LazyLock<Mutex<HashMap<u32, Arc<AtomicBool>>>> = LazyLock::new(Default::default);
 
 /// Searches document `id` as it is now, reporting matches as they are
 /// found. [`doc_cancel_search`] with `search` stops it.
@@ -281,7 +293,7 @@ pub fn doc_search(id: u32, search: u32, query: DocQuery, sink: StreamSink<DocSea
         }
     };
     let cancel = Arc::new(AtomicBool::new(false));
-    lock(&SEARCHES).insert(search, cancel.clone());
+    lock(&JOBS).insert(search, cancel.clone());
     let query = reqorb_core::Query {
         text: query.text,
         regex: query.regex,
@@ -301,7 +313,7 @@ pub fn doc_search(id: u32, search: u32, query: DocQuery, sink: StreamSink<DocSea
             ..Default::default()
         });
     });
-    lock(&SEARCHES).remove(&search);
+    lock(&JOBS).remove(&search);
     let _ = sink.add(match result {
         Ok(found) => DocSearchUpdate {
             searched: snapshot.len(),
@@ -317,10 +329,152 @@ pub fn doc_search(id: u32, search: u32, query: DocQuery, sink: StreamSink<DocSea
     });
 }
 
-/// Stops search `search`, if it is still going.
+/// What a JSON value is.
+#[derive(Debug, Clone, Copy)]
+pub enum DocJsonKind {
+    Object,
+    Array,
+    String,
+    Number,
+    Bool,
+    Null,
+}
+
+/// One value in a document's JSON, as a tree shows it.
+#[derive(Debug, Clone)]
+pub struct DocJsonNode {
+    pub key: Option<String>,
+    pub kind: DocJsonKind,
+    /// The start of a scalar as written; empty for an object or array.
+    pub preview: String,
+    pub start: u64,
+    pub end: u64,
+}
+
+/// Some of the children of an object or array, and where the rest go on
+/// from, if there are more.
+#[derive(Debug, Clone)]
+pub struct DocJsonPage {
+    pub nodes: Vec<DocJsonNode>,
+    pub next: Option<u64>,
+}
+
+fn node(n: reqorb_core::JsonNode) -> DocJsonNode {
+    use reqorb_core::JsonKind as K;
+    DocJsonNode {
+        key: n.key,
+        kind: match n.kind {
+            K::Object => DocJsonKind::Object,
+            K::Array => DocJsonKind::Array,
+            K::String => DocJsonKind::String,
+            K::Number => DocJsonKind::Number,
+            K::Bool => DocJsonKind::Bool,
+            K::Null => DocJsonKind::Null,
+        },
+        preview: n.preview,
+        start: n.start,
+        end: n.end,
+    }
+}
+
+/// The JSON value at the top of document `id`. Reads the whole of it, to
+/// find where it ends.
+pub fn doc_json_root(id: u32) -> Result<DocJsonNode, String> {
+    let doc = shared(id)?;
+    let snapshot = lock(&doc).snapshot();
+    snapshot.json_root().map(node).map_err(|e| e.to_string())
+}
+
+/// Up to `count` children of the object or array at `at`: from its first,
+/// or from `from`, where a page before left off.
+pub fn doc_json_children(
+    id: u32,
+    at: u64,
+    from: Option<u64>,
+    count: u32,
+) -> Result<DocJsonPage, String> {
+    let doc = shared(id)?;
+    let snapshot = lock(&doc).snapshot();
+    snapshot
+        .json_children(at, from, count as usize)
+        .map(|page| DocJsonPage {
+            nodes: page.nodes.into_iter().map(node).collect(),
+            next: page.next,
+        })
+        .map_err(|e| e.to_string())
+}
+
+/// How writing a document's JSON out again is going: how much has been
+/// read of how much, and at the end, the file written, or why not.
+#[derive(Debug, Clone, Default)]
+pub struct DocFormatUpdate {
+    pub read: u64,
+    pub total: u64,
+    pub done: bool,
+    pub path: Option<String>,
+    pub error: Option<String>,
+}
+
+/// Writes document `id`'s JSON to a new temporary file, indented by
+/// `indent`, or minified without one, reporting as it goes.
+/// [`doc_cancel_search`] with `job` stops it.
+pub fn doc_format_json(
+    id: u32,
+    job: u32,
+    indent: Option<String>,
+    sink: StreamSink<DocFormatUpdate>,
+) {
+    let snapshot = match shared(id) {
+        Ok(doc) => lock(&doc).snapshot(),
+        Err(e) => {
+            let _ = sink.add(DocFormatUpdate {
+                done: true,
+                error: Some(e),
+                ..Default::default()
+            });
+            return;
+        }
+    };
+    let cancel = Arc::new(AtomicBool::new(false));
+    lock(&JOBS).insert(job, cancel.clone());
+    let total = snapshot.len();
+    let result = (|| {
+        let (mut file, path) = reqorb_core::new_spill_file()
+            .map_err(|e| format!("could not make a file to write to: {e}"))?;
+        let written = snapshot.format_json(indent.as_deref(), &mut file, &cancel, &mut |read| {
+            let _ = sink.add(DocFormatUpdate {
+                read,
+                total,
+                ..Default::default()
+            });
+        });
+        if let Err(e) = written {
+            let _ = std::fs::remove_file(&path);
+            return Err(e.to_string());
+        }
+        Ok(path.display().to_string())
+    })();
+    lock(&JOBS).remove(&job);
+    let _ = sink.add(match result {
+        Ok(path) => DocFormatUpdate {
+            read: total,
+            total,
+            done: true,
+            path: Some(path),
+            error: None,
+        },
+        Err(e) => DocFormatUpdate {
+            done: true,
+            error: Some(e),
+            ..Default::default()
+        },
+    });
+}
+
+/// Stops search or formatting `search`, if it is still going.
 #[frb(sync)]
 pub fn doc_cancel_search(search: u32) -> bool {
-    lock(&SEARCHES)
+    lock(&JOBS)
         .get(&search)
         .map(|cancel| cancel.store(true, Ordering::Relaxed))
         .is_some()

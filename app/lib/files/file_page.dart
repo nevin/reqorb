@@ -9,6 +9,8 @@ import 'package:flutter/services.dart';
 import 'package:reqorb/bridge/engine.dart';
 import 'package:reqorb/document/text_document.dart';
 import 'package:reqorb/editor/document_view.dart';
+import 'package:reqorb/editor/hex_view.dart';
+import 'package:reqorb/editor/json_tree_view.dart';
 import 'package:reqorb/editor/syntax.dart';
 import 'package:reqorb/shared/messages.dart';
 import 'package:reqorb/shared/theme.dart';
@@ -134,8 +136,17 @@ class _FilePageState extends State<FilePage> {
   String? _error;
   bool _opening = true;
 
-  /// Whether the file looks binary, and is shown only when asked.
-  bool _binary = false;
+  /// How the file is shown: as text, as bytes, or as a JSON tree. A file
+  /// that looks binary starts as bytes.
+  _View _view = _View.text;
+
+  /// Whether the text is JSON written out again, not yet saved over the
+  /// file: the document is then a temporary file of its own.
+  bool _rewritten = false;
+
+  /// How far writing the JSON out again has got, while it is going.
+  double? _rewriting;
+  StreamSubscription<DocFormatUpdate>? _rewrite;
 
   /// Whether the file was changed elsewhere while there are changes here.
   bool _changedElsewhere = false;
@@ -153,7 +164,11 @@ class _FilePageState extends State<FilePage> {
   String get _name =>
       _temporary ? (widget.name ?? _nameOf(_path)) : _nameOf(_path);
 
-  bool get _modified => _doc?.info().modified ?? false;
+  bool get _modified => (_doc?.info().modified ?? false) || _rewritten;
+
+  CodeLanguage? get _language => CodeLanguage.ofFileName(_name);
+
+  bool get _json => _language == CodeLanguage.json;
 
   @override
   void didChangeDependencies() {
@@ -164,6 +179,7 @@ class _FilePageState extends State<FilePage> {
   @override
   void dispose() {
     _watch?.cancel();
+    _rewrite?.cancel();
     _doc?.dispose();
     super.dispose();
   }
@@ -192,8 +208,10 @@ class _FilePageState extends State<FilePage> {
       _doc = doc;
       _error = error;
       _opening = false;
-      _binary = doc?.looksBinary ?? false;
+      _view = (doc?.looksBinary ?? false) ? _View.hex : _View.text;
       _changedElsewhere = false;
+      _rewritten = false;
+      _rewriting = null;
     });
     _watch?.cancel();
     if (doc != null) {
@@ -205,7 +223,11 @@ class _FilePageState extends State<FilePage> {
   /// there are no changes here to lose, and otherwise said.
   void _check() {
     final doc = _doc;
-    if (doc == null || _saving || _changedElsewhere || !doc.changedOnDisk) {
+    if (doc == null ||
+        _saving ||
+        _changedElsewhere ||
+        _rewritten ||
+        !doc.changedOnDisk) {
       return;
     }
     if (!_modified) {
@@ -229,7 +251,8 @@ class _FilePageState extends State<FilePage> {
       await _saveAs();
       return;
     }
-    await _saveTo(doc, null);
+    // JSON written out again is in a file of its own, saved over this one.
+    await _saveTo(doc, _rewritten ? _path : null, force: _rewritten);
   }
 
   Future<void> _saveAs() async {
@@ -260,6 +283,7 @@ class _FilePageState extends State<FilePage> {
       setState(() {
         if (path != null) _path = path;
         _changedElsewhere = false;
+        _rewritten = false;
       });
       notify(messenger, 'Saved $_name');
       return true;
@@ -355,7 +379,7 @@ class _FilePageState extends State<FilePage> {
           await _export();
           return false;
         }
-        return _saveTo(doc, null);
+        return _saveTo(doc, _rewritten ? _path : null, force: _rewritten);
       default:
         return false;
     }
@@ -375,6 +399,46 @@ class _FilePageState extends State<FilePage> {
 
   /// Drops the changes here for the file as it is now.
   void _reload() => _open(_path);
+
+  /// Writes the JSON out again, indented by [indent] or minified, into a
+  /// file of its own, and shows that in place of the text, to save over
+  /// the file. It takes the text with any edits as it is when asked; undo
+  /// starts afresh after.
+  void _rewriteJson({String? indent}) {
+    final doc = _doc;
+    if (doc == null || _rewrite != null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final engine = Engine.of(context);
+    setState(() => _rewriting = 0);
+    _rewrite = doc.formatJson(indent: indent).listen((u) async {
+      if (!mounted) return;
+      if (!u.done) {
+        setState(() => _rewriting = u.total == 0 ? null : u.read / u.total);
+        return;
+      }
+      _rewrite = null;
+      final path = u.path;
+      if (path == null) {
+        setState(() => _rewriting = null);
+        notify(messenger, 'Could not format $_name: ${u.error}');
+        return;
+      }
+      final rewritten = await engine.openDocument(path);
+      if (!mounted || doc != _doc) return rewritten.dispose();
+      doc.dispose();
+      setState(() {
+        _doc = rewritten;
+        _rewritten = true;
+        _rewriting = null;
+      });
+      notify(
+        messenger,
+        indent == null
+            ? 'Minified; saving writes it over $_name'
+            : 'Formatted; saving writes it over $_name',
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -408,39 +472,6 @@ class _FilePageState extends State<FilePage> {
           ),
         ),
       );
-    } else if (_binary) {
-      body = Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.memory,
-                size: 40,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                '$_name looks like a binary file.',
-                style: theme.textTheme.titleMedium,
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Shown as text, it is mostly unreadable, and saving it after '
-                'an edit could damage it.',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              FilledButton.tonal(
-                key: const Key('file-binary-open'),
-                onPressed: () => setState(() => _binary = false),
-                child: const Text('Show as text anyway'),
-              ),
-            ],
-          ),
-        ),
-      );
     } else {
       body = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -465,18 +496,41 @@ class _FilePageState extends State<FilePage> {
                 ),
               ],
             ),
-          Expanded(
-            child: DocumentView(
-              key: ValueKey(doc),
-              document: doc,
-              name: 'file',
-              language: CodeLanguage.ofFileName(_name),
-              editable: true,
-              status: true,
-              autofocus: true,
-              onChanged: () => setState(() {}),
+          if (_rewriting != null || _rewrite != null)
+            LinearProgressIndicator(
+              key: const Key('file-rewriting'),
+              minHeight: 2,
+              value: _rewriting,
             ),
-          ),
+          if (_view == _View.hex)
+            Expanded(
+              child: HexView(
+                key: ValueKey(doc),
+                document: doc,
+                name: 'file-hex',
+              ),
+            )
+          else if (_view == _View.tree)
+            Expanded(
+              child: JsonTreeView(
+                key: ValueKey(doc),
+                document: doc,
+                name: 'file-tree',
+              ),
+            )
+          else
+            Expanded(
+              child: DocumentView(
+                key: ValueKey(doc),
+                document: doc,
+                name: 'file',
+                language: _language,
+                editable: true,
+                status: true,
+                autofocus: true,
+                onChanged: () => setState(() {}),
+              ),
+            ),
         ],
       );
     }
@@ -518,6 +572,52 @@ class _FilePageState extends State<FilePage> {
               ],
             ),
             actions: [
+              if (doc != null)
+                PopupMenuButton<VoidCallback>(
+                  key: const Key('file-view'),
+                  tooltip: 'Show as',
+                  icon: Icon(switch (_view) {
+                    _View.text => Icons.notes,
+                    _View.hex => Icons.memory,
+                    _View.tree => Icons.account_tree_outlined,
+                  }),
+                  onSelected: (action) => action(),
+                  itemBuilder: (_) => [
+                    CheckedPopupMenuItem(
+                      key: const Key('file-view-text'),
+                      checked: _view == _View.text,
+                      value: () => setState(() => _view = _View.text),
+                      child: const Text('Text'),
+                    ),
+                    CheckedPopupMenuItem(
+                      key: const Key('file-view-hex'),
+                      checked: _view == _View.hex,
+                      value: () => setState(() => _view = _View.hex),
+                      child: const Text('Bytes'),
+                    ),
+                    if (_json) ...[
+                      CheckedPopupMenuItem(
+                        key: const Key('file-view-tree'),
+                        checked: _view == _View.tree,
+                        value: () => setState(() => _view = _View.tree),
+                        child: const Text('JSON tree'),
+                      ),
+                      const PopupMenuDivider(),
+                      PopupMenuItem(
+                        key: const Key('file-format'),
+                        enabled: _rewrite == null,
+                        value: () => _rewriteJson(indent: CodeStyle.indent),
+                        child: const Text('Format JSON'),
+                      ),
+                      PopupMenuItem(
+                        key: const Key('file-minify'),
+                        enabled: _rewrite == null,
+                        value: _rewriteJson,
+                        child: const Text('Minify JSON'),
+                      ),
+                    ],
+                  ],
+                ),
               IconButton(
                 key: const Key('file-open'),
                 tooltip: 'Open another (${shortcutModifier}O)',
@@ -560,3 +660,6 @@ class _FilePageState extends State<FilePage> {
     );
   }
 }
+
+/// How a file is shown.
+enum _View { text, hex, tree }

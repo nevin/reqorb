@@ -42,7 +42,10 @@ pub use auth::{Auth, AuthField, AuthKind, AuthParam, auth_fields};
 pub use checks::{TestResult, capture, run_tests};
 pub use codegen::{CodeTarget, generate_code};
 pub use data::parse_run_data;
-pub use document::{Change, Document, Found, Indexing, MAX_KEPT, Query, ROW_BYTES, Row, Snapshot};
+pub use document::{
+    Change, Document, Found, Indexing, JsonKind, JsonNode, JsonPage, MAX_KEPT, Query, ROW_BYTES,
+    Row, Snapshot,
+};
 pub use error::Error;
 pub use files::{DirAccess, FileAccess, check_directory};
 pub use formats::{
@@ -67,7 +70,9 @@ pub use model::{
     SendOptions, Settings, Variable, Workspace,
 };
 pub use redact::{REDACTED, redact_collection, redact_environment, redact_exchanges, redact_text};
-pub use spill::{PREVIEW_BYTES, READ_LIMIT, SPILL_BYTES, clean_spilled, read_spilled, spill_dir};
+pub use spill::{
+    PREVIEW_BYTES, READ_LIMIT, SPILL_BYTES, clean_spilled, new_spill_file, read_spilled, spill_dir,
+};
 pub use vars::{Resolved, resolve};
 pub use vault::{
     KeyStore, Keychain, LOCKED, Loaded, check_keys, load_workspace, locked_secrets, save_workspace,

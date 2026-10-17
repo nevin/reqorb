@@ -15,6 +15,10 @@ the new version when it is tagged.
 - A response over 16 MB is written to a file as it arrives, rather than held in
   memory, and shown from there, however large. Copy, save, tests and captures still
   see all of it, up to 256 MB, and **Open to edit** opens it in a page of its own.
+- JSON of any size can be explored as a **Tree**, opened a level at a time, in a
+  response or a file. A large JSON response is indented for **Pretty** without being
+  parsed whole, and **Open file…** can format or minify a JSON file however big.
+- Binary responses and files can be shown as bytes, in hexadecimal.
 
 ## 0.2.0 – 2026-10-17
 

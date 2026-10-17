@@ -164,13 +164,95 @@ void main() {
     expect(find.byKey(const Key('file-changed')), findsNothing);
   }, variant: _mac);
 
-  testWidgets('a binary file is shown as text only when asked', (tester) async {
+  testWidgets('a binary file is shown as bytes, or as text when asked', (
+    tester,
+  ) async {
     File(path).writeAsBytesSync([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 13]);
     await start(tester);
-    expect(find.text('notes.json looks like a binary file.'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('file-binary-open')));
-    await settle(tester);
+    expect(find.byKey(const Key('file-hex')), findsOneWidget);
+    expect(
+      find.text(
+        '00000000  89 50 4e 47 00 00 00 0d                           .PNG....',
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('file-view')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('file-view-text')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('file')), findsOneWidget);
+  }, variant: _mac);
+
+  testWidgets('JSON is explored as a tree', (tester) async {
+    File(path).writeAsStringSync(
+      '{"name": "reqorb", "list": [${List.generate(250, (i) => i).join(', ')}]}',
+    );
+    await start(tester);
+    await tester.tap(find.byKey(const Key('file-view')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('file-view-tree')));
+    await settle(tester);
+    expect(find.text('"name": "reqorb"'), findsOneWidget);
+    // The list opens a page at a time: after the top, its two keys and
+    // the first 200 items, a row brings more.
+    await tester.tap(find.textContaining('"list": […]'));
+    await settle(tester);
+    expect(find.text('0: 0'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('file-tree-more-203')),
+      300,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('file-tree')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.tap(find.byKey(const Key('file-tree-more-203')));
+    await settle(tester);
+    await tester.scrollUntilVisible(
+      find.text('249: 249'),
+      300,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('file-tree')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    expect(find.text('249: 249'), findsOneWidget);
+  }, variant: _mac);
+
+  testWidgets('JSON is formatted or minified, and saved over the file', (
+    tester,
+  ) async {
+    File(path).writeAsStringSync('{"a":[1,2],"b":{}}');
+    await start(tester);
+    Future<void> menu(String key) async {
+      await tester.tap(find.byKey(const Key('file-view')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(Key(key)));
+      await settle(tester);
+      await settle(tester);
+    }
+
+    await menu('file-format');
+    expect(find.text('  "a": ['), findsOneWidget);
+    expect(title(tester), '• notes.json');
+    expect(
+      await tester.runAsync(() => File(path).readAsString()),
+      '{"a":[1,2],"b":{}}',
+      reason: 'not written until saved',
+    );
+    await command(tester, LogicalKeyboardKey.keyS);
+    expect(title(tester), 'notes.json');
+    expect(
+      await tester.runAsync(() => File(path).readAsString()),
+      '{\n  "a": [\n    1,\n    2\n  ],\n  "b": {}\n}\n',
+    );
+
+    await menu('file-minify');
+    await command(tester, LogicalKeyboardKey.keyS);
+    expect(
+      await tester.runAsync(() => File(path).readAsString()),
+      '{"a":[1,2],"b":{}}',
+    );
   }, variant: _mac);
 
   testWidgets('a file that cannot be read says why', (tester) async {

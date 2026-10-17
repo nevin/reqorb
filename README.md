@@ -549,6 +549,13 @@ far the lines have been counted. `⌘F` finds text, with **Aa** to match case, *
 whole words and **.\*** for a regular expression; matches are counted as the search
 goes, and `Enter` steps through them.
 
+JSON, whatever its size, can be shown as a **Tree** (beside **Pretty** and **Raw** in a
+response, and under the view button of **Open file…**): each object or array opens to
+list what is in it, 200 at a time, and only that much of the text is read. A large
+JSON response is indented for **Pretty** a megabyte at a time, into a file of its own,
+with a bar showing how far it has got. A binary response or file can be shown as its
+bytes in hexadecimal, sixteen to a row, with the characters beside them.
+
 **Open file…** in the sidebar, the `⌘K` box or `⌘O` opens a file to edit there:
 
 - Typing goes through the system's input method, so accents and Chinese or Japanese
@@ -563,6 +570,9 @@ goes, and `Enter` steps through them.
 - If another program changes the file, it is read again; if there are edits, a notice
   offers to reload it or keep them, and saving over it is asked about first. Closing
   with unsaved edits asks whether to save them.
+- The view button shows the file as text, as bytes, or, for JSON, as a tree, and
+  offers **Format JSON** and **Minify JSON**, which rewrite the whole file a megabyte
+  at a time; saving then writes the result over it.
 - On iPad a picked file is a copy, so it is exported (up to 64 MB) rather than saved.
 
 ## Code generation

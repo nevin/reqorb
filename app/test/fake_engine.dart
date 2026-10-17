@@ -599,6 +599,13 @@ class FakeEngine extends Engine {
   }
 
   @override
+  TextDocument documentOfBytes(Uint8List bytes) {
+    final document = MemoryDocument.bytes(bytes);
+    documents.add(document);
+    return document;
+  }
+
+  @override
   Future<TextDocument> openDocument(String path) async {
     final document = await MemoryDocument.open(path);
     documents.add(document);

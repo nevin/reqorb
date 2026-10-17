@@ -14,6 +14,8 @@ import 'package:reqorb/document/memory_document.dart';
 import 'package:reqorb/document/text_document.dart';
 import 'package:reqorb/editor/code_editor.dart';
 import 'package:reqorb/editor/document_view.dart';
+import 'package:reqorb/editor/hex_view.dart';
+import 'package:reqorb/editor/json_tree_view.dart';
 import 'package:reqorb/files/file_page.dart';
 import 'package:reqorb/editor/syntax.dart';
 import 'package:reqorb/response/sse.dart';
@@ -228,7 +230,7 @@ typedef _Section = ({
 
 /// How the body is shown: re-indented and coloured, as received, or, for
 /// a web page, as a browser would show it.
-enum _BodyMode { pretty, raw, preview }
+enum _BodyMode { pretty, raw, tree, preview }
 
 class _LoadedState extends State<_Loaded> {
   /// Kept from one response to the next, as is [_format].
@@ -288,15 +290,24 @@ class _LoadedState extends State<_Loaded> {
     final spilled = response.bodyFile;
     final isHtml = spilled == null && _isHtml(contentType, response.body);
     final canPreview = previewsHtml && isHtml;
-    // A page kept from a response that had one falls back to Pretty.
-    final mode = _mode == _BodyMode.preview && !canPreview
+    final json = spilled == null ? _jsonOf(response.body) : null;
+    // JSON can be explored as a tree, however big.
+    final canTree =
+        json != null ||
+        (spilled != null &&
+            (_format ?? _languageOf(contentType, response.body)) ==
+                CodeLanguage.json);
+    // A page or a tree kept from a response that had one falls back to
+    // Pretty.
+    final mode =
+        (_mode == _BodyMode.preview && !canPreview) ||
+            (_mode == _BodyMode.tree && !canTree)
         ? _BodyMode.pretty
         : _mode;
     final raw = mode == _BodyMode.raw;
     final language = raw
         ? CodeLanguage.plain
         : _format ?? _languageOf(contentType, response.body);
-    final json = spilled == null ? _jsonOf(response.body) : null;
     final body = raw || language != CodeLanguage.json
         ? response.body
         : json ?? response.body;
@@ -322,16 +333,37 @@ class _LoadedState extends State<_Loaded> {
     final hasEvents = contentType == 'text/event-stream';
     final events = hasEvents ? parseSse(response.body) : const <SseEvent>[];
 
+    Widget bar() => _BodyBar(
+      mode: mode,
+      canPreview: canPreview,
+      canTree: canTree,
+      onMode: (mode) => setState(() => _mode = mode),
+      format: _format,
+      onFormat: (format) => setState(() => _format = format),
+      // Where the page cannot be shown here, a browser shows it.
+      onOpenInBrowser: isHtml && !previewsHtml
+          ? () => _openInBrowser(context, response.body, url)
+          : null,
+    );
     final Widget bodyView;
     if (spilled != null) {
-      bodyView = _FileBody(
+      final file = _FileBody(
         key: ValueKey(spilled),
         path: spilled,
         size: response.sizeBytes,
         contentType: contentType,
         text: response.body.isNotEmpty,
         language: raw ? CodeLanguage.plain : language,
+        mode: mode,
       );
+      bodyView = response.body.isEmpty
+          ? file
+          : Column(
+              children: [
+                bar(),
+                Expanded(child: file),
+              ],
+            );
     } else if (response.bytes case final bytes?) {
       bodyView = _Binary(
         bytes: bytes,
@@ -351,20 +383,12 @@ class _LoadedState extends State<_Loaded> {
     } else {
       bodyView = Column(
         children: [
-          _BodyBar(
-            mode: mode,
-            canPreview: canPreview,
-            onMode: (mode) => setState(() => _mode = mode),
-            format: _format,
-            onFormat: (format) => setState(() => _format = format),
-            // Where the page cannot be shown here, a browser shows it.
-            onOpenInBrowser: isHtml && !previewsHtml
-                ? () => _openInBrowser(context, response.body, url)
-                : null,
-          ),
+          bar(),
           Expanded(
             child: mode == _BodyMode.preview
                 ? _HtmlPreview(html: response.body, url: url)
+                : mode == _BodyMode.tree
+                ? _TreeBody(key: ValueKey(response.body), text: response.body)
                 : CodeView(
                     name: 'responseBody',
                     text: body,
@@ -671,11 +695,15 @@ class _BodyBar extends StatelessWidget {
   const _BodyBar({
     required this.mode,
     required this.canPreview,
+    required this.canTree,
     required this.onMode,
     required this.format,
     required this.onFormat,
     this.onOpenInBrowser,
   });
+
+  /// Whether the body is JSON, which can be explored as a tree.
+  final bool canTree;
 
   /// Shows the page in the browser; null where it is not offered.
   final VoidCallback? onOpenInBrowser;
@@ -723,6 +751,15 @@ class _BodyBar extends StatelessWidget {
                 value: _BodyMode.raw,
                 label: Text('Raw', key: const Key('body-raw'), style: small),
               ),
+              if (canTree)
+                ButtonSegment(
+                  value: _BodyMode.tree,
+                  label: Text(
+                    'Tree',
+                    key: const Key('body-tree'),
+                    style: small,
+                  ),
+                ),
               if (canPreview)
                 ButtonSegment(
                   value: _BodyMode.preview,
@@ -1091,7 +1128,7 @@ String _binaryFileName(Response response) {
 }
 
 /// A body that is not text: shown if it is an image, and saved as it is.
-class _Binary extends StatelessWidget {
+class _Binary extends StatefulWidget {
   const _Binary({
     required this.bytes,
     required this.contentType,
@@ -1103,40 +1140,75 @@ class _Binary extends StatelessWidget {
   final VoidCallback onSave;
 
   @override
+  State<_Binary> createState() => _BinaryState();
+}
+
+class _BinaryState extends State<_Binary> {
+  /// Whether the bytes themselves are shown, in hexadecimal.
+  bool _hex = false;
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final contentType = widget.contentType;
+    final image = contentType.startsWith('image/');
     final about = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          Icons.insert_drive_file_outlined,
-          size: 32,
-          color: scheme.outlineVariant,
-        ),
-        const SizedBox(height: 10),
+        if (!_hex) ...[
+          Icon(
+            Icons.insert_drive_file_outlined,
+            size: 32,
+            color: scheme.outlineVariant,
+          ),
+          const SizedBox(height: 10),
+        ],
         Text(
           '${contentType.isEmpty ? 'Binary' : contentType} · '
-          '${formatSize(bytes.length)}',
+          '${formatSize(widget.bytes.length)}',
           key: const Key('binary-body'),
           style: TextStyle(color: scheme.onSurfaceVariant),
         ),
         const SizedBox(height: 10),
-        OutlinedButton.icon(
-          key: const Key('binary-save'),
-          icon: const Icon(Icons.save_alt, size: 18),
-          label: const Text('Save to file…'),
-          onPressed: onSave,
+        Wrap(
+          spacing: 8,
+          children: [
+            OutlinedButton.icon(
+              key: const Key('binary-save'),
+              icon: const Icon(Icons.save_alt, size: 18),
+              label: const Text('Save to file…'),
+              onPressed: widget.onSave,
+            ),
+            OutlinedButton.icon(
+              key: const Key('binary-hex'),
+              icon: Icon(_hex ? Icons.image_outlined : Icons.memory, size: 18),
+              label: Text(
+                _hex
+                    ? (image ? 'Show the image' : 'Hide the bytes')
+                    : 'Show the bytes',
+              ),
+              onPressed: () => setState(() => _hex = !_hex),
+            ),
+          ],
         ),
       ],
     );
-    if (!contentType.startsWith('image/')) return Center(child: about);
+    if (_hex) {
+      return Column(
+        children: [
+          Padding(padding: const EdgeInsets.only(top: 8), child: about),
+          Expanded(child: _HexBody(bytes: widget.bytes)),
+        ],
+      );
+    }
+    if (!image) return Center(child: about);
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Column(
         children: [
           Expanded(
             child: Image.memory(
-              bytes,
+              widget.bytes,
               fit: BoxFit.scaleDown,
               // A format the platform cannot decode is still a file to save.
               errorBuilder: (_, _, _) => const SizedBox.shrink(),
@@ -1171,7 +1243,9 @@ Future<String?> _readForCopy(BuildContext context, String path) async {
 }
 
 /// A body too big to hold, shown from the file it was written to as it
-/// arrived: text in a [DocumentView], read a screenful at a time.
+/// arrived: text in a [DocumentView], read a screenful at a time, JSON
+/// re-indented into another file for Pretty or explored as a tree, and
+/// anything else in hexadecimal.
 class _FileBody extends StatefulWidget {
   const _FileBody({
     super.key,
@@ -1180,6 +1254,7 @@ class _FileBody extends StatefulWidget {
     required this.contentType,
     required this.text,
     required this.language,
+    required this.mode,
   });
 
   final String path;
@@ -1189,6 +1264,7 @@ class _FileBody extends StatefulWidget {
   /// Whether the body is text, rather than an image or other binary.
   final bool text;
   final CodeLanguage language;
+  final _BodyMode mode;
 
   @override
   State<_FileBody> createState() => _FileBodyState();
@@ -1199,19 +1275,25 @@ class _FileBodyState extends State<_FileBody> {
   String? _error;
   bool _asked = false;
 
+  /// The JSON re-indented, once it has been, and how far that has got.
+  TextDocument? _pretty;
+  StreamSubscription<DocFormatUpdate>? _indenting;
+  double? _indented;
+  String? _notJson;
+
+  bool get _wantsPretty =>
+      widget.mode == _BodyMode.pretty && widget.language == CodeLanguage.json;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_asked || !widget.text) return;
+    if (_asked) return;
     _asked = true;
-    final engine = Engine.maybeOf(context);
-    final opening = engine == null
-        ? MemoryDocument.open(widget.path)
-        : engine.openDocument(widget.path);
-    opening.then(
+    _open(widget.path).then(
       (document) {
         if (!mounted) return document.dispose();
         setState(() => _document = document);
+        _indentIfWanted();
       },
       onError: (Object e) {
         if (mounted) setState(() => _error = '$e');
@@ -1220,8 +1302,47 @@ class _FileBodyState extends State<_FileBody> {
   }
 
   @override
+  void didUpdateWidget(_FileBody old) {
+    super.didUpdateWidget(old);
+    _indentIfWanted();
+  }
+
+  Future<TextDocument> _open(String path) {
+    final engine = Engine.maybeOf(context);
+    return engine == null
+        ? MemoryDocument.open(path)
+        : engine.openDocument(path);
+  }
+
+  /// Starts re-indenting the JSON for Pretty, the first time it is shown.
+  void _indentIfWanted() {
+    final document = _document;
+    if (!_wantsPretty || document == null) return;
+    if (_pretty != null || _indenting != null || _notJson != null) return;
+    _indented = 0;
+    _indenting = document.formatJson(indent: CodeStyle.indent).listen((u) {
+      if (!mounted) return;
+      if (!u.done) {
+        setState(() => _indented = u.total == 0 ? null : u.read / u.total);
+        return;
+      }
+      final path = u.path;
+      if (path == null) {
+        setState(() => _notJson = u.error ?? 'not valid JSON');
+        return;
+      }
+      _open(path).then((pretty) {
+        if (!mounted) return pretty.dispose();
+        setState(() => _pretty = pretty);
+      });
+    });
+  }
+
+  @override
   void dispose() {
+    _indenting?.cancel();
     _document?.dispose();
+    _pretty?.dispose();
     super.dispose();
   }
 
@@ -1233,34 +1354,51 @@ class _FileBodyState extends State<_FileBody> {
       color: scheme.onSurfaceVariant,
     );
     final kind = widget.contentType.isEmpty ? 'Binary' : widget.contentType;
-    if (!widget.text) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.insert_drive_file_outlined,
-              size: 32,
-              color: scheme.outlineVariant,
-            ),
-            const SizedBox(height: 10),
-            Text(
-              '$kind · ${formatSize(widget.size)}',
-              key: const Key('binary-body'),
-              style: TextStyle(color: scheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 10),
-            OutlinedButton.icon(
-              key: const Key('binary-save'),
-              icon: const Icon(Icons.save_alt, size: 18),
-              label: const Text('Save to file…'),
-              onPressed: () => saveCopyOf(context, widget.path, 'response'),
-            ),
-          ],
-        ),
+    final document = _document;
+    final Widget shown;
+    if (document == null) {
+      shown = Center(
+        child: _error == null
+            ? const CircularProgressIndicator()
+            : Text(_error!, style: muted),
+      );
+    } else if (!widget.text) {
+      shown = HexView(document: document, name: 'responseHex');
+    } else if (widget.mode == _BodyMode.tree) {
+      shown = JsonTreeView(document: document, name: 'responseTree');
+    } else if (_wantsPretty && _notJson == null) {
+      final pretty = _pretty;
+      shown = pretty != null
+          ? DocumentView(
+              key: const ValueKey('pretty'),
+              name: 'responseBody-document',
+              document: pretty,
+              language: CodeLanguage.json,
+            )
+          : Center(
+              child: SizedBox(
+                width: 240,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    LinearProgressIndicator(
+                      key: const Key('response-indenting'),
+                      value: _indented,
+                    ),
+                    const SizedBox(height: 8),
+                    Text('Indenting the JSON…', style: muted),
+                  ],
+                ),
+              ),
+            );
+    } else {
+      shown = DocumentView(
+        key: const ValueKey('raw'),
+        name: 'responseBody-document',
+        document: document,
+        language: widget.language,
       );
     }
-    final document = _document;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1270,42 +1408,107 @@ class _FileBodyState extends State<_FileBody> {
             children: [
               Expanded(
                 child: Text(
-                  '${formatSize(widget.size)}, too big to hold in memory, '
-                  'so it is read from a file as it is shown.',
-                  key: const Key('response-from-file'),
+                  widget.text
+                      ? _notJson != null && _wantsPretty
+                            ? 'Shown as received: $_notJson'
+                            : '${formatSize(widget.size)}, too big to hold in '
+                                  'memory, so it is read from a file as it is '
+                                  'shown.'
+                      : '$kind · ${formatSize(widget.size)}',
+                  key: Key(widget.text ? 'response-from-file' : 'binary-body'),
                   style: muted,
                 ),
               ),
-              TextButton.icon(
-                key: const Key('response-open-file'),
-                icon: const Icon(Icons.open_in_new, size: 16),
-                label: const Text('Open to edit'),
-                onPressed: () => showFile(
-                  context,
-                  widget.path,
-                  temporary: true,
-                  name: 'Response body',
+              if (widget.text)
+                TextButton.icon(
+                  key: const Key('response-open-file'),
+                  icon: const Icon(Icons.open_in_new, size: 16),
+                  label: const Text('Open to edit'),
+                  onPressed: () => showFile(
+                    context,
+                    widget.path,
+                    temporary: true,
+                    name: 'Response body',
+                  ),
+                )
+              else
+                TextButton.icon(
+                  key: const Key('binary-save'),
+                  icon: const Icon(Icons.save_alt, size: 16),
+                  label: const Text('Save to file…'),
+                  onPressed: () => saveCopyOf(context, widget.path, 'response'),
                 ),
-              ),
             ],
           ),
         ),
-        Expanded(
-          child: document != null
-              ? DocumentView(
-                  name: 'responseBody-document',
-                  document: document,
-                  language: widget.language,
-                )
-              : Center(
-                  child: _error == null
-                      ? const CircularProgressIndicator()
-                      : Text(_error!, style: muted),
-                ),
-        ),
+        Expanded(child: shown),
       ],
     );
   }
+}
+
+/// A JSON body held in memory, explored as a tree.
+class _TreeBody extends StatefulWidget {
+  const _TreeBody({super.key, required this.text});
+
+  final String text;
+
+  @override
+  State<_TreeBody> createState() => _TreeBodyState();
+}
+
+class _TreeBodyState extends State<_TreeBody> {
+  TextDocument? _document;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _document ??=
+        Engine.maybeOf(context)?.documentOf(widget.text) ??
+        MemoryDocument(widget.text);
+  }
+
+  @override
+  void dispose() {
+    _document?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      JsonTreeView(document: _document!, name: 'responseTree');
+}
+
+/// Binary bytes held in memory, in hexadecimal.
+class _HexBody extends StatefulWidget {
+  const _HexBody({required this.bytes});
+
+  final Uint8List bytes;
+
+  @override
+  State<_HexBody> createState() => _HexBodyState();
+}
+
+class _HexBodyState extends State<_HexBody> {
+  TextDocument? _document;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _document ??=
+        Engine.maybeOf(context)?.documentOfBytes(widget.bytes) ??
+        MemoryDocument.bytes(widget.bytes);
+  }
+
+  @override
+  void dispose() {
+    _document?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      HexView(document: _document!, name: 'responseHex');
 }
 
 /// A small icon and value, such as the time a response took.

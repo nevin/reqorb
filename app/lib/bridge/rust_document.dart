@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:reqorb/document/text_document.dart';
 import 'package:reqorb/src/rust/api/document.dart' as rust;
@@ -10,6 +11,10 @@ class RustDocument implements TextDocument {
   /// A document holding [text], not saved anywhere.
   factory RustDocument.of(String text) =>
       RustDocument._(rust.docFromText(text: text));
+
+  /// A document holding [bytes], which need not be text.
+  factory RustDocument.ofBytes(Uint8List bytes) =>
+      RustDocument._(rust.docFromBytes(bytes: bytes));
 
   /// Opens the file at [path]. Its start can be shown at once; its other
   /// lines are found in the background, as [info] tells.
@@ -50,6 +55,36 @@ class RustDocument implements TextDocument {
   @override
   String text(int start, int end) =>
       rust.docText(id: _id, start: start, end: end);
+
+  @override
+  Uint8List bytes(int start, int end) =>
+      rust.docBytes(id: _id, start: start, end: end);
+
+  @override
+  Future<DocJsonNode> jsonRoot() => rust.docJsonRoot(id: _id);
+
+  @override
+  Future<DocJsonPage> jsonChildren(int at, {int? from, int count = 200}) =>
+      rust.docJsonChildren(id: _id, at: at, from: from, count: count);
+
+  @override
+  Stream<DocFormatUpdate> formatJson({String? indent}) {
+    final job = ++_searches;
+    late final StreamController<DocFormatUpdate> out;
+    StreamSubscription<DocFormatUpdate>? from;
+    out = StreamController(
+      onListen: () {
+        from = rust
+            .docFormatJson(id: _id, job: job, indent: indent)
+            .listen(out.add, onError: out.addError, onDone: out.close);
+      },
+      onCancel: () {
+        rust.docCancelSearch(search: job);
+        return from?.cancel();
+      },
+    );
+    return out.stream;
+  }
 
   @override
   void replace(int start, int end, String text, {bool typing = false}) => rust

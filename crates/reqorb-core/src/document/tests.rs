@@ -596,3 +596,168 @@ fn a_gigabyte_stays_fast() {
     doc.save(None, false).unwrap();
     println!("save: {:?}", started.elapsed());
 }
+
+fn format_to_string(doc: &Document, indent: Option<&str>) -> Result<String, Error> {
+    let mut out = Vec::new();
+    doc.snapshot()
+        .format_json(indent, &mut out, &AtomicBool::new(false), &mut |_| {})?;
+    Ok(String::from_utf8(out).unwrap())
+}
+
+#[test]
+fn lists_the_children_of_json_a_page_at_a_time() {
+    let doc = Document::from_text(
+        "\u{feff}{\"name\": \"re\\\"qorb\", \"n\": -1.5e3, \"ok\": true, \"none\": null,\n \
+         \"list\": [1, [2, \"]\"], {\"a\": {}}], \"é\": \"日本\"}",
+    );
+    let snapshot = doc.snapshot();
+    let root = snapshot.json_root().unwrap();
+    assert_eq!(root.kind, JsonKind::Object);
+    assert_eq!(root.start, 3);
+    assert_eq!(root.end, doc.len());
+
+    let page = snapshot.json_children(root.start, None, 3).unwrap();
+    let names: Vec<_> = page.nodes.iter().map(|n| n.key.clone().unwrap()).collect();
+    assert_eq!(names, ["name", "n", "ok"]);
+    assert_eq!(page.nodes[0].kind, JsonKind::String);
+    assert_eq!(page.nodes[0].preview, "re\\\"qorb");
+    assert_eq!(page.nodes[1].preview, "-1.5e3");
+    assert_eq!(doc.text(page.nodes[2].start, page.nodes[2].end), "true");
+
+    let rest = snapshot.json_children(root.start, page.next, 100).unwrap();
+    assert_eq!(rest.next, None);
+    let kinds: Vec<_> = rest.nodes.iter().map(|n| n.kind).collect();
+    assert_eq!(kinds, [JsonKind::Null, JsonKind::Array, JsonKind::String]);
+    assert_eq!(rest.nodes[2].key.as_deref(), Some("é"));
+    assert_eq!(rest.nodes[2].preview, "日本");
+
+    let list = &rest.nodes[1];
+    let items = snapshot.json_children(list.start, None, 10).unwrap();
+    assert_eq!(items.nodes.len(), 3);
+    assert!(items.nodes.iter().all(|n| n.key.is_none()));
+    assert_eq!(
+        doc.text(items.nodes[1].start, items.nodes[1].end),
+        "[2, \"]\"]"
+    );
+    let empty = snapshot
+        .json_children(
+            snapshot
+                .json_children(items.nodes[2].start, None, 1)
+                .unwrap()
+                .nodes[0]
+                .start,
+            None,
+            5,
+        )
+        .unwrap();
+    assert!(empty.nodes.is_empty());
+}
+
+#[test]
+fn json_that_is_not_valid_says_where() {
+    let doc = Document::from_text("{\n  \"a\": 1,\n  \"b\" 2\n}");
+    let snapshot = doc.snapshot();
+    let err = snapshot.json_children(0, None, 10).unwrap_err();
+    assert!(err.to_string().contains("line 3"), "{err}");
+    let err = format_to_string(&Document::from_text("[1, 2}"), Some("  ")).unwrap_err();
+    assert!(err.to_string().contains("does not match"), "{err}");
+    let err = format_to_string(&Document::from_text("{\"a\": \"open"), None).unwrap_err();
+    assert!(err.to_string().contains("not closed"), "{err}");
+    assert!(
+        snapshot.json_children(1, None, 1).is_err(),
+        "not at a bracket"
+    );
+}
+
+#[test]
+fn formats_json_indented_or_minified() {
+    let doc = Document::from_text(
+        "{\"a\":[1,2,{}],\"s\":\"x , : { [\\\" y\",\n\n  \"e\" : [ ] , \"t\":true}",
+    );
+    assert_eq!(
+        format_to_string(&doc, Some("  ")).unwrap(),
+        "{\n  \"a\": [\n    1,\n    2,\n    {}\n  ],\n  \"s\": \"x , : { [\\\" y\",\n  \
+         \"e\": [],\n  \"t\": true\n}\n"
+    );
+    assert_eq!(
+        format_to_string(&doc, None).unwrap(),
+        "{\"a\":[1,2,{}],\"s\":\"x , : { [\\\" y\",\"e\":[],\"t\":true}"
+    );
+    // Lines of JSON, one value to a line, stay on lines of their own.
+    let lines = Document::from_text("{\"a\": 1}\n{\"b\": 2}\n3 4");
+    assert_eq!(
+        format_to_string(&lines, None).unwrap(),
+        "{\"a\":1}\n{\"b\":2}\n3\n4"
+    );
+    assert_eq!(
+        format_to_string(&lines, Some(" ")).unwrap(),
+        "{\n \"a\": 1\n}\n{\n \"b\": 2\n}\n3\n4\n"
+    );
+}
+
+#[test]
+fn json_across_buffers_is_read_whole() {
+    // Strings and escapes that straddle the 64 KB the reader takes at once.
+    let long = "y".repeat(70_000);
+    let text = format!("[\"{long}\\\"\", {{\"k\": [\"{long}\"]}}, 7]");
+    let doc = Document::from_text(&text);
+    let snapshot = doc.snapshot();
+    let page = snapshot.json_children(0, None, 10).unwrap();
+    assert_eq!(page.nodes.len(), 3);
+    assert_eq!(page.nodes[2].preview, "7");
+    assert_eq!(page.nodes[0].preview.len(), 120);
+    let minified = format_to_string(&doc, None).unwrap();
+    assert_eq!(minified, text.replace(", ", ",").replace(": ", ":"));
+}
+
+/// Run with `cargo test --release -- --ignored`: JSON of a few hundred
+/// megabytes, explored and written out again.
+#[test]
+#[ignore]
+fn large_json_stays_fast() {
+    use std::time::Instant;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("big.json");
+    {
+        let mut file = std::io::BufWriter::new(File::create(&path).unwrap());
+        file.write_all(b"{\"items\": [").unwrap();
+        for i in 0..2_500_000 {
+            if i > 0 {
+                file.write_all(b",").unwrap();
+            }
+            write!(
+                file,
+                "{{\"id\": {i}, \"name\": \"item {i}\", \"tags\": [\"a\", \"b\"], \"ok\": true}}"
+            )
+            .unwrap();
+        }
+        file.write_all(b"], \"last\": \"end\"}").unwrap();
+    }
+    let mut doc = Document::open(&path).unwrap();
+    doc.wait_indexed();
+    let len = doc.len();
+    let snapshot = doc.snapshot();
+
+    let started = Instant::now();
+    let root = snapshot.json_root().unwrap();
+    let root_took = started.elapsed();
+    let started = Instant::now();
+    let top = snapshot.json_children(root.start, None, 200).unwrap();
+    let items = snapshot
+        .json_children(top.nodes[0].start, None, 200)
+        .unwrap();
+    let page_took = started.elapsed();
+    assert_eq!(items.nodes.len(), 200);
+    assert_eq!(top.nodes[1].preview, "end");
+
+    let started = Instant::now();
+    let mut out = std::io::sink();
+    snapshot
+        .format_json(Some("  "), &mut out, &AtomicBool::new(false), &mut |_| {})
+        .unwrap();
+    let format_took = started.elapsed();
+    eprintln!(
+        "{} MB: root {root_took:?}, two pages {page_took:?}, indenting {format_took:?}",
+        len / (1024 * 1024)
+    );
+}

@@ -7,12 +7,16 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `keep`, `lock`, `shared`, `with`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `keep`, `lock`, `node`, `shared`, `with`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// A new document holding `text`, not saved anywhere.
 int docFromText({required String text}) =>
     RustLib.instance.api.crateApiDocumentDocFromText(text: text);
+
+/// A new document holding `bytes`, which need not be text.
+int docFromBytes({required List<int> bytes}) =>
+    RustLib.instance.api.crateApiDocumentDocFromBytes(bytes: bytes);
 
 /// Opens a file. Its first page is ready when this returns; the rest of
 /// its lines are found in the background, as [`doc_info`] tells.
@@ -61,6 +65,14 @@ DocSpan docLineSpan({required int id, required int line}) =>
 /// The line byte `offset` is on.
 int docLineOf({required int id, required int offset}) =>
     RustLib.instance.api.crateApiDocumentDocLineOf(id: id, offset: offset);
+
+/// Bytes `start..end` as they are, for showing in hexadecimal.
+Uint8List docBytes({required int id, required int start, required int end}) =>
+    RustLib.instance.api.crateApiDocumentDocBytes(
+      id: id,
+      start: start,
+      end: end,
+    );
 
 /// Bytes `start..end` as text.
 String docText({required int id, required int start, required int end}) =>
@@ -132,9 +144,81 @@ Stream<DocSearchUpdate> docSearch({
   query: query,
 );
 
-/// Stops search `search`, if it is still going.
+/// The JSON value at the top of document `id`. Reads the whole of it, to
+/// find where it ends.
+Future<DocJsonNode> docJsonRoot({required int id}) =>
+    RustLib.instance.api.crateApiDocumentDocJsonRoot(id: id);
+
+/// Up to `count` children of the object or array at `at`: from its first,
+/// or from `from`, where a page before left off.
+Future<DocJsonPage> docJsonChildren({
+  required int id,
+  required int at,
+  int? from,
+  required int count,
+}) => RustLib.instance.api.crateApiDocumentDocJsonChildren(
+  id: id,
+  at: at,
+  from: from,
+  count: count,
+);
+
+/// Writes document `id`'s JSON to a new temporary file, indented by
+/// `indent`, or minified without one, reporting as it goes.
+/// [`doc_cancel_search`] with `job` stops it.
+Stream<DocFormatUpdate> docFormatJson({
+  required int id,
+  required int job,
+  String? indent,
+}) => RustLib.instance.api.crateApiDocumentDocFormatJson(
+  id: id,
+  job: job,
+  indent: indent,
+);
+
+/// Stops search or formatting `search`, if it is still going.
 bool docCancelSearch({required int search}) =>
     RustLib.instance.api.crateApiDocumentDocCancelSearch(search: search);
+
+/// How writing a document's JSON out again is going: how much has been
+/// read of how much, and at the end, the file written, or why not.
+class DocFormatUpdate {
+  final int read;
+  final int total;
+  final bool done;
+  final String? path;
+  final String? error;
+
+  const DocFormatUpdate({
+    required this.read,
+    required this.total,
+    required this.done,
+    this.path,
+    this.error,
+  });
+
+  static Future<DocFormatUpdate> default_() =>
+      RustLib.instance.api.crateApiDocumentDocFormatUpdateDefault();
+
+  @override
+  int get hashCode =>
+      read.hashCode ^
+      total.hashCode ^
+      done.hashCode ^
+      path.hashCode ^
+      error.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DocFormatUpdate &&
+          runtimeType == other.runtimeType &&
+          read == other.read &&
+          total == other.total &&
+          done == other.done &&
+          path == other.path &&
+          error == other.error;
+}
 
 /// What the editor needs to know about a document on each frame.
 class DocInfo {
@@ -203,6 +287,67 @@ class DocInfo {
           indexingDone == other.indexingDone &&
           path == other.path &&
           problem == other.problem;
+}
+
+/// What a JSON value is.
+enum DocJsonKind { object, array, string, number, bool, null_ }
+
+/// One value in a document's JSON, as a tree shows it.
+class DocJsonNode {
+  final String? key;
+  final DocJsonKind kind;
+
+  /// The start of a scalar as written; empty for an object or array.
+  final String preview;
+  final int start;
+  final int end;
+
+  const DocJsonNode({
+    this.key,
+    required this.kind,
+    required this.preview,
+    required this.start,
+    required this.end,
+  });
+
+  @override
+  int get hashCode =>
+      key.hashCode ^
+      kind.hashCode ^
+      preview.hashCode ^
+      start.hashCode ^
+      end.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DocJsonNode &&
+          runtimeType == other.runtimeType &&
+          key == other.key &&
+          kind == other.kind &&
+          preview == other.preview &&
+          start == other.start &&
+          end == other.end;
+}
+
+/// Some of the children of an object or array, and where the rest go on
+/// from, if there are more.
+class DocJsonPage {
+  final List<DocJsonNode> nodes;
+  final int? next;
+
+  const DocJsonPage({required this.nodes, this.next});
+
+  @override
+  int get hashCode => nodes.hashCode ^ next.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DocJsonPage &&
+          runtimeType == other.runtimeType &&
+          nodes == other.nodes &&
+          next == other.next;
 }
 
 /// A row and a column within it, counted in UTF-16 units.

@@ -237,6 +237,83 @@ void documentConformance(MakeDocument make, OpenDocument open) {
     expect((await doc('plain')).looksBinary, isFalse);
   });
 
+  test('gives bytes as they are', () async {
+    final dir = await Directory.systemTemp.createTemp('reqorb_doc');
+    addTearDown(() => dir.delete(recursive: true));
+    final path = '${dir.path}/data.bin';
+    await File(path).writeAsBytes([0, 1, 0xff, 0x80, 65]);
+    final d = await open(path);
+    made.add(d);
+    expect(d.bytes(1, 4), [1, 0xff, 0x80]);
+    expect(d.bytes(3, 99), [0x80, 65]);
+    expect(d.bytes(9, 12), isEmpty);
+  });
+
+  test('lists the children of JSON a page at a time', () async {
+    final d = await doc(
+      '﻿{"name": "re\\"qorb", "n": -1.5e3, "ok": true, "none": null,\n '
+      '"list": [1, [2, "]"], {"a": {}}], "é": "日本"}',
+    );
+    final root = await d.jsonRoot();
+    expect(
+      (root.kind, root.start, root.end),
+      (DocJsonKind.object, 3, d.info().len),
+    );
+    final page = await d.jsonChildren(root.start, count: 3);
+    expect(page.nodes.map((n) => n.key), ['name', 'n', 'ok']);
+    expect(page.nodes.map((n) => n.preview), ['re\\"qorb', '-1.5e3', 'true']);
+    final rest = await d.jsonChildren(root.start, from: page.next);
+    expect(rest.next, isNull);
+    expect(rest.nodes.map((n) => n.kind), [
+      DocJsonKind.null_,
+      DocJsonKind.array,
+      DocJsonKind.string,
+    ]);
+    expect((rest.nodes[2].key, rest.nodes[2].preview), ('é', '日本'));
+    final items = await d.jsonChildren(rest.nodes[1].start);
+    expect(items.nodes.map((n) => d.text(n.start, n.end)), [
+      '1',
+      '[2, "]"]',
+      '{"a": {}}',
+    ]);
+    await expectLater(d.jsonChildren(1), throwsA(anything));
+    final broken = await doc('{\n  "a": 1,\n  "b" 2\n}');
+    await expectLater(
+      broken.jsonChildren(0),
+      throwsA(predicate((e) => '$e'.contains('line 3'))),
+    );
+  });
+
+  test('writes JSON out again indented or minified', () async {
+    Future<String> formatted(TextDocument d, String? indent) async {
+      final last = await d.formatJson(indent: indent).last;
+      if (last.error != null) throw last.error!;
+      expect(last.read, last.total);
+      return File(last.path!).readAsString();
+    }
+
+    final d = await doc(
+      '{"a":[1,2,{}],"s":"x , : { [\\" y",\n\n  "e" : [ ] , "t":true}',
+    );
+    expect(
+      await formatted(d, '  '),
+      '{\n  "a": [\n    1,\n    2,\n    {}\n  ],\n  "s": "x , : { [\\" y",\n'
+      '  "e": [],\n  "t": true\n}\n',
+    );
+    expect(
+      await formatted(d, null),
+      '{"a":[1,2,{}],"s":"x , : { [\\" y","e":[],"t":true}',
+    );
+    expect(
+      await formatted(await doc('{"a": 1}\n{"b": 2}\n3 4'), null),
+      '{"a":1}\n{"b":2}\n3\n4',
+    );
+    await expectLater(
+      formatted(await doc('[1, 2}'), '  '),
+      throwsA(predicate((e) => '$e'.contains('does not match'))),
+    );
+  });
+
   test('edits at random keep rows and text in step', () async {
     var model = '{\n  "name": "reqorb",\r\n  "tags": ["a", "b"]\n}\nlast é 日本';
     final d = await doc(model);

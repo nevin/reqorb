@@ -13,6 +13,7 @@
 //! UTF-16 code units within a row, as Dart counts them.
 
 mod index;
+mod json;
 mod search;
 mod source;
 #[cfg(test)]
@@ -30,6 +31,7 @@ use memchr::memchr_iter;
 
 use crate::Error;
 use index::{Index, Indexed};
+pub use json::{JsonKind, JsonNode, JsonPage};
 pub use search::{Found, MAX_KEPT, Query};
 use source::Source;
 use text::{Piece, Text};
@@ -99,6 +101,36 @@ impl Snapshot {
         progress: impl FnMut(&[(u64, u64)], u64),
     ) -> Result<Found, Error> {
         search::search(&self.0, query, cancel, progress)
+    }
+
+    /// The JSON value at the top of the text.
+    pub fn json_root(&self) -> Result<JsonNode, Error> {
+        json::root(&self.0)
+    }
+
+    /// Up to `count` children of the JSON object or array at `at`: from its
+    /// first, or from `from`, where a page before left off. Only as much
+    /// of the text is read as they take up.
+    pub fn json_children(
+        &self,
+        at: u64,
+        from: Option<u64>,
+        count: usize,
+    ) -> Result<JsonPage, Error> {
+        json::children(&self.0, at, from, count)
+    }
+
+    /// Writes the text, which is JSON, to `out`: indented by `indent`, or
+    /// minified when there is none. A megabyte is read at a time, and
+    /// `progress` told how far it has got.
+    pub fn format_json(
+        &self,
+        indent: Option<&str>,
+        out: &mut dyn Write,
+        cancel: &AtomicBool,
+        progress: &mut dyn FnMut(u64),
+    ) -> Result<(), Error> {
+        json::format(&self.0, indent, out, cancel, progress)
     }
 }
 

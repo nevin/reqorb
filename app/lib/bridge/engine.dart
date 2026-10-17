@@ -2,6 +2,7 @@
 library;
 
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart' hide FormField;
 import 'package:reqorb/bridge/rust_document.dart';
@@ -261,6 +262,10 @@ abstract class Engine {
   /// Opens the file at [path] as a document. Its start can be shown at
   /// once, whatever its size.
   Future<TextDocument> openDocument(String path);
+
+  /// A document holding [bytes], which need not be text, as for a binary
+  /// response shown in hexadecimal.
+  TextDocument documentOfBytes(Uint8List bytes);
 }
 
 /// Makes an [Engine] available to the widgets below it.
@@ -561,4 +566,7 @@ class RustEngine extends Engine {
 
   @override
   Future<TextDocument> openDocument(String path) => RustDocument.open(path);
+
+  @override
+  TextDocument documentOfBytes(Uint8List bytes) => RustDocument.ofBytes(bytes);
 }
