@@ -6,5 +6,7 @@ the new version when it is tagged.
 
 ## Unreleased
 
+## 0.1.0 – 2026-10-17
+
 The first release: the request engine, the `reqorb` command, and the app for macOS and
 iPad. The [README](README.md#features) lists what they do.
