@@ -6,6 +6,8 @@ the new version when it is tagged.
 
 ## Unreleased
 
+## 0.2.0 – 2026-10-17
+
 - Responses and API specs over a megabyte open at once, however large, in a new viewer
   that colours, numbers, selects, copies and searches them. Search can match case, whole
   words or a regular expression, and reaches the end of a 20 MB response in a moment.
