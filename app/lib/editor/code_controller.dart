@@ -53,11 +53,19 @@ class CodeController extends TextEditingController {
     _lineSought
       ..value = null
       ..value = start;
+    _lineNumberSought
+      ..value = null
+      ..value = index + 1;
   }
 
   /// The offset [goToLine] last asked to be shown, for the editor.
   ValueListenable<int?> get lineSought => _lineSought;
   final _lineSought = ValueNotifier<int?>(null);
+
+  /// The line [goToLine] last asked to be shown, counted from 1, for a
+  /// [DocumentView], which counts in lines rather than characters.
+  ValueListenable<int?> get lineNumberSought => _lineNumberSought;
+  final _lineNumberSought = ValueNotifier<int?>(null);
 
   /// Drops what a search marked without telling anyone, for when whatever
   /// showed the search has gone.
@@ -126,6 +134,7 @@ class CodeController extends TextEditingController {
   void dispose() {
     _dropLinks();
     _lineSought.dispose();
+    _lineNumberSought.dispose();
     super.dispose();
   }
 

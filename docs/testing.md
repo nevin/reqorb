@@ -109,7 +109,17 @@ testWidgets('a sent request shows its response', (tester) async {
 When you add a method to `Engine`, `FakeEngine` must implement it too, or the tests do not
 compile.
 
+**Documents are tested on both sides with one suite.** `test/document_conformance.dart`
+says what every `TextDocument` must do: rows, columns, undo, search, saving. It runs on
+`MemoryDocument` in `flutter test` (`document_test.dart`) and on the Rust engine's
+documents in the end-to-end tests (`integration_test/document_test.dart`). When a
+document does something new, add it to that suite, so the stand-in the widget tests use
+cannot quietly differ from the real thing.
+
 ## End-to-end tests
+
+`app/integration_test/document_test.dart` runs the document suite on the Rust engine,
+and opens, scrolls through and searches a 100 MB file in `DocumentView`.
 
 `app/integration_test/send_request_test.dart` runs the real app, with the real Rust
 library, against an `HttpServer` it starts on the loopback address, using a workspace in a

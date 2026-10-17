@@ -14,7 +14,7 @@ import 'package:flutter/services.dart';
 import 'package:reqorb/bridge/engine.dart';
 import 'package:reqorb/editor/code_controller.dart';
 import 'package:reqorb/editor/code_editor.dart';
-import 'package:reqorb/editor/line_view.dart';
+import 'package:reqorb/editor/document_view.dart';
 import 'package:reqorb/editor/syntax.dart';
 import 'package:reqorb/shared/messages.dart';
 import 'package:reqorb/shared/split_view.dart';
@@ -663,7 +663,14 @@ class _SpecPageState extends State<SpecPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _ReadOnlyNote(size: _code.text.length),
-                Expanded(child: LineView(controller: _code)),
+                Expanded(
+                  child: DocumentText(
+                    name: 'spec-document',
+                    text: _code.text,
+                    language: _json ? CodeLanguage.json : CodeLanguage.yaml,
+                    lineSought: _code.lineNumberSought,
+                  ),
+                ),
               ],
             )
           : CodeEditor(

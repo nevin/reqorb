@@ -123,6 +123,14 @@ bindings, and `FakeEngine` in `app/test/fake_engine.dart`. Widgets find it with
 seam is what lets `flutter test` run the whole app without the native library; see
 [Testing](testing.md).
 
+**Text over a megabyte is a document, not a string in a text field.** A text field lays
+out all its text on every change, which at ten megabytes takes seconds. `DocumentView`
+asks a `TextDocument` for the rows in view, 128 at a time, and colours only those. The
+document lives in Rust (`document/` in the core): Dart holds a number for it, and
+positions are byte offsets, with columns in UTF-16 units within a row. `Engine` makes
+documents (`documentOf`, `openDocument`), so the widget tests get a `MemoryDocument`
+instead.
+
 Start-up (`app/lib/main.dart`) initialises the bridge (`RustLib.init()`), loads
 `workspace.json` from the platform's application support directory, then loads history,
 the working directory and linked collection folders in parallel, and runs the app.
@@ -135,7 +143,8 @@ The `app/lib/` folders are features:
 | `request/` | The main page, the request model, the send session, the request editors and the code dialog |
 | `response/` | The response pane, server-sent events |
 | `protocols/` | WebSocket and gRPC sessions and views |
-| `editor/` | The code editor: colouring, typing aids, find and replace, folding, completion, and the read-only `LineView` for text over a megabyte |
+| `editor/` | The code editor: colouring, typing aids, find and replace, folding, completion; and `DocumentView`, which shows a document of any size a screenful at a time |
+| `document/` | `TextDocument`, text of any size held by the Rust engine (`RustDocument` in `bridge/`), and `MemoryDocument`, the same held in Dart for tests |
 | `graphql/` | The GraphQL editor, schema browser and schema session |
 | `spec/` | The API spec viewer: preview, problems, examples, Try it |
 | `runner/`, `palette/` | Running a collection; the find-anything box |

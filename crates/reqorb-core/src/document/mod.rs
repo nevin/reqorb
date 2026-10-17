@@ -702,28 +702,56 @@ impl Document {
     /// Saves to `to`, or to the file it came from. Saving over a file that
     /// something else has changed fails unless `force` is set.
     pub fn save(&mut self, to: Option<&Path>, force: bool) -> Result<(), Error> {
+        let job = self.save_job(to, force)?;
+        job.write()?;
+        self.saved(&job);
+        Ok(())
+    }
+
+    /// Gets ready to save, as [`Document::save`] does, in three steps: this,
+    /// which checks where to; [`SaveJob::write`], which needs no access to
+    /// the document, so that editing can go on meanwhile; and
+    /// [`Document::saved`].
+    pub fn save_job(&self, to: Option<&Path>, force: bool) -> Result<SaveJob, Error> {
         let target = match to.or(self.path.as_deref()) {
             Some(path) => path.to_path_buf(),
             None => return Err(Error::Io("choose where to save the document".into())),
         };
-        let name = target.display().to_string();
         if !force && self.path.as_deref() == Some(target.as_path()) && self.changed_on_disk() {
             return Err(Error::Io(format!(
-                "{name} has been changed by another program since it was opened"
+                "{} has been changed by another program since it was opened",
+                target.display()
             )));
         }
-        self.write_to(&target)
-            .map_err(|e| Error::Io(format!("{name} could not be saved: {e}")))?;
-        self.stamp = Stamp::of(&target);
-        self.path = Some(target);
-        self.saved = self.undo.last().map(|s| s.id);
-        Ok(())
+        Ok(SaveJob {
+            text: self.text.clone(),
+            target,
+            at: self.undo.last().map(|s| s.id),
+        })
     }
 
-    /// Writes the text beside `target` and then moves it into place, so
+    /// Takes note that `job` has been written.
+    pub fn saved(&mut self, job: &SaveJob) {
+        self.stamp = Stamp::of(&job.target);
+        self.path = Some(job.target.clone());
+        self.saved = job.at;
+    }
+}
+
+/// The text of a document as it was when saving began, and where it goes.
+pub struct SaveJob {
+    text: Text,
+    target: PathBuf,
+    /// The undo step it was taken at.
+    at: Option<u64>,
+}
+
+impl SaveJob {
+    /// Writes the text beside the target and then moves it into place, so
     /// that a failure part way leaves the file as it was. The original is
     /// still read from the file as it was opened, which stays readable.
-    fn write_to(&self, target: &Path) -> std::io::Result<()> {
+    pub fn write(&self) -> Result<(), Error> {
+        let target = &self.target;
         let name = target
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -746,7 +774,7 @@ impl Document {
         if written.is_err() {
             let _ = fs::remove_file(&temp);
         }
-        written
+        written.map_err(|e| Error::Io(format!("{} could not be saved: {e}", target.display())))
     }
 }
 

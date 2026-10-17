@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reqorb/editor/line_view.dart';
+import 'package:reqorb/editor/document_view.dart';
 import 'package:reqorb/response/response_view.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 
@@ -110,22 +110,16 @@ void main() {
       body: body,
     );
     String text() =>
-        tester.widget<LineView>(find.byType(LineView)).controller.text;
+        tester.widget<DocumentText>(find.byType(DocumentText)).text;
 
     // As received while it is re-indented apart; the one line goes on
     // over rows that are not numbered.
     expect(find.byKey(const Key('responseBody')), findsNothing);
     expect(text(), body);
-    final rows = find.descendant(
-      of: find.byKey(const Key('line-view')),
-      matching: find.byType(Row),
-    );
-    final gutters = [
-      for (final row in tester.widgetList<Row>(rows).take(3))
-        ((row.children.first as SizedBox).child! as SelectionContainer).child
-            as Text,
-    ];
-    expect([for (final g in gutters) g.data], ['1', '', '']);
+    String number(int row) => tester
+        .widget<Text>(find.byKey(ValueKey('responseBody-document-number-$row')))
+        .data!;
+    expect([number(0), number(1), number(2)], ['1', '', '']);
 
     // Then re-indented, once.
     for (var i = 0; i < 100 && !text().contains('\n'); i++) {
