@@ -445,6 +445,50 @@ fn saves_reopens_and_notices_changes_on_disk() {
     );
 }
 
+/// As in the macOS sandbox, where only the file chosen may be written:
+/// nothing can be made beside it, so it is written over, and the original
+/// the document reads, kept first, still serves undo and the rest.
+#[cfg(unix)]
+#[test]
+fn saves_over_the_file_where_nothing_may_be_written_beside_it() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("notes.txt");
+    let original: String = (0..2000).map(|i| format!("line {i}\n")).collect();
+    fs::write(&path, &original).unwrap();
+    let mut doc = Document::open_paged(&path, 64).unwrap();
+    doc.wait_indexed();
+    doc.replace(0, 4, "LINE", false);
+    let end = doc.len();
+    doc.replace(end, end, "the end\n", false);
+    let edited = doc.text(0, u64::MAX);
+
+    let locked = fs::Permissions::from_mode(0o555);
+    fs::set_permissions(dir.path(), locked).unwrap();
+    let saved = doc.save(None, false);
+    let saved_again = {
+        doc.replace(0, 0, "zero\n", false);
+        doc.save(None, false)
+    };
+    fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o755)).unwrap();
+    saved.unwrap();
+    saved_again.unwrap();
+
+    let expected = format!("zero\n{edited}");
+    assert_eq!(fs::read_to_string(&path).unwrap(), expected);
+    assert_eq!(doc.text(0, u64::MAX), expected);
+    assert!(!doc.is_modified());
+    assert!(!doc.changed_on_disk());
+    // Every step back reads the original as it was, from the copy.
+    doc.undo();
+    doc.undo();
+    doc.undo();
+    assert_eq!(doc.text(0, u64::MAX), original);
+    assert_eq!(doc.line_count(), 2001);
+    assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+}
+
 #[test]
 fn a_document_from_memory_needs_somewhere_to_save() {
     let mut doc = Document::from_text("x");

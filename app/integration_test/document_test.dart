@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:reqorb/bridge/engine.dart';
 import 'package:reqorb/bridge/rust_document.dart';
 import 'package:reqorb/editor/document_view.dart';
+import 'package:reqorb/files/file_page.dart';
 import 'package:reqorb/src/rust/frb_generated.dart';
 
 import '../test/document_conformance.dart';
@@ -83,5 +85,71 @@ void main() {
     }
     expect(count(), '1 of 1');
     expect(find.text('{"last": "the needle"}'), findsOneWidget);
+  });
+
+  testWidgets('edits and saves a 100 MB file in place', (tester) async {
+    final dir = await Directory.systemTemp.createTemp('reqorb_big');
+    addTearDown(() => dir.delete(recursive: true));
+    final path = '${dir.path}/big.log';
+    const line = 'an ordinary line of a log, of no interest at all\n';
+    const lines = 2000000;
+    await tester.runAsync(
+      () => File(path).writeAsString('${line * lines}the end!'),
+    );
+
+    await tester.pumpWidget(
+      EngineScope(
+        engine: const RustEngine(),
+        child: MaterialApp(home: FilePage(path: path)),
+      ),
+    );
+    for (var i = 0; i < 50 && find.text(line.trim()).evaluate().isEmpty; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+    }
+    expect(find.text(line.trim()), findsWidgets);
+
+    Future<void> command(LogicalKeyboardKey key) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.meta);
+      await tester.sendKeyEvent(key);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.meta);
+      await tester.pump();
+    }
+
+    // To the very end, and the "!" rubbed out.
+    await command(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.pump();
+    // Lines may still be being found, which moves where the end is shown.
+    for (var i = 0; i < 50 && find.text('the end').evaluate().isEmpty; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump(const Duration(milliseconds: 150));
+    }
+    expect(find.text('the end'), findsOneWidget);
+    expect(find.text('• big.log'), findsOneWidget);
+
+    final started = DateTime.now();
+    await command(LogicalKeyboardKey.keyS);
+    for (var i = 0; i < 200 && find.text('big.log').evaluate().isEmpty; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+    }
+    expect(find.text('big.log'), findsOneWidget);
+    expect(
+      DateTime.now().difference(started),
+      lessThan(const Duration(seconds: 5)),
+    );
+    final saved = (await tester.runAsync(() => File(path).length()))!;
+    expect(saved, line.length * lines + 'the end'.length);
+    final tail = await tester.runAsync(
+      () => File(path).openRead(saved - 20).fold(<int>[], (a, b) => a + b),
+    );
+    expect(String.fromCharCodes(tail!), 'erest at all\nthe end');
   });
 }

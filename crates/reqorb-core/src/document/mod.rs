@@ -20,7 +20,7 @@ mod tests;
 mod text;
 
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -750,22 +750,28 @@ impl SaveJob {
     /// Writes the text beside the target and then moves it into place, so
     /// that a failure part way leaves the file as it was. The original is
     /// still read from the file as it was opened, which stays readable.
+    ///
+    /// Where nothing may be written beside the target, as in the macOS
+    /// sandbox, which allows only the file chosen, the target is written
+    /// over instead, by `write_over`.
     pub fn write(&self) -> Result<(), Error> {
         let target = &self.target;
+        let failed =
+            |e: io::Error| Error::Io(format!("{} could not be saved: {e}", target.display()));
         let name = target
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
         let temp = target.with_file_name(format!(".{name}.reqorb-{}", std::process::id()));
-        let written = (|| {
-            let mut file = File::create(&temp)?;
-            let mut at = 0;
-            while at < self.text.len() {
-                let to = (at + CHUNK).min(self.text.len());
-                file.write_all(&self.text.read(at, to))?;
-                at = to;
+        let mut file = match File::create(&temp) {
+            Ok(file) => file,
+            Err(e) if e.kind() == io::ErrorKind::PermissionDenied => {
+                return self.write_over().map_err(failed);
             }
-            file.sync_all()?;
+            Err(e) => return Err(failed(e)),
+        };
+        let written = (|| {
+            self.write_to(&mut file)?;
             if let Ok(meta) = fs::metadata(target) {
                 fs::set_permissions(&temp, meta.permissions())?;
             }
@@ -774,7 +780,35 @@ impl SaveJob {
         if written.is_err() {
             let _ = fs::remove_file(&temp);
         }
-        written.map_err(|e| Error::Io(format!("{} could not be saved: {e}", target.display())))
+        written.map_err(failed)
+    }
+
+    /// Writes the text over the target in place. A failure part way leaves
+    /// the file part written. If the document reads its original from the
+    /// target, it is first given a copy to read instead.
+    fn write_over(&self) -> io::Result<()> {
+        let source = self.text.source();
+        if source.reads(&self.target) {
+            source.keep_original(&self.target)?;
+        }
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&self.target)?;
+        self.write_to(&mut file)?;
+        file.set_len(self.text.len())?;
+        file.sync_all()
+    }
+
+    fn write_to(&self, file: &mut File) -> io::Result<()> {
+        let mut at = 0;
+        while at < self.text.len() {
+            let to = (at + CHUNK).min(self.text.len());
+            file.write_all(&self.text.read(at, to))?;
+            at = to;
+        }
+        file.sync_all()
     }
 }
 

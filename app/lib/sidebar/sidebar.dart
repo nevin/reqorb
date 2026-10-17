@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:reqorb/files/file_page.dart';
 
 import 'package:reqorb/runner/collection_run.dart';
 import 'package:reqorb/runner/runner_dialog.dart';
@@ -254,6 +255,13 @@ class _SidebarState extends State<Sidebar> {
               leading: const Icon(Icons.description_outlined, size: 20),
               title: const Text('API specs'),
               onTap: widget.onSpecs,
+            ),
+            ListTile(
+              key: const Key('open-file'),
+              dense: true,
+              leading: const Icon(Icons.file_open_outlined, size: 20),
+              title: const Text('Open file…'),
+              onTap: () => openFile(context),
             ),
             ListTile(
               key: const Key('har-analyser'),

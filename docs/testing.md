@@ -116,10 +116,18 @@ documents in the end-to-end tests (`integration_test/document_test.dart`). When 
 document does something new, add it to that suite, so the stand-in the widget tests use
 cannot quietly differ from the real thing.
 
+**Typing is tested as the input method sends it.** `test/document_input.dart` sends
+the changes a platform's input method sends (`TextInputClient.updateEditingStateWithDeltas`),
+including text still being composed, so `document_view_test.dart` and
+`file_page_test.dart` type into an editable `DocumentView` as a keyboard would. Tests that
+depend on the platform's keys, such as Option moving by word or a file being saved in
+place, run as macOS with `TargetPlatformVariant.only(TargetPlatform.macOS)`.
+
 ## End-to-end tests
 
 `app/integration_test/document_test.dart` runs the document suite on the Rust engine,
-and opens, scrolls through and searches a 100 MB file in `DocumentView`.
+opens, scrolls through and searches a 100 MB file in `DocumentView`, and edits and saves
+another in **Open file…**.
 
 `app/integration_test/send_request_test.dart` runs the real app, with the real Rust
 library, against an `HttpServer` it starts on the loopback address, using a workspace in a

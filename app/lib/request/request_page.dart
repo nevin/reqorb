@@ -22,6 +22,7 @@ import 'package:reqorb/request/tab_strip.dart';
 import 'package:reqorb/request/url_bar.dart';
 import 'package:reqorb/request/send_session.dart';
 import 'package:reqorb/environments/environments.dart';
+import 'package:reqorb/files/file_page.dart';
 import 'package:reqorb/protocols/grpc_view.dart';
 import 'package:reqorb/protocols/ws_view.dart';
 import 'package:reqorb/request/auth_editor.dart';
@@ -742,6 +743,12 @@ class _RequestPageState extends State<RequestPage> {
         detail: 'OpenAPI, Swagger',
       ),
       action(
+        'Open a file',
+        Icons.file_open_outlined,
+        () => openFile(context),
+        detail: 'view and edit, any size',
+      ),
+      action(
         'Analyse a HAR file',
         Icons.insights,
         () => analyzeHarFile(context, _store),
@@ -979,6 +986,7 @@ class _RequestPageState extends State<RequestPage> {
                 (LogicalKeyboardKey.enter, _primary),
                 (LogicalKeyboardKey.keyS, _save),
                 (LogicalKeyboardKey.keyN, _newRequest),
+                (LogicalKeyboardKey.keyO, () => openFile(context)),
                 (LogicalKeyboardKey.keyW, () => _closeTab(_active)),
                 (LogicalKeyboardKey.keyL, _urlFocus.requestFocus),
                 (LogicalKeyboardKey.keyK, () => _openPalette(toggle)),

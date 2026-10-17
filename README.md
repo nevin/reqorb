@@ -18,6 +18,9 @@ view. One Rust core does the networking and powers all three front ends.
 - **Tabs:** several requests open at once, each keeping its own edits and response.
 - **Find anything:** `⌘K` finds a saved request, an open tab, an environment or an
   action by a few letters of its name.
+- **Large files:** **Open file…** opens a file of any size, up to a gigabyte or so, at
+  once, to read, search, edit and save; responses and specs over a megabyte open the
+  same way.
 - **Code editor:** bodies, GraphQL queries, messages, tests, variables and responses are
   coloured by language, with line numbers, bracket matching, find and replace, folding of
   responses, and completion of `{{variables}}` and GraphQL fields.
@@ -531,6 +534,31 @@ share one editor.
   arguments of the field being called are offered as you type, with their types;
   `Ctrl+Space` asks for the list before anything is typed. Arrow keys and `Enter`
   or a tap pick one, `Esc` dismisses.
+
+## Large files
+
+Text over a megabyte, whether a response, an API spec or a file, opens in a view that
+reads only what is on screen, so a gigabyte opens as fast as a line. It is coloured and
+numbered, a line over 2 KB goes on over several rows, and a bar at the top shows how
+far the lines have been counted. `⌘F` finds text, with **Aa** to match case, **W** for
+whole words and **.\*** for a regular expression; matches are counted as the search
+goes, and `Enter` steps through them.
+
+**Open file…** in the sidebar, the `⌘K` box or `⌘O` opens a file to edit there:
+
+- Typing goes through the system's input method, so accents and Chinese or Japanese
+  input work. The arrows move by character (with `⌥` by word, `⌘` to the ends of the
+  line or the file); `⇧` selects as they move. `⌘Z` and `⇧⌘Z` undo and redo,
+  typing a run at a time. `Tab` and `⇧Tab` indent and outdent the selected lines, and
+  a new line keeps the indentation.
+- `⌘⌥F`, or the arrow beside the search, adds **Replace with**: **Replace** changes the
+  match the search is on, **All** changes every one as a single edit.
+- `⌘S` saves and `⇧⌘S` saves a copy elsewhere. A line along the bottom shows the line
+  and column, what is selected, and the file's size and language.
+- If another program changes the file, it is read again; if there are edits, a notice
+  offers to reload it or keep them, and saving over it is asked about first. Closing
+  with unsaved edits asks whether to save them.
+- On iPad a picked file is a copy, so it is exported (up to 64 MB) rather than saved.
 
 ## Code generation
 

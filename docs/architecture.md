@@ -57,7 +57,7 @@ The workspace forbids `unsafe` code and denies `dbg!`, `todo!` and `unimplemente
 | `redact`, `analyze`, `data` | Removing credentials from exports; the HAR report; the data file of a collection run |
 | `vault`, `history` | What is kept on disk: the workspace with its credentials encrypted, and the requests sent |
 | `files` | Checking that a working directory can be read and written |
-| `document/` | Text of any size, up to about a gigabyte, for the editor. The original bytes are read from memory or a file a page at a time (`source.rs`); a background thread counts newlines every 4 KB (`index.rs`); edits are a piece table over the original and an append-only buffer, so undo copies no text (`text.rs`); search runs over a snapshot a megabyte at a time (`search.rs`). Lines over 2 KB are shown over several rows, and columns are counted in UTF-16 units, as Dart counts them |
+| `document/` | Text of any size, up to about a gigabyte, for the editor. The original bytes are read from memory or a file a page at a time (`source.rs`); a background thread counts newlines every 4 KB (`index.rs`); edits are a piece table over the original and an append-only buffer, so undo copies no text (`text.rs`); search runs over a snapshot a megabyte at a time (`search.rs`). Lines over 2 KB are shown over several rows, and columns are counted in UTF-16 units, as Dart counts them. Saving writes beside the file and renames it into place; where only the file itself may be written, as in the macOS sandbox, it first keeps a copy of the original to read from and then writes over the file |
 
 ## The CLI
 
@@ -131,6 +131,13 @@ positions are byte offsets, with columns in UTF-16 units within a row. `Engine` 
 documents (`documentOf`, `openDocument`), so the widget tests get a `MemoryDocument`
 instead.
 
+An editable `DocumentView` is its own text input client (`DeltaTextInputClient`). The
+platform's input method is told only the rows around the selection, never the whole
+text, and sends back changes to them, which the view turns into byte ranges of the
+document. Keys that edit or move the caret are handled by the view; everything else
+goes to the input method, which is what makes accents and Chinese or Japanese input
+work. `files/file_page.dart` puts it on a page of its own for **Open file…**.
+
 Start-up (`app/lib/main.dart`) initialises the bridge (`RustLib.init()`), loads
 `workspace.json` from the platform's application support directory, then loads history,
 the working directory and linked collection folders in parallel, and runs the app.
@@ -144,7 +151,8 @@ The `app/lib/` folders are features:
 | `response/` | The response pane, server-sent events |
 | `protocols/` | WebSocket and gRPC sessions and views |
 | `editor/` | The code editor: colouring, typing aids, find and replace, folding, completion; and `DocumentView`, which shows a document of any size a screenful at a time |
-| `document/` | `TextDocument`, text of any size held by the Rust engine (`RustDocument` in `bridge/`), and `MemoryDocument`, the same held in Dart for tests |
+| `document/` | `TextDocument`, text of any size held by the Rust engine (`RustDocument` in `bridge/`), and `MemoryDocument`, the same held in Dart for tests; `caret.dart` moves through one by character and word |
+| `files/` | **Open file…**: a file of any size to edit and save |
 | `graphql/` | The GraphQL editor, schema browser and schema session |
 | `spec/` | The API spec viewer: preview, problems, examples, Try it |
 | `runner/`, `palette/` | Running a collection; the find-anything box |

@@ -7,6 +7,8 @@ import 'package:reqorb/document/memory_document.dart';
 import 'package:reqorb/document/text_document.dart';
 import 'package:reqorb/editor/document_view.dart';
 
+import 'document_input.dart';
+
 /// A document still being read, as a large file is for a moment after it
 /// opens: its lines come in as the test says.
 class _Reading extends MemoryDocument {
@@ -34,11 +36,15 @@ class _Reading extends MemoryDocument {
 void main() {
   late List<String> copied;
 
+  late int changes;
+
   Future<void> show(
     WidgetTester tester,
     TextDocument document, {
     ValueListenable<int?>? lineSought,
+    bool editable = false,
   }) async {
+    changes = 0;
     tester.view.physicalSize = const Size(900, 400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -59,6 +65,9 @@ void main() {
             name: 'doc',
             document: document,
             lineSought: lineSought,
+            editable: editable,
+            status: editable,
+            onChanged: () => changes++,
           ),
         ),
       ),
@@ -83,12 +92,42 @@ void main() {
     return Offset(box.left + x + 1, box.center.dy);
   }
 
-  Future<void> press(WidgetTester tester, LogicalKeyboardKey key) async {
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.meta);
+  Future<void> press(
+    WidgetTester tester,
+    LogicalKeyboardKey key, {
+    LogicalKeyboardKey modifier = LogicalKeyboardKey.meta,
+    bool shift = false,
+  }) async {
+    await tester.sendKeyDownEvent(modifier);
+    if (shift) await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
     await tester.sendKeyEvent(key);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.meta);
+    if (shift) await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+    await tester.sendKeyUpEvent(modifier);
     await tester.pump();
   }
+
+  /// Control, which edits with on the platform tests run as.
+  const control = LogicalKeyboardKey.control;
+
+  Future<void> key(
+    WidgetTester tester,
+    LogicalKeyboardKey key, {
+    bool shift = false,
+  }) async {
+    if (shift) await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+    await tester.sendKeyEvent(key);
+    if (shift) await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+    await tester.pump();
+  }
+
+  String status(WidgetTester tester) => tester
+      .widget<Text>(
+        find.descendant(
+          of: find.byKey(const Key('doc-status')),
+          matching: find.byType(Text),
+        ),
+      )
+      .data!;
 
   testWidgets('shows only the rows in view, numbering lines', (tester) async {
     final text = [for (var i = 1; i <= 10000; i++) 'line $i'].join('\n');
@@ -248,5 +287,243 @@ void main() {
     );
     expect(find.text('changed'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
+  });
+
+  group('editing', () {
+    testWidgets('types, rubs out and moves the caret', (tester) async {
+      final doc = MemoryDocument('first\nsecond');
+      await show(tester, doc, editable: true);
+      await tester.tapAt(at(tester, 'first', 0, 5));
+      await tester.pump();
+      expect(tester.testTextInput.hasAnyClients, isTrue);
+      // Told only the caret's row.
+      expect(told(tester).text, 'first');
+      expect(told(tester).selection, const TextSelection.collapsed(offset: 5));
+
+      await input(tester, '!');
+      await input(tester, 'é');
+      expect(doc.text(0, 99), 'first!é\nsecond');
+      expect(find.text('first!é'), findsOneWidget);
+      expect(changes, 2);
+      expect(status(tester), startsWith('Ln 1, Col 8'));
+
+      await key(tester, LogicalKeyboardKey.backspace);
+      await key(tester, LogicalKeyboardKey.arrowLeft);
+      await key(tester, LogicalKeyboardKey.arrowLeft, shift: true);
+      await key(tester, LogicalKeyboardKey.backspace);
+      expect(doc.text(0, 99), 'firs!\nsecond');
+
+      // Down keeps as far across as it can, and on to the end.
+      await key(tester, LogicalKeyboardKey.arrowDown);
+      await input(tester, '-');
+      expect(doc.text(0, 99), 'firs!\nseco-nd');
+      await key(tester, LogicalKeyboardKey.end);
+      await key(tester, LogicalKeyboardKey.delete);
+      await input(tester, '.');
+      expect(doc.text(0, 99), 'firs!\nseco-nd.');
+      expect(told(tester).text, 'seco-nd.');
+
+      // By word, with Control here, as on Windows and Linux: what is
+      // between, and the word before it.
+      await tester.sendKeyDownEvent(control);
+      await key(tester, LogicalKeyboardKey.backspace);
+      await tester.sendKeyUpEvent(control);
+      expect(doc.text(0, 99), 'firs!\nseco-');
+    });
+
+    testWidgets('a new line keeps the indentation, and more in brackets', (
+      tester,
+    ) async {
+      final doc = MemoryDocument('{\n  "a": [1]\n}');
+      await show(tester, doc, editable: true);
+      await tester.tapAt(at(tester, '  "a": [1]', 1, 8));
+      await tester.pump();
+      await key(tester, LogicalKeyboardKey.enter);
+      expect(doc.text(0, 99), '{\n  "a": [\n    1]\n}');
+      await input(tester, '0, ');
+      expect(doc.text(0, 99), '{\n  "a": [\n    0, 1]\n}');
+    });
+
+    testWidgets('undoes and does again', (tester) async {
+      final doc = MemoryDocument('abc');
+      await show(tester, doc, editable: true);
+      await tester.tapAt(at(tester, 'abc', 0, 3));
+      await tester.pump();
+      for (final c in 'def'.split('')) {
+        await input(tester, c);
+      }
+      await key(tester, LogicalKeyboardKey.backspace);
+      expect(doc.text(0, 99), 'abcde');
+
+      await press(tester, LogicalKeyboardKey.keyZ, modifier: control);
+      expect(doc.text(0, 99), 'abcdef');
+      await press(tester, LogicalKeyboardKey.keyZ, modifier: control);
+      expect(doc.text(0, 99), 'abc', reason: 'typing undoes a run at a time');
+      expect(doc.info().modified, isFalse);
+      await press(
+        tester,
+        LogicalKeyboardKey.keyZ,
+        modifier: control,
+        shift: true,
+      );
+      expect(doc.text(0, 99), 'abcdef');
+      await press(tester, LogicalKeyboardKey.keyY, modifier: control);
+      expect(doc.text(0, 99), 'abcde');
+      // The caret follows, and typing goes on from it.
+      await input(tester, '!');
+      expect(doc.text(0, 99), 'abcde!');
+    });
+
+    testWidgets('composes with the input method', (tester) async {
+      final doc = MemoryDocument('ab');
+      await show(tester, doc, editable: true);
+      await tester.tapAt(at(tester, 'ab', 0, 1));
+      await tester.pump();
+      // Japanese: "n", then "に", still being chosen, then chosen.
+      await input(tester, 'n', composing: const TextRange(start: 1, end: 2));
+      expect(doc.text(0, 99), 'anb');
+      // Keys go to the input method while it composes.
+      await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+      await tester.pump();
+      expect(doc.text(0, 99), 'anb');
+      await input(
+        tester,
+        'に',
+        start: 1,
+        end: 2,
+        composing: const TextRange(start: 1, end: 2),
+      );
+      expect(doc.text(0, 99), 'aにb');
+      expect(told(tester).composing, const TextRange(start: 1, end: 2));
+      await input(tester, '', start: 2, end: 2);
+      expect(doc.text(0, 99), 'aにb');
+      await key(tester, LogicalKeyboardKey.backspace);
+      expect(doc.text(0, 99), 'ab');
+    });
+
+    testWidgets('cuts, copies and pastes', (tester) async {
+      final doc = MemoryDocument('one two');
+      await show(tester, doc, editable: true);
+      String? clipboard;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            clipboard = (call.arguments as Map)['text'] as String;
+          }
+          if (call.method == 'Clipboard.getData') {
+            return {'text': clipboard};
+          }
+          return null;
+        },
+      );
+      await tester.tapAt(at(tester, 'one two', 0, 1));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tapAt(at(tester, 'one two', 0, 1));
+      await tester.pump();
+      await press(tester, LogicalKeyboardKey.keyX, modifier: control);
+      expect(clipboard, 'one');
+      expect(doc.text(0, 99), ' two');
+      await key(tester, LogicalKeyboardKey.end);
+      await press(tester, LogicalKeyboardKey.keyV, modifier: control);
+      expect(doc.text(0, 99), ' twoone');
+    });
+
+    testWidgets('indents and outdents lines', (tester) async {
+      final doc = MemoryDocument('a\nb\n\nc');
+      await show(tester, doc, editable: true);
+      await tester.tapAt(at(tester, 'a', 0, 0));
+      await tester.pump();
+      await key(tester, LogicalKeyboardKey.tab);
+      expect(doc.text(0, 99), '  a\nb\n\nc');
+      await press(tester, LogicalKeyboardKey.keyA, modifier: control);
+      await key(tester, LogicalKeyboardKey.tab);
+      expect(doc.text(0, 99), '    a\n  b\n\n  c');
+      // One step, undone at once.
+      await press(tester, LogicalKeyboardKey.keyZ, modifier: control);
+      expect(doc.text(0, 99), '  a\nb\n\nc');
+      await press(tester, LogicalKeyboardKey.keyA, modifier: control);
+      await key(tester, LogicalKeyboardKey.tab, shift: true);
+      expect(doc.text(0, 99), 'a\nb\n\nc');
+    });
+
+    testWidgets('replaces one match and then all', (tester) async {
+      final doc = MemoryDocument('cat dog cat\ncat');
+      await show(tester, doc, editable: true);
+      await tester.tapAt(at(tester, 'cat dog cat', 0, 0));
+      await tester.pump();
+      await press(tester, LogicalKeyboardKey.keyF);
+      await tester.tap(find.byKey(const Key('doc-replace-toggle')));
+      await tester.pump();
+      await tester.enterText(find.byKey(const Key('doc-find-field')), 'cat');
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump();
+      await tester.enterText(
+        find.byKey(const Key('doc-replace-field')),
+        'bird',
+      );
+      await tester.tap(find.byKey(const Key('doc-replace-one')));
+      await tester.pump();
+      await tester.pump();
+      expect(doc.text(0, 99), 'bird dog cat\ncat');
+      String count() =>
+          tester.widget<Text>(find.byKey(const Key('doc-find-count'))).data!;
+      expect(count(), '1 of 2');
+
+      await tester.tap(find.byKey(const Key('doc-replace-all')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump();
+      expect(doc.text(0, 99), 'bird dog bird\nbird');
+      expect(find.text('Replaced 2'), findsOneWidget);
+      expect(count(), 'None');
+      // All in one step.
+      await tester.tapAt(at(tester, 'bird dog bird', 0, 0));
+      await tester.pump();
+      await press(tester, LogicalKeyboardKey.keyZ, modifier: control);
+      expect(doc.text(0, 99), 'bird dog cat\ncat');
+    });
+
+    testWidgets('typing over a selection too big to tell replaces it', (
+      tester,
+    ) async {
+      final text = [for (var i = 0; i < 100; i++) 'line $i'].join('\n');
+      final doc = MemoryDocument(text);
+      await show(tester, doc, editable: true);
+      await tester.tapAt(at(tester, 'line 0', 0, 0));
+      await tester.pump();
+      await press(tester, LogicalKeyboardKey.keyA, modifier: control);
+      expect(told(tester).text, '');
+      expect(status(tester), contains('selected'));
+      await input(tester, 'x');
+      expect(doc.text(0, 999), 'x');
+      await input(tester, 'y');
+      expect(doc.text(0, 999), 'xy');
+    });
+
+    testWidgets('a view that cannot be edited takes no typing', (tester) async {
+      await show(tester, MemoryDocument('fixed'));
+      await tester.tapAt(at(tester, 'fixed', 0, 2));
+      await tester.pump();
+      expect(tester.testTextInput.hasAnyClients, isFalse);
+      expect(find.byKey(const Key('doc-status')), findsNothing);
+    });
+
+    testWidgets('moves by word with Option on macOS', (tester) async {
+      final doc = MemoryDocument('alpha beta gamma');
+      await show(tester, doc, editable: true);
+      await tester.tapAt(at(tester, 'alpha beta gamma', 0, 0));
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.alt);
+      await key(tester, LogicalKeyboardKey.arrowRight);
+      await key(tester, LogicalKeyboardKey.arrowRight);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.alt);
+      await input(tester, '!');
+      expect(doc.text(0, 99), 'alpha beta! gamma');
+      // Command goes to the end of the row.
+      await press(tester, LogicalKeyboardKey.arrowLeft);
+      await input(tester, '>');
+      expect(doc.text(0, 99), '>alpha beta! gamma');
+    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
   });
 }

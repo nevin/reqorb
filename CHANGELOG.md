@@ -6,6 +6,13 @@ the new version when it is tagged.
 
 ## Unreleased
 
+- **Open file…**, in the sidebar, the `⌘K` box and `⌘O`, opens a file of any size to
+  read and edit: a gigabyte opens at once. Typing works with accents and Chinese or
+  Japanese input, with undo, cut, copy and paste, indenting, and find and replace.
+  Saving keeps the file's other changes in mind: one made by another program is read
+  again, or, if there are edits, saving over it is asked about first. On iPad, where a
+  picked file is a copy, it is exported instead.
+
 ## 0.2.0 – 2026-10-17
 
 - Responses and API specs over a megabyte open at once, however large, in a new viewer
