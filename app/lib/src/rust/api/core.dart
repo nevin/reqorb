@@ -342,6 +342,11 @@ String redactText({required String text}) =>
 String exportExtension({required ExportFormat format}) =>
     RustLib.instance.api.crateApiCoreExportExtension(format: format);
 
+/// Deletes the response bodies an earlier run wrote to files, as nothing
+/// refers to them any more.
+Future<void> cleanSpilledBodies() =>
+    RustLib.instance.api.crateApiCoreCleanSpilledBodies();
+
 enum AppTheme { system, light, dark }
 
 class Auth {
@@ -1546,6 +1551,7 @@ class Response {
   final List<Header> headers;
   final String body;
   final Uint8List? bytes;
+  final String? bodyFile;
   final int sizeBytes;
   final int elapsedMs;
 
@@ -1556,6 +1562,7 @@ class Response {
     required this.headers,
     required this.body,
     this.bytes,
+    this.bodyFile,
     required this.sizeBytes,
     required this.elapsedMs,
   });
@@ -1568,6 +1575,7 @@ class Response {
       headers.hashCode ^
       body.hashCode ^
       bytes.hashCode ^
+      bodyFile.hashCode ^
       sizeBytes.hashCode ^
       elapsedMs.hashCode;
 
@@ -1582,6 +1590,7 @@ class Response {
           headers == other.headers &&
           body == other.body &&
           bytes == other.bytes &&
+          bodyFile == other.bodyFile &&
           sizeBytes == other.sizeBytes &&
           elapsedMs == other.elapsedMs;
 }

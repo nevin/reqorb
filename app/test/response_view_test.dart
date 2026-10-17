@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -231,5 +233,79 @@ void main() {
       contains('<base href="https://a.test/p?x=1&amp;y=&quot;2&quot;">'),
     );
     expect(pageForBrowser('<p>hi</p>', null), endsWith("'none'\"><p>hi</p>"));
+  });
+
+  testWidgets('a body too big to hold is shown from its file', (tester) async {
+    final dir = Directory.systemTemp.createTempSync('reqorb_spilled');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final path = '${dir.path}/body';
+    final lines = [for (var i = 0; i < 3000; i++) '{"row": $i}'].join('\n');
+    File(path).writeAsStringSync(lines);
+    tester.view.physicalSize = const Size(1000, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final sent = sentWith(
+      Response(
+        status: 200,
+        statusText: 'OK',
+        httpVersion: 'HTTP/1.1',
+        headers: const [
+          Header(name: 'content-type', value: 'application/json'),
+        ],
+        // Only its start is held.
+        body: lines.substring(0, 100),
+        bodyFile: path,
+        sizeBytes: 40 * 1024 * 1024,
+        elapsedMs: 12,
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ResponseView(
+            sent: sent,
+            error: null,
+            errorTitle: '',
+            sending: false,
+            sessionSize: 1,
+            onExportSession: () {},
+          ),
+        ),
+      ),
+    );
+    for (var i = 0; i < 10; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+    }
+    expect(find.byKey(const Key('response-from-file')), findsOneWidget);
+    expect(find.text('{"row": 0}'), findsOneWidget);
+    // All of it is there, not only what was held.
+    await tester.tap(find.text('{"row": 0}'));
+    await tester.sendKeyEvent(LogicalKeyboardKey.end);
+    await tester.pump();
+    expect(find.text('{"row": 2999}'), findsOneWidget);
+
+    // Copying takes the whole body from the file.
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String;
+        }
+        return null;
+      },
+    );
+    await tester.tap(find.byKey(const Key('copy-response')));
+    for (var i = 0; i < 10 && copied == null; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+    }
+    expect(copied, lines);
+    await tester.pumpWidget(const SizedBox());
   });
 }

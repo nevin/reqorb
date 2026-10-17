@@ -1143,3 +1143,46 @@ async fn a_send_stopped_before_any_answer_is_cancelled() {
     assert!(matches!(send.await.unwrap(), Err(Error::Cancelled)));
     drop(listener);
 }
+
+#[tokio::test]
+async fn a_body_too_big_to_hold_goes_to_a_file() {
+    // A little over the limit, as JSON with a value at the very end.
+    let filler = "x".repeat(SPILL_BYTES as usize);
+    let body = format!("{{\"filler\": \"{filler}\", \"last\": \"é end\"}}");
+    let (url, server) = serve(vec![reply(
+        "200 OK",
+        "Content-Type: application/json\r\n",
+        &body,
+    )]);
+    let mut request = Request::new("GET", &url);
+    request.tests = vec!["body.last == \"é end\"".into(), "size > 16000000".into()];
+    let (events, mut seen) = tokio::sync::mpsc::unbounded_channel();
+    let watch = Watch::new(
+        move |event| {
+            let _ = events.send(event);
+        },
+        Cancel::default(),
+    );
+    let sent = send_watched(&request, &[], &SendOptions::default(), &[], &watch)
+        .await
+        .unwrap();
+    server.join().unwrap();
+
+    let response = &sent.response;
+    let file = response.body_file.clone().expect("written to a file");
+    assert_eq!(response.size_bytes, body.len() as u64);
+    assert_eq!(response.body.len(), PREVIEW_BYTES);
+    assert!(body.starts_with(&response.body));
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), body);
+    // Tests read the whole of it.
+    assert!(sent.tests.iter().all(|t| t.passed), "{:?}", sent.tests);
+    // Text stops being passed on once it goes to a file.
+    let mut text = 0;
+    while let Ok(event) = seen.try_recv() {
+        if let SendEvent::Body { text: part, .. } = event {
+            text += part.len();
+        }
+    }
+    assert!(text as u64 <= SPILL_BYTES, "{text}");
+    std::fs::remove_file(file).unwrap();
+}

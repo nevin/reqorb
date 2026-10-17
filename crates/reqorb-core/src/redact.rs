@@ -496,6 +496,7 @@ mod tests {
             body: r#"{"refresh_token":"r","name":"n"}"#.into(),
             size_bytes: 32,
             bytes: None,
+            body_file: None,
             elapsed_ms: 5,
         };
         let exchanges = [Exchange {

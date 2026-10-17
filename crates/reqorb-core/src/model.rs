@@ -219,7 +219,7 @@ impl Request {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Response {
     pub status: u16,
     pub status_text: String,
@@ -231,6 +231,11 @@ pub struct Response {
     /// archive, a PDF. Text bodies are in `body` alone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bytes: Option<Vec<u8>>,
+    /// A file holding the whole body, when it was too big to hold in
+    /// memory (see `spill`): `body` then holds only its start, as text,
+    /// and `bytes` nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body_file: Option<String>,
     /// Size of the decompressed body in bytes.
     pub size_bytes: u64,
     /// Time from sending the request to receiving the full body.

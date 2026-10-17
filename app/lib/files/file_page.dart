@@ -46,6 +46,36 @@ bool get _savesInPlace => switch (defaultTargetPlatform) {
 /// place: exporting hands the whole text to the platform.
 const _exportLimit = 64 * 1024 * 1024;
 
+/// Saves a copy of the file at [from], suggesting [name]: where the user
+/// chooses on the desktop, and handed to the platform to export on iPad,
+/// which needs it all in memory, so at most [_exportLimit] of it.
+Future<void> saveCopyOf(BuildContext context, String from, String name) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    if (_savesInPlace) {
+      final to = await chooseSavePath(name);
+      if (to == null) return;
+      await File(from).copy(to);
+      notify(messenger, 'Saved ${_nameOf(to)}');
+      return;
+    }
+    final len = await File(from).length();
+    if (len > _exportLimit) {
+      notify(
+        messenger,
+        'At most ${_exportLimit >> 20} MB can be exported at once.',
+      );
+      return;
+    }
+    await FilePicker.saveFile(
+      fileName: name,
+      bytes: await File(from).readAsBytes(),
+    );
+  } catch (e) {
+    notify(messenger, 'Could not save $name: $e');
+  }
+}
+
 /// Asks for a file and opens it to edit.
 Future<void> openFile(BuildContext context) async {
   final path = await pickDocumentPath();
@@ -53,14 +83,20 @@ Future<void> openFile(BuildContext context) async {
   await showFile(context, path);
 }
 
-/// Opens the file at [path] to edit, however large.
-Future<void> showFile(BuildContext context, String path) =>
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        fullscreenDialog: true,
-        builder: (_) => FilePage(path: path),
-      ),
-    );
+/// Opens the file at [path] to edit, however large. A [temporary] file,
+/// such as a response kept on disk, is shown as [name] and saved only
+/// elsewhere.
+Future<void> showFile(
+  BuildContext context,
+  String path, {
+  bool temporary = false,
+  String? name,
+}) => Navigator.of(context).push(
+  MaterialPageRoute<void>(
+    fullscreenDialog: true,
+    builder: (_) => FilePage(path: path, temporary: temporary, name: name),
+  ),
+);
 
 String _nameOf(String path) => path.split(Platform.pathSeparator).last;
 
@@ -72,9 +108,21 @@ String _nameOf(String path) => path.split(Platform.pathSeparator).last;
 /// the notice of a change made elsewhere `file-changed`, with
 /// `file-reload` and `file-keep`.
 class FilePage extends StatefulWidget {
-  const FilePage({super.key, required this.path});
+  const FilePage({
+    super.key,
+    required this.path,
+    this.temporary = false,
+    this.name,
+  });
 
   final String path;
+
+  /// Whether the file is one of the app's own, kept only for now, which
+  /// saving puts somewhere else rather than writing.
+  final bool temporary;
+
+  /// What to call it, in place of its file name.
+  final String? name;
 
   @override
   State<FilePage> createState() => _FilePageState();
@@ -99,7 +147,11 @@ class _FilePageState extends State<FilePage> {
   /// Counts opens, so that one finishing after a later one is dropped.
   int _opens = 0;
 
-  String get _name => _nameOf(_path);
+  /// Still the app's temporary file, not yet saved anywhere of the user's.
+  bool get _temporary => widget.temporary && _path == widget.path;
+
+  String get _name =>
+      _temporary ? (widget.name ?? _nameOf(_path)) : _nameOf(_path);
 
   bool get _modified => _doc?.info().modified ?? false;
 
@@ -171,6 +223,10 @@ class _FilePageState extends State<FilePage> {
     if (doc == null || _saving) return;
     if (!_savesInPlace) {
       await _export();
+      return;
+    }
+    if (_temporary) {
+      await _saveAs();
       return;
     }
     await _saveTo(doc, null);
@@ -451,7 +507,9 @@ class _FilePageState extends State<FilePage> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  File(_path).parent.path,
+                  _temporary
+                      ? 'Not saved anywhere yet'
+                      : File(_path).parent.path,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
@@ -467,17 +525,20 @@ class _FilePageState extends State<FilePage> {
                 onPressed: _openAnother,
               ),
               if (_savesInPlace) ...[
-                IconButton(
-                  key: const Key('file-save'),
-                  tooltip: 'Save (${shortcutModifier}S)',
-                  icon: _saving
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.save_outlined),
-                  onPressed: doc == null || !modified || _saving ? null : _save,
-                ),
+                if (!_temporary)
+                  IconButton(
+                    key: const Key('file-save'),
+                    tooltip: 'Save (${shortcutModifier}S)',
+                    icon: _saving
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.save_outlined),
+                    onPressed: doc == null || !modified || _saving
+                        ? null
+                        : _save,
+                  ),
                 IconButton(
                   key: const Key('file-save-as'),
                   tooltip: 'Save as… (⇧${shortcutModifier}S)',

@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart' hide FormField;
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:reqorb/transfer/export_actions.dart';
@@ -232,6 +232,18 @@ void main() {
           await request.response.close();
           return;
         }
+        // A body too big to hold in memory: 40 MB of JSON lines.
+        if (request.uri.path == '/big') {
+          request.response.headers.contentType = ContentType.json;
+          final line = '{"id": 1234567, "name": "an ordinary record"}\n';
+          final block = line * 10000;
+          for (var i = 0; i < 90; i++) {
+            request.response.write(block);
+          }
+          request.response.write('{"last": "the end"}');
+          await request.response.close();
+          return;
+        }
         // A binary body: the smallest PNG there is.
         if (request.uri.path == '/logo.png') {
           request.response
@@ -403,6 +415,30 @@ void main() {
     expect(seen.method, 'POST');
     expect(seen.headers!.value('x-test'), 'yes');
     expect(seen.body, 'hello');
+  });
+
+  testWidgets('shows a response too big to hold from a file', (tester) async {
+    await start(tester);
+    await launch(tester);
+    await type(
+      tester,
+      find.byKey(const Key('url')),
+      'http://127.0.0.1:${server.port}/big',
+    );
+    await tester.tap(find.byKey(const Key('send')));
+    await waitFor(tester, find.byKey(const Key('response-from-file')));
+    await waitFor(
+      tester,
+      find.text('{"id": 1234567, "name": "an ordinary record"}'),
+    );
+    expect(find.textContaining('39.5 MB'), findsWidgets);
+
+    await tester.tap(
+      find.text('{"id": 1234567, "name": "an ordinary record"}').first,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.end);
+    await tester.pump();
+    await waitFor(tester, find.text('{"last": "the end"}'));
   });
 
   testWidgets('imports a pasted curl command and saves a new request', (

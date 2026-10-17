@@ -235,7 +235,7 @@ pub async fn import_url(url: &str) -> Result<ImportResult, Error> {
         .filter(|stem| !stem.is_empty())
         .or(origin.host_str())
         .unwrap_or("Imported");
-    import_from(&response.body, hint, Some(&origin))
+    import_from(&response.full_body()?, hint, Some(&origin))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

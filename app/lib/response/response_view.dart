@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
@@ -8,7 +9,12 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import 'package:reqorb/bridge/engine.dart';
+import 'package:reqorb/document/memory_document.dart';
+import 'package:reqorb/document/text_document.dart';
 import 'package:reqorb/editor/code_editor.dart';
+import 'package:reqorb/editor/document_view.dart';
+import 'package:reqorb/files/file_page.dart';
 import 'package:reqorb/editor/syntax.dart';
 import 'package:reqorb/response/sse.dart';
 import 'package:reqorb/shared/messages.dart';
@@ -214,7 +220,9 @@ class _Loaded extends StatefulWidget {
 typedef _Section = ({
   Tab tab,
   Widget view,
-  String Function() copy,
+
+  /// What to copy; null when it cannot be, having said why.
+  FutureOr<String?> Function() copy,
   String what,
 });
 
@@ -276,7 +284,9 @@ class _LoadedState extends State<_Loaded> {
     final scheme = theme.colorScheme;
     final color = statusColor(response.status, scheme);
     final contentType = _contentType(response);
-    final isHtml = _isHtml(contentType, response.body);
+    // A body too big to hold is in a file, with only its start here.
+    final spilled = response.bodyFile;
+    final isHtml = spilled == null && _isHtml(contentType, response.body);
     final canPreview = previewsHtml && isHtml;
     // A page kept from a response that had one falls back to Pretty.
     final mode = _mode == _BodyMode.preview && !canPreview
@@ -286,7 +296,7 @@ class _LoadedState extends State<_Loaded> {
     final language = raw
         ? CodeLanguage.plain
         : _format ?? _languageOf(contentType, response.body);
-    final json = _jsonOf(response.body);
+    final json = spilled == null ? _jsonOf(response.body) : null;
     final body = raw || language != CodeLanguage.json
         ? response.body
         : json ?? response.body;
@@ -313,7 +323,16 @@ class _LoadedState extends State<_Loaded> {
     final events = hasEvents ? parseSse(response.body) : const <SseEvent>[];
 
     final Widget bodyView;
-    if (response.bytes case final bytes?) {
+    if (spilled != null) {
+      bodyView = _FileBody(
+        key: ValueKey(spilled),
+        path: spilled,
+        size: response.sizeBytes,
+        contentType: contentType,
+        text: response.body.isNotEmpty,
+        language: raw ? CodeLanguage.plain : language,
+      );
+    } else if (response.bytes case final bytes?) {
       bodyView = _Binary(
         bytes: bytes,
         contentType: contentType,
@@ -372,7 +391,9 @@ class _LoadedState extends State<_Loaded> {
       (
         tab: const Tab(height: 38, text: 'Body'),
         view: bodyView,
-        copy: () => body,
+        copy: spilled == null
+            ? () => body
+            : () => _readForCopy(context, spilled),
         what: 'Body',
       ),
       (
@@ -565,9 +586,9 @@ class _LoadedState extends State<_Loaded> {
                       // Whichever tab is showing is what gets copied.
                       final section =
                           sections[DefaultTabController.of(context).index];
-                      await Clipboard.setData(
-                        ClipboardData(text: section.copy()),
-                      );
+                      final text = await section.copy();
+                      if (text == null) return;
+                      await Clipboard.setData(ClipboardData(text: text));
                       if (!context.mounted) return;
                       showMessage(context, '${section.what} copied');
                     },
@@ -588,7 +609,19 @@ class _LoadedState extends State<_Loaded> {
                           saveTextFile(context, 'response.json', json ?? ''),
                       child: const Text('Save body as JSON…'),
                     ),
-                    if (response.bytes case final bytes?)
+                    if (spilled != null)
+                      PopupMenuItem(
+                        key: const Key('export-file'),
+                        value: () => saveCopyOf(
+                          context,
+                          spilled,
+                          response.body.isEmpty
+                              ? _binaryFileName(response)
+                              : 'response.txt',
+                        ),
+                        child: const Text('Save body as file…'),
+                      )
+                    else if (response.bytes case final bytes?)
                       PopupMenuItem(
                         key: const Key('export-file'),
                         value: () => saveBytesFile(
@@ -1113,6 +1146,164 @@ class _Binary extends StatelessWidget {
           about,
         ],
       ),
+    );
+  }
+}
+
+/// Reads a body kept in a file to copy it, if it is not too big to.
+Future<String?> _readForCopy(BuildContext context, String path) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    final size = await File(path).length();
+    if (size > copyLimit) {
+      notify(
+        messenger,
+        'The body is ${formatSize(size)}; at most '
+        '${formatSize(copyLimit)} can be copied. Save it as a file instead.',
+      );
+      return null;
+    }
+    return utf8.decode(await File(path).readAsBytes(), allowMalformed: true);
+  } catch (e) {
+    notify(messenger, 'Could not read the body: $e');
+    return null;
+  }
+}
+
+/// A body too big to hold, shown from the file it was written to as it
+/// arrived: text in a [DocumentView], read a screenful at a time.
+class _FileBody extends StatefulWidget {
+  const _FileBody({
+    super.key,
+    required this.path,
+    required this.size,
+    required this.contentType,
+    required this.text,
+    required this.language,
+  });
+
+  final String path;
+  final int size;
+  final String contentType;
+
+  /// Whether the body is text, rather than an image or other binary.
+  final bool text;
+  final CodeLanguage language;
+
+  @override
+  State<_FileBody> createState() => _FileBodyState();
+}
+
+class _FileBodyState extends State<_FileBody> {
+  TextDocument? _document;
+  String? _error;
+  bool _asked = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_asked || !widget.text) return;
+    _asked = true;
+    final engine = Engine.maybeOf(context);
+    final opening = engine == null
+        ? MemoryDocument.open(widget.path)
+        : engine.openDocument(widget.path);
+    opening.then(
+      (document) {
+        if (!mounted) return document.dispose();
+        setState(() => _document = document);
+      },
+      onError: (Object e) {
+        if (mounted) setState(() => _error = '$e');
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _document?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
+    final kind = widget.contentType.isEmpty ? 'Binary' : widget.contentType;
+    if (!widget.text) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.insert_drive_file_outlined,
+              size: 32,
+              color: scheme.outlineVariant,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              '$kind · ${formatSize(widget.size)}',
+              key: const Key('binary-body'),
+              style: TextStyle(color: scheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              key: const Key('binary-save'),
+              icon: const Icon(Icons.save_alt, size: 18),
+              label: const Text('Save to file…'),
+              onPressed: () => saveCopyOf(context, widget.path, 'response'),
+            ),
+          ],
+        ),
+      );
+    }
+    final document = _document;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 6, 4, 2),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${formatSize(widget.size)}, too big to hold in memory, '
+                  'so it is read from a file as it is shown.',
+                  key: const Key('response-from-file'),
+                  style: muted,
+                ),
+              ),
+              TextButton.icon(
+                key: const Key('response-open-file'),
+                icon: const Icon(Icons.open_in_new, size: 16),
+                label: const Text('Open to edit'),
+                onPressed: () => showFile(
+                  context,
+                  widget.path,
+                  temporary: true,
+                  name: 'Response body',
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: document != null
+              ? DocumentView(
+                  name: 'responseBody-document',
+                  document: document,
+                  language: widget.language,
+                )
+              : Center(
+                  child: _error == null
+                      ? const CircularProgressIndicator()
+                      : Text(_error!, style: muted),
+                ),
+        ),
+      ],
     );
   }
 }

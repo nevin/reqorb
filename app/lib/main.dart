@@ -16,6 +16,8 @@ Future<void> main() async {
   await store.load();
   // Each needs the workspace and none needs another, so they overlap.
   await Future.wait([
+    // Bodies an earlier run wrote to files are no longer shown anywhere.
+    cleanSpilledBodies(),
     store.loadHistory(),
     store.restoreWorkingDir(folders),
     store.restoreLinks(folders),

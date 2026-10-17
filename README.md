@@ -537,6 +537,11 @@ share one editor.
 
 ## Large files
 
+A response over 16 MB is written to a temporary file as it arrives instead of being
+held in memory, and shown from there; **Open to edit** opens it like a file. Tests,
+captures and scripts read it back when it is under 256 MB; past that, scripts see its
+first megabyte. History keeps only the start of a large body.
+
 Text over a megabyte, whether a response, an API spec or a file, opens in a view that
 reads only what is on screen, so a gigabyte opens as fast as a line. It is coloured and
 numbered, a line over 2 KB goes on over several rows, and a bar at the top shows how

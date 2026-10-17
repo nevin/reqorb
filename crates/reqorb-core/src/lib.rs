@@ -10,6 +10,7 @@
 //! - `vars`, `checks`, `redact`, `analyze`, `data`: work done on requests
 //!   and responses without touching the network.
 //! - `document`: text of any size, up to a gigabyte, for the editor.
+//! - `spill`: response bodies too big to hold, written to files.
 //! - `vault`, `history`: what is kept on disk: the workspace, with its
 //!   credentials encrypted, and the requests sent.
 
@@ -29,6 +30,7 @@ mod http;
 mod model;
 mod redact;
 mod script;
+mod spill;
 mod subscribe;
 mod time;
 mod vars;
@@ -65,6 +67,7 @@ pub use model::{
     SendOptions, Settings, Variable, Workspace,
 };
 pub use redact::{REDACTED, redact_collection, redact_environment, redact_exchanges, redact_text};
+pub use spill::{PREVIEW_BYTES, READ_LIMIT, SPILL_BYTES, clean_spilled, read_spilled, spill_dir};
 pub use vars::{Resolved, resolve};
 pub use vault::{
     KeyStore, Keychain, LOCKED, Loaded, check_keys, load_workspace, locked_secrets, save_workspace,

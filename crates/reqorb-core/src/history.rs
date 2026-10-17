@@ -67,6 +67,8 @@ fn compact(entry: &HistoryEntry) -> HistoryEntry {
     let mut entry = entry.clone();
     let response = &mut entry.exchange.response;
     entry.cut |= response.bytes.take().is_some();
+    // The file goes when the app quits; what was kept of it stays.
+    entry.cut |= response.body_file.take().is_some();
     entry.cut |= shorten(&mut response.body);
     for request in [Some(&mut entry.exchange.request), entry.source.as_mut()]
         .into_iter()
@@ -199,6 +201,7 @@ mod tests {
                     headers: Vec::new(),
                     body: format!(r#"{{"n":{n},"session":"pr1vate"}}"#),
                     bytes: None,
+                    body_file: None,
                     size_bytes: 30,
                     elapsed_ms: 12,
                 },
@@ -317,12 +320,26 @@ mod tests {
         binary.exchange.response.bytes = Some(vec![0, 159, 146, 150]);
         let mut upload = entry(3);
         upload.exchange.request.body = Some("x".repeat(BODY_BYTES + 1));
-        append_history(&path, &[large, binary, upload, entry(4)], 100, false, &keys).unwrap();
+        // Too big to have been held: its start is here, the rest in a file.
+        let mut spilled = entry(5);
+        spilled.exchange.response.body = "start".into();
+        spilled.exchange.response.body_file = Some("/tmp/body".into());
+        append_history(
+            &path,
+            &[large, binary, upload, entry(4), spilled],
+            100,
+            false,
+            &keys,
+        )
+        .unwrap();
 
         let history = load_history(&path, &keys).unwrap();
-        let [large, binary, upload, small] = &history.entries[..] else {
-            panic!("four entries");
+        let [large, binary, upload, small, spilled] = &history.entries[..] else {
+            panic!("five entries");
         };
+        assert!(spilled.cut);
+        assert_eq!(spilled.exchange.response.body_file, None);
+        assert_eq!(spilled.exchange.response.body, "start");
         assert!(large.cut);
         // Cut between characters, never through one.
         assert_eq!(large.exchange.response.body.len(), BODY_BYTES);

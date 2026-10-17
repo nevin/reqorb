@@ -12,6 +12,9 @@ the new version when it is tagged.
   Saving keeps the file's other changes in mind: one made by another program is read
   again, or, if there are edits, saving over it is asked about first. On iPad, where a
   picked file is a copy, it is exported instead.
+- A response over 16 MB is written to a file as it arrives, rather than held in
+  memory, and shown from there, however large. Copy, save, tests and captures still
+  see all of it, up to 256 MB, and **Open to edit** opens it in a page of its own.
 
 ## 0.2.0 – 2026-10-17
 
