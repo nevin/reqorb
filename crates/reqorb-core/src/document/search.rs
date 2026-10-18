@@ -42,16 +42,18 @@ const OVERLAP: u64 = 64 * 1024;
 const BEHIND: u64 = 4;
 
 enum Matcher {
-    Bytes(memmem::Finder<'static>),
+    /// Boxed: a finder is a few hundred bytes on some systems, and the
+    /// matcher is passed around by value.
+    Bytes(Box<memmem::Finder<'static>>),
     Regex(Regex),
 }
 
 impl Matcher {
     fn new(query: &Query) -> Result<Self, Error> {
         if !query.regex && query.case_sensitive && !query.whole_word {
-            return Ok(Self::Bytes(
+            return Ok(Self::Bytes(Box::new(
                 memmem::Finder::new(query.text.as_bytes()).into_owned(),
-            ));
+            )));
         }
         let mut pattern = if query.regex {
             query.text.clone()
