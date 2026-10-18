@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/reqorb-core", "crates/reqorb-cli", "crates/reqorb-alloc", "app/rust"]
 
 [workspace.package]
-version = "0.2.0"
+version = "1.0.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/nevin/reqorb"

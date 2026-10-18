@@ -3086,11 +3086,11 @@ dependencies = [
 
 [[package]]
 name = "reqorb-alloc"
-version = "0.2.0"
+version = "1.0.0"
 
 [[package]]
 name = "reqorb-cli"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -3103,7 +3103,7 @@ dependencies = [
 
 [[package]]
 name = "reqorb-core"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "apple-native-keyring-store",
  "base64 0.23.1",
@@ -3206,7 +3206,7 @@ dependencies = [
 
 [[package]]
 name = "rust_lib_reqorb"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
  "flutter_rust_bridge",
  "libc",
