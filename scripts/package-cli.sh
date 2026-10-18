@@ -20,6 +20,9 @@ name="reqorb-$version-$target"
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 mkdir -p "$stage/$name" "$out"
+# A full path: the Windows archive is made from inside the staging folder,
+# where a relative one would point somewhere else.
+out="$(cd "$out" && pwd)"
 binary="reqorb"
 [[ "$target" == *windows* ]] && binary="reqorb.exe"
 cp "$root/target/$target/release/$binary" "$root/README.md" "$root/LICENSE" "$stage/$name/"
