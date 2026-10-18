@@ -2,8 +2,11 @@
 library;
 
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart' hide FormField;
+import 'package:reqorb/bridge/rust_document.dart';
+import 'package:reqorb/document/text_document.dart';
 import 'package:reqorb/src/rust/api/core.dart' as rust;
 import 'package:reqorb/src/rust/api/core.dart';
 
@@ -22,6 +25,10 @@ abstract class Engine {
     assert(scope != null, 'No EngineScope above this widget');
     return scope!.engine;
   }
+
+  /// The engine provided by the nearest [EngineScope], if there is one.
+  static Engine? maybeOf(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<EngineScope>()?.engine;
 
   // ---------------------------------------------------------------- sending
 
@@ -246,6 +253,19 @@ abstract class Engine {
   Collection redactCollection({required Collection collection});
   Environment redactEnvironment({required Environment environment});
   String redactText({required String text});
+
+  // -------------------------------------------------------------- documents
+
+  /// A document holding [text], not saved anywhere, for the editor.
+  TextDocument documentOf(String text);
+
+  /// Opens the file at [path] as a document. Its start can be shown at
+  /// once, whatever its size.
+  Future<TextDocument> openDocument(String path);
+
+  /// A document holding [bytes], which need not be text, as for a binary
+  /// response shown in hexadecimal.
+  TextDocument documentOfBytes(Uint8List bytes);
 }
 
 /// Makes an [Engine] available to the widgets below it.
@@ -540,4 +560,13 @@ class RustEngine extends Engine {
 
   @override
   String redactText({required String text}) => rust.redactText(text: text);
+
+  @override
+  TextDocument documentOf(String text) => RustDocument.of(text);
+
+  @override
+  Future<TextDocument> openDocument(String path) => RustDocument.open(path);
+
+  @override
+  TextDocument documentOfBytes(Uint8List bytes) => RustDocument.ofBytes(bytes);
 }

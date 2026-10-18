@@ -98,7 +98,7 @@ The full set to run before pushing is in [CONTRIBUTING.md](../CONTRIBUTING.md#be
 - **Performance of large inputs.** Long work runs off the UI thread: Rust calls are
   asynchronous, and Dart work over a size threshold uses `Isolate.run` (see
   `readSpecApart` in `app/lib/spec/api_spec.dart` and `_asJsonApart` in
-  `app/lib/response/response_view.dart`). Text over a megabyte is shown in `LineView`
+  `app/lib/response/response_view.dart`). Text over a megabyte is shown in `DocumentView`
   rather than the editor, which lays out all its text on every change.
 - **iPad.** The iPad simulator shares the Mac's network, so a server on the Mac is
   reachable at `localhost`. `xcrun simctl ui booted appearance dark` switches the

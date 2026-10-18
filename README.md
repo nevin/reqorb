@@ -18,6 +18,9 @@ view. One Rust core does the networking and powers all three front ends.
 - **Tabs:** several requests open at once, each keeping its own edits and response.
 - **Find anything:** `⌘K` finds a saved request, an open tab, an environment or an
   action by a few letters of its name.
+- **Large files:** **Open file…** opens a file of any size, up to a gigabyte or so, at
+  once, to read, search, edit and save; responses and specs over a megabyte open the
+  same way.
 - **Code editor:** bodies, GraphQL queries, messages, tests, variables and responses are
   coloured by language, with line numbers, bracket matching, find and replace, folding of
   responses, and completion of `{{variables}}` and GraphQL fields.
@@ -531,6 +534,59 @@ share one editor.
   arguments of the field being called are offered as you type, with their types;
   `Ctrl+Space` asks for the list before anything is typed. Arrow keys and `Enter`
   or a tap pick one, `Esc` dismisses.
+
+## Large files
+
+Every code field stays quick at any size. Past a megabyte, as when a large body is
+pasted in, the field turns into the large-file editor: still editable, with the
+partner of the bracket beside the caret marked and brackets and quotes closed as they
+are typed, though without completion or folding. A raw body over 16 MB is saved with
+the request, so the body offers **Send from a file** instead, which sends the file as
+it is.
+
+A response over 16 MB is written to a temporary file as it arrives instead of being
+held in memory, and shown from there; **Open to edit** opens it like a file. Tests,
+captures and scripts read it back when it is under 256 MB; past that, scripts see its
+first megabyte. History keeps only the start of a large body.
+
+Text over a megabyte, whether a response, an API spec or a file, opens in a view that
+reads only what is on screen, so a gigabyte opens as fast as a line. It is coloured and
+numbered, a line over 2 KB goes on over several rows, and a bar at the top shows how
+far the lines have been counted. `⌘F` finds text, with **Aa** to match case, **W** for
+whole words and **.\*** for a regular expression; matches are counted as the search
+goes, and `Enter` steps through them.
+
+JSON, whatever its size, can be shown as a **Tree** (beside **Pretty** and **Raw** in a
+response, and under the view button of **Open file…**): each object or array opens to
+list what is in it, 200 at a time, and only that much of the text is read. Tapping a
+value, or the button at the end of its row, shows it selected in the text. A large
+JSON response is indented for **Pretty** a megabyte at a time, into a file of its own,
+with a bar showing how far it has got. A binary response or file can be shown as its
+bytes in hexadecimal, sixteen to a row, with the characters beside them.
+
+**Open file…** in the sidebar, the `⌘K` box or `⌘O` opens a file to edit there:
+
+- Typing goes through the system's input method, so accents and Chinese or Japanese
+  input work. The arrows move by character (with `⌥` by word, `⌘` to the ends of the
+  line or the file); `⇧` selects as they move. `⌘Z` and `⇧⌘Z` undo and redo,
+  typing a run at a time. `Tab` and `⇧Tab` indent and outdent the selected lines, and
+  a new line keeps the indentation.
+- `⌘⌥F`, or the arrow beside the search, adds **Replace with**: **Replace** changes the
+  match the search is on, **All** changes every one as a single edit.
+- `⌘S` saves and `⇧⌘S` saves a copy elsewhere. A line along the bottom shows the line
+  and column, what is selected, and the file's size and language.
+- If another program changes the file, it is read again; if there are edits, a notice
+  offers to reload it or keep them, and saving over it is asked about first. Closing
+  with unsaved edits asks whether to save them.
+- The view button shows the file as text, as bytes, or, for JSON, as a tree, and
+  offers **Format JSON** and **Minify JSON**, which rewrite the whole file a megabyte
+  at a time; saving then writes the result over it.
+- On iPad a picked file is a copy, so it is exported (up to 64 MB) rather than saved.
+- With a finger, a tap places the caret, and a long press or a double tap selects a
+  word, with handles to drag either end and a menu to cut, copy, paste or select all.
+  Dragging on after a long press selects as the finger goes.
+  A right click brings up the same menu. With VoiceOver on, each line is read with its
+  number, and moving the caret reads the line it moves to.
 
 ## Code generation
 

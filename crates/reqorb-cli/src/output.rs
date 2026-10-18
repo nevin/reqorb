@@ -63,7 +63,20 @@ pub(crate) fn print_response_parts(
 
     let mut out = std::io::stdout().lock();
     match &response.bytes {
-        _ if !body => {}
+        _ if !body => {
+            if let Some(path) = &response.body_file {
+                let _ = std::fs::remove_file(path);
+            }
+        }
+        // Too big to have been held: written out from its file, which is
+        // no longer needed after.
+        _ if response.body_file.is_some() => {
+            let path = response.body_file.as_deref().unwrap_or_default();
+            let copied =
+                std::fs::File::open(path).and_then(|mut file| std::io::copy(&mut file, &mut out));
+            let _ = std::fs::remove_file(path);
+            copied?;
+        }
         // Binary is written as it is when piped or redirected, but would
         // only garble a terminal.
         Some(bytes) if out.is_terminal() => writeln!(

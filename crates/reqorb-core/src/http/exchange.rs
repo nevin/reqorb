@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 
 use super::cookies::Jar;
 use super::watch::{SendEvent, TextStream, Watch};
+use crate::spill::{BodySink, preview};
 use crate::time::now_ms;
 use crate::{BodyMode, Error, Exchange, FileAccess, Header, Request, RequestSettings, Response};
 
@@ -322,7 +323,9 @@ async fn execute_once(
     {
         return Err(too_large(limit));
     }
-    let mut bytes = Vec::new();
+    // Past a size, the body goes to a file as it arrives.
+    let mut body = BodySink::default();
+    let text_like = is_text(content_type) || content_type.is_empty();
     if watch.watched() {
         watch.report(SendEvent::Head {
             status: status.as_u16(),
@@ -330,8 +333,9 @@ async fn execute_once(
             http_version: format!("{version:?}"),
             headers: headers.clone(),
         });
-        // Text is passed on as it arrives; anything else is only counted.
-        let mut text = (is_text(content_type) || content_type.is_empty()).then(TextStream::default);
+        // Text is passed on as it arrives; anything else is only counted,
+        // as is text that has gone to a file.
+        let mut text = text_like.then(TextStream::default);
         loop {
             let chunk = tokio::select! {
                 chunk = resp.chunk() => chunk?,
@@ -339,32 +343,49 @@ async fn execute_once(
                 _ = watch.cancel.cancelled() => break,
             };
             let Some(chunk) = chunk else { break };
-            bytes.extend_from_slice(&chunk);
-            if limit.is_some_and(|limit| bytes.len() as u64 > limit) {
+            body.push(&chunk)?;
+            if limit.is_some_and(|limit| body.len() > limit) {
                 return Err(too_large(limit.unwrap_or_default()));
+            }
+            if body.spilled() {
+                text = None;
             }
             watch.report(SendEvent::Body {
                 text: text.as_mut().map(|t| t.push(&chunk)).unwrap_or_default(),
-                received: bytes.len() as u64,
+                received: body.len(),
             });
         }
-    } else if let Some(limit) = limit {
+    } else {
         while let Some(chunk) = resp.chunk().await? {
-            bytes.extend_from_slice(&chunk);
-            if bytes.len() as u64 > limit {
+            body.push(&chunk)?;
+            if let Some(limit) = limit
+                && body.len() > limit
+            {
                 return Err(too_large(limit));
             }
         }
-    } else {
-        bytes = resp.bytes().await?.to_vec();
     }
     let elapsed_ms = started.elapsed().as_millis() as u64;
+    let size_bytes = body.len();
+    let (bytes, body_file) = body.finish()?;
     // Bytes that are not UTF-8 are kept as they are, unless the server says
-    // they are text in some other encoding.
-    let (body, raw) = match std::str::from_utf8(&bytes) {
-        Ok(text) => (text.to_string(), None),
-        Err(_) if is_text(content_type) => (String::from_utf8_lossy(&bytes).into_owned(), None),
-        Err(_) => (String::new(), Some(bytes.clone())),
+    // they are text in some other encoding. A body in a file keeps its
+    // start as text, for a quick look.
+    let (body, raw) = if body_file.is_some() {
+        (
+            if text_like {
+                preview(&bytes)
+            } else {
+                String::new()
+            },
+            None,
+        )
+    } else {
+        match std::str::from_utf8(&bytes) {
+            Ok(text) => (text.to_string(), None),
+            Err(_) if is_text(content_type) => (String::from_utf8_lossy(&bytes).into_owned(), None),
+            Err(_) => (String::new(), Some(bytes)),
+        }
     };
 
     Ok((
@@ -373,9 +394,10 @@ async fn execute_once(
             status_text: status.canonical_reason().unwrap_or("").to_string(),
             http_version: format!("{version:?}"),
             headers,
-            size_bytes: bytes.len() as u64,
+            size_bytes,
             body,
             bytes: raw,
+            body_file,
             elapsed_ms,
         },
         sent,

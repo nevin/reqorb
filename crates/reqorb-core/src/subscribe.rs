@@ -237,6 +237,7 @@ pub(crate) async fn over_websocket(
         size_bytes: body.len() as u64,
         body,
         bytes: None,
+        body_file: None,
         elapsed_ms: started.elapsed().as_millis() as u64,
     };
     let exchange = Exchange {

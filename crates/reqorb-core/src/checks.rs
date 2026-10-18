@@ -60,7 +60,10 @@ fn read(source: &str, response: &Response) -> Result<Option<String>, String> {
         "status" => return Ok(Some(response.status.to_string())),
         "time" => return Ok(Some(response.elapsed_ms.to_string())),
         "size" => return Ok(Some(response.size_bytes.to_string())),
-        "body" => return Ok(Some(response.body.clone())),
+        "body" => {
+            let body = response.full_body().map_err(|e| e.to_string())?;
+            return Ok(Some(body.into_owned()));
+        }
         _ => {}
     }
     if let Some(name) = lower.strip_prefix("header ") {
@@ -72,7 +75,8 @@ fn read(source: &str, response: &Response) -> Result<Option<String>, String> {
             .map(|h| h.value.clone()));
     }
     if lower.starts_with("body.") || lower.starts_with("body[") {
-        let Ok(mut value) = serde_json::from_str::<Value>(&response.body) else {
+        let body = response.full_body().map_err(|e| e.to_string())?;
+        let Ok(mut value) = serde_json::from_str::<Value>(&body) else {
             return Err("the body is not JSON".into());
         };
         for step in path(&source[4..])? {
@@ -265,6 +269,7 @@ mod tests {
             body: r#"{"token":"abc","user":{"id":42,"name":"Ann","tags":["a","b"]},"none":null,"odd key":true,"items":[{"price":9.5}]}"#.into(),
             size_bytes: 100,
             bytes: None,
+            body_file: None,
             elapsed_ms: 120,
         }
     }

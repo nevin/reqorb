@@ -251,6 +251,7 @@ pub struct _Response {
     pub headers: Vec<Header>,
     pub body: String,
     pub bytes: Option<Vec<u8>>,
+    pub body_file: Option<String>,
     pub size_bytes: u64,
     pub elapsed_ms: u64,
 }
@@ -1084,4 +1085,17 @@ pub fn export_extension(format: ExportFormat) -> String {
 #[frb(init)]
 pub fn init_app() {
     flutter_rust_bridge::setup_default_user_utils();
+}
+
+/// Deletes the response bodies an earlier run wrote to files, as nothing
+/// refers to them any more.
+pub fn clean_spilled_bodies() {
+    reqorb_core::clean_spilled();
+}
+
+/// Sets how large a response body is held in memory before it goes to a
+/// file: less on a device with little memory.
+#[frb(sync)]
+pub fn set_spill_bytes(bytes: u64) {
+    reqorb_core::set_spill_bytes(bytes);
 }

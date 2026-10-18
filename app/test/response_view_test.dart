@@ -1,7 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reqorb/editor/line_view.dart';
+import 'package:reqorb/editor/document_view.dart';
 import 'package:reqorb/response/response_view.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 
@@ -110,22 +112,16 @@ void main() {
       body: body,
     );
     String text() =>
-        tester.widget<LineView>(find.byType(LineView)).controller.text;
+        tester.widget<DocumentText>(find.byType(DocumentText)).text;
 
     // As received while it is re-indented apart; the one line goes on
     // over rows that are not numbered.
     expect(find.byKey(const Key('responseBody')), findsNothing);
     expect(text(), body);
-    final rows = find.descendant(
-      of: find.byKey(const Key('line-view')),
-      matching: find.byType(Row),
-    );
-    final gutters = [
-      for (final row in tester.widgetList<Row>(rows).take(3))
-        ((row.children.first as SizedBox).child! as SelectionContainer).child
-            as Text,
-    ];
-    expect([for (final g in gutters) g.data], ['1', '', '']);
+    String number(int row) => tester
+        .widget<Text>(find.byKey(ValueKey('responseBody-document-number-$row')))
+        .data!;
+    expect([number(0), number(1), number(2)], ['1', '', '']);
 
     // Then re-indented, once.
     for (var i = 0; i < 100 && !text().contains('\n'); i++) {
@@ -237,5 +233,172 @@ void main() {
       contains('<base href="https://a.test/p?x=1&amp;y=&quot;2&quot;">'),
     );
     expect(pageForBrowser('<p>hi</p>', null), endsWith("'none'\"><p>hi</p>"));
+  });
+
+  testWidgets('a body too big to hold is shown from its file', (tester) async {
+    final dir = Directory.systemTemp.createTempSync('reqorb_spilled');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final path = '${dir.path}/body';
+    final lines = [for (var i = 0; i < 3000; i++) '{"row": $i}'].join('\n');
+    File(path).writeAsStringSync(lines);
+    tester.view.physicalSize = const Size(1000, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final sent = sentWith(
+      Response(
+        status: 200,
+        statusText: 'OK',
+        httpVersion: 'HTTP/1.1',
+        headers: const [
+          Header(name: 'content-type', value: 'application/json'),
+        ],
+        // Only its start is held.
+        body: lines.substring(0, 100),
+        bodyFile: path,
+        sizeBytes: 40 * 1024 * 1024,
+        elapsedMs: 12,
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ResponseView(
+            sent: sent,
+            error: null,
+            errorTitle: '',
+            sending: false,
+            sessionSize: 1,
+            onExportSession: () {},
+          ),
+        ),
+      ),
+    );
+    // Opened, and re-indented: files read and written outside the clock.
+    for (var i = 0; i < 40 && find.text('  "row": 0').evaluate().isEmpty; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+    }
+    expect(find.byKey(const Key('response-from-file')), findsOneWidget);
+    // Pretty is the JSON re-indented, into a file of its own.
+    expect(find.text('  "row": 0'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('body-raw')));
+    for (var i = 0; i < 10; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+    }
+    expect(find.text('{"row": 0}'), findsOneWidget);
+    // All of it is there, not only what was held.
+    await tester.tap(find.text('{"row": 0}'));
+    await tester.sendKeyEvent(LogicalKeyboardKey.end);
+    await tester.pump();
+    expect(find.text('{"row": 2999}'), findsOneWidget);
+
+    // Copying takes the whole body from the file.
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String;
+        }
+        return null;
+      },
+    );
+    await tester.tap(find.byKey(const Key('copy-response')));
+    for (var i = 0; i < 10 && copied == null; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+    }
+    expect(copied, lines);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('JSON can be explored as a tree', (tester) async {
+    await show(
+      tester,
+      headers: const [Header(name: 'content-type', value: 'application/json')],
+      body: '{"a": [1, 2], "b": "x"}',
+    );
+    await tester.tap(find.byKey(const Key('body-tree')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    expect(find.textContaining('"a": […]'), findsOneWidget);
+    expect(find.text('"b": "x"'), findsOneWidget);
+    await tester.tap(find.textContaining('"a": […]'));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    expect(find.text('1: 2'), findsOneWidget);
+    expect(find.textContaining('2 items'), findsOneWidget);
+  });
+
+  testWidgets('a binary body can be shown as bytes', (tester) async {
+    tester.view.physicalSize = const Size(1000, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final sent = sentWith(
+      Response(
+        status: 200,
+        statusText: 'OK',
+        httpVersion: 'HTTP/1.1',
+        headers: const [
+          Header(name: 'content-type', value: 'application/octet-stream'),
+        ],
+        body: '',
+        bytes: Uint8List.fromList([0, 1, 0x41, 0xff]),
+        sizeBytes: 4,
+        elapsedMs: 12,
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ResponseView(
+            sent: sent,
+            error: null,
+            errorTitle: '',
+            sending: false,
+            sessionSize: 1,
+            onExportSession: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const Key('binary-hex')));
+    await tester.pump();
+    expect(find.textContaining('00 01 41 ff'), findsOneWidget);
+    expect(find.textContaining('..A.'), findsOneWidget);
+  });
+
+  testWidgets('a value picked in the tree is shown as received', (
+    tester,
+  ) async {
+    await show(
+      tester,
+      headers: const [Header(name: 'content-type', value: 'application/json')],
+      body: '{"a": [1, 2], "b": "x"}',
+    );
+    await tester.tap(find.byKey(const Key('body-tree')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    // Row 2 is "b", after the top and "a".
+    await tester.tap(find.byKey(const Key('responseTree-show-2')));
+    await tester.pumpAndSettle();
+    final field = tester.widget<TextField>(
+      find.byKey(const Key('responseBody')),
+    );
+    final selection = field.controller!.selection;
+    expect(
+      field.controller!.text.substring(selection.start, selection.end),
+      '"x"',
+    );
   });
 }

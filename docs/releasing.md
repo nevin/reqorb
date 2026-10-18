@@ -2,9 +2,14 @@
 
 ## Cutting a version
 
-1. **Set the version** in two places, to the same value:
+1. **Set the version** to the same value everywhere:
    - `Cargo.toml`: `version` under `[workspace.package]`. All the crates share it.
-   - `app/pubspec.yaml`: `version`. The part before any `+` must match.
+   - `app/pubspec.yaml`: `version`. The part before any `+` must match; raise the
+     build number after the `+` too.
+   - The `version` of each `reqorb-core` and `reqorb-alloc` dependency in
+     `crates/reqorb-cli/Cargo.toml`, `crates/reqorb-core/Cargo.toml` and
+     `app/rust/Cargo.toml`, and that last file's own `version`. Cargo refuses to build
+     until these match, and `cargo check` then updates `Cargo.lock`.
 2. **Update the changelog.** In `CHANGELOG.md`, rename **Unreleased** to the version and
    the date (`## 0.2.0 – 2026-11-02`) and start a new, empty **Unreleased** above it.
    Read the entries through as a user would; they become the release notes.

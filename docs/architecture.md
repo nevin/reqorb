@@ -57,6 +57,8 @@ The workspace forbids `unsafe` code and denies `dbg!`, `todo!` and `unimplemente
 | `redact`, `analyze`, `data` | Removing credentials from exports; the HAR report; the data file of a collection run |
 | `vault`, `history` | What is kept on disk: the workspace with its credentials encrypted, and the requests sent |
 | `files` | Checking that a working directory can be read and written |
+| `spill.rs` | Response bodies over 16 MB (8 MB on an iPad with 3 GB of memory or less, as `set_spill_bytes` says at start-up), written to a temporary file as they arrive; the `Response` keeps the first megabyte as text and the file's path in `body_file`. Tests, captures and HAR export read the file back when it is under 256 MB; scripts get the first megabyte past that. Only the last 8 files are kept, history keeps none, and the app deletes them all when it starts |
+| `document/` | Text of any size, up to about a gigabyte, for the editor. The original bytes are read from memory or a file a page at a time (`source.rs`); a background thread counts newlines every 4 KB (`index.rs`); edits are a piece table over the original and an append-only buffer, so undo copies no text (`text.rs`); search runs over a snapshot a megabyte at a time (`search.rs`). Lines over 2 KB are shown over several rows, and columns are counted in UTF-16 units, as Dart counts them. `json.rs` lists the children of one object or array at a time, reading only as far as they go, and writes the whole of a document's JSON out again indented or minified, a megabyte at a time. Saving writes beside the file and renames it into place; where only the file itself may be written, as in the macOS sandbox, it first keeps a copy of the original to read from and then writes over the file |
 
 ## The CLI
 
@@ -122,6 +124,35 @@ bindings, and `FakeEngine` in `app/test/fake_engine.dart`. Widgets find it with
 seam is what lets `flutter test` run the whole app without the native library; see
 [Testing](testing.md).
 
+**Text over a megabyte is a document, not a string in a text field.** A text field lays
+out all its text on every change, which at ten megabytes takes seconds. `DocumentView`
+asks a `TextDocument` for the rows in view, 128 at a time, and colours only those. The
+document lives in Rust (`document/` in the core): Dart holds a number for it, and
+positions are byte offsets, with columns in UTF-16 units within a row. `Engine` makes
+documents (`documentOf`, `openDocument`), so the widget tests get a `MemoryDocument`
+instead.
+
+An editable `DocumentView` is its own text input client (`DeltaTextInputClient`). The
+platform's input method is told only the rows around the selection, never the whole
+text, and sends back changes to them, which the view turns into byte ranges of the
+document. Keys that edit or move the caret are handled by the view; everything else
+goes to the input method, which is what makes accents and Chinese or Japanese input
+work. `files/file_page.dart` puts it on a page of its own for **Open file…**.
+
+Every code field is a `CodeEditor`, a text field with colouring, completion and folding,
+for text up to a megabyte. Past that, as when a large body is pasted in, it hands over to
+`LargeEditor`, which holds the text in a document and edits it in a `DocumentView`,
+writing it back to the field's `CodeController` as it changes: at once up to 4 MB, and
+once typing pauses beyond, and always when the focus leaves. The view itself matches
+brackets, closes them as they are typed, and opens web addresses clicked with `⌘`.
+Rows are coloured 128 at a time. So that a block need not be coloured from the top
+of the document, each row of a long line carries whether it begins inside a string,
+which the engine finds by reading the line once as far as the rows asked for, keeping
+what it found before any later edit; and in languages whose comments run over lines,
+a block is coloured from up to 64 KB before it. A finger or a pen is followed by gestures (a tap, a long press, a hand-detected double
+tap, since a recognizer for one would hold every tap back) while the mouse is followed
+by pointer events; a selection made by touch has handles and a menu laid over the rows.
+
 Start-up (`app/lib/main.dart`) initialises the bridge (`RustLib.init()`), loads
 `workspace.json` from the platform's application support directory, then loads history,
 the working directory and linked collection folders in parallel, and runs the app.
@@ -134,14 +165,16 @@ The `app/lib/` folders are features:
 | `request/` | The main page, the request model, the send session, the request editors and the code dialog |
 | `response/` | The response pane, server-sent events |
 | `protocols/` | WebSocket and gRPC sessions and views |
-| `editor/` | The code editor: colouring, typing aids, find and replace, folding, completion, and the read-only `LineView` for text over a megabyte |
+| `editor/` | The code editor: colouring, typing aids, find and replace, folding, completion; `DocumentView`, which shows a document of any size a screenful at a time; `HexView`, its bytes; and `JsonTreeView`, its JSON as a tree opened a level at a time |
+| `document/` | `TextDocument`, text of any size held by the Rust engine (`RustDocument` in `bridge/`), and `MemoryDocument`, the same held in Dart for tests; `caret.dart` moves through one by character and word |
+| `files/` | **Open file…**: a file of any size to edit and save |
 | `graphql/` | The GraphQL editor, schema browser and schema session |
 | `spec/` | The API spec viewer: preview, problems, examples, Try it |
 | `runner/`, `palette/` | Running a collection; the find-anything box |
 | `sidebar/`, `environments/`, `settings/`, `har/`, `history/` | What their names say |
 | `transfer/` | Import and export actions |
 | `workspace/` | The store and the collection actions |
-| `shared/` | Theme, messages, folders and small reusable widgets |
+| `shared/` | Theme, messages, folders, what the device has (`device.dart`, answered on iPad by `AppDelegate.swift`: its memory and free space) and small reusable widgets |
 | `src/rust/` | The generated bindings; never edited by hand |
 
 ## The bridge

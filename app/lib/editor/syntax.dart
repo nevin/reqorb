@@ -39,6 +39,63 @@ enum CodeLanguage {
     return plain;
   }
 
+  /// The language a file is written in, by the end of its name.
+  static CodeLanguage? ofFileName(String name) {
+    final dot = name.lastIndexOf('.');
+    if (dot < 0) return null;
+    return switch (name.substring(dot + 1).toLowerCase()) {
+      'json' || 'har' || 'geojson' || 'ipynb' => json,
+      'xml' || 'html' || 'htm' || 'svg' || 'plist' || 'xsd' || 'wsdl' => xml,
+      'js' || 'mjs' || 'cjs' || 'ts' || 'jsx' || 'tsx' => javascript,
+      'yaml' || 'yml' => yaml,
+      'graphql' || 'gql' => graphql,
+      'env' || 'properties' || 'ini' => pairs,
+      'c' ||
+      'h' ||
+      'cc' ||
+      'cpp' ||
+      'hpp' ||
+      'cs' ||
+      'java' ||
+      'kt' ||
+      'swift' ||
+      'go' ||
+      'rs' ||
+      'dart' ||
+      'scala' ||
+      'proto' ||
+      'css' ||
+      'scss' => source,
+      'py' ||
+      'sh' ||
+      'bash' ||
+      'zsh' ||
+      'rb' ||
+      'pl' ||
+      'toml' ||
+      'r' ||
+      'tf' ||
+      'dockerfile' ||
+      'mk' => script,
+      'txt' || 'log' || 'md' || 'csv' || 'tsv' => plain,
+      _ => null,
+    };
+  }
+
+  /// What the language is called, for showing.
+  String get label => switch (this) {
+    plain => 'Plain text',
+    json => 'JSON',
+    graphql => 'GraphQL',
+    xml => 'XML',
+    javascript => 'JavaScript',
+    yaml => 'YAML',
+    pairs => 'Properties',
+    checks => 'Checks',
+    source => 'Source code',
+    script => 'Script',
+  };
+
   /// A guess from how the text starts, for a body nobody has labelled.
   static CodeLanguage sniff(String text) {
     final start = text.trimLeft();

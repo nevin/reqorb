@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:reqorb/editor/code_controller.dart';
 import 'package:reqorb/editor/code_editor.dart';
 import 'package:reqorb/editor/code_formatter.dart';
+import 'package:reqorb/editor/document_view.dart';
 import 'package:reqorb/editor/folding.dart';
 import 'package:reqorb/editor/syntax.dart';
 import 'package:reqorb/graphql/graphql_complete.dart';
@@ -11,6 +12,7 @@ import 'package:reqorb/main.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 import 'package:reqorb/workspace/workspace_store.dart';
 
+import 'document_input.dart';
 import 'fake_engine.dart';
 
 /// The text of each token with its kind, for reading in an expectation.
@@ -786,5 +788,65 @@ void main() {
       ['https://a.test/x', 'http://b.test/y?q=1'],
     );
     code.dispose();
+  });
+
+  testWidgets('text too long for a text field is edited as a document', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 500);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final code = CodeController(text: '{"a": 1}');
+    addTearDown(code.dispose);
+    final changes = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CodeEditor(
+            name: 'body',
+            controller: code,
+            language: CodeLanguage.json,
+            onChanged: changes.add,
+          ),
+        ),
+      ),
+    );
+    expect(find.byKey(const Key('body')), findsOneWidget);
+
+    // Pasted in, or loaded: past the limit, a document takes over.
+    final long = '[\n${'  "${'x' * 90}",\n' * (editLimit ~/ 96 + 10)}  0\n]';
+    code.text = long;
+    await tester.pump();
+    expect(find.byKey(const Key('body')), findsNothing);
+    expect(find.byKey(const Key('body-document')), findsOneWidget);
+    expect(changes.last, long);
+
+    // Typing is written back to the controller.
+    await tester.tapAt(
+      tester.getTopLeft(find.byKey(const Key('body-document'))) +
+          const Offset(60, 14),
+    );
+    await tester.pump();
+    await input(tester, 'x');
+    expect(code.text.length, long.length + 1);
+    expect(changes.last, code.text);
+
+    // Brackets come in pairs, and an empty pair goes together. At the
+    // very end, where nothing follows to run into.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+    await tester.sendKeyEvent(LogicalKeyboardKey.end);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+    await tester.pump();
+    await input(tester, '[');
+    expect(code.text, endsWith('0\n][]'));
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.pump();
+    expect(code.text.length, long.length + 1);
+
+    // Text set from elsewhere replaces it, and a short one goes back to
+    // a text field.
+    code.text = '{"b": 2}';
+    await tester.pump();
+    expect(find.byKey(const Key('body')), findsOneWidget);
   });
 }

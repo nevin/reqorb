@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reqorb/editor/line_view.dart';
+import 'package:reqorb/editor/document_view.dart';
 import 'package:reqorb/editor/syntax.dart';
 import 'package:reqorb/main.dart';
 import 'package:reqorb/spec/api_spec.dart';
@@ -10,6 +10,7 @@ import 'package:reqorb/spec/spec_page.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 import 'package:reqorb/workspace/workspace_store.dart';
 
+import 'document_input.dart';
 import 'fake_engine.dart';
 
 void main() {
@@ -804,7 +805,9 @@ paths:
     expect(find.byKey(const Key('spec-link-S0')), findsOneWidget);
   });
 
-  testWidgets('a spec too long to edit is shown read-only', (tester) async {
+  testWidgets('a spec too long for a text field is edited as a document', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1600, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -829,9 +832,9 @@ paths:
       await tester.pump();
       if (find.byKey(const Key('spec-reading')).evaluate().isEmpty) break;
     }
-    // No editor: the text is shown a line at a time.
+    // Not a text field: the text is shown a screenful at a time.
     expect(find.byKey(const Key('spec-editor')), findsNothing);
-    expect(find.byKey(const Key('spec-read-only')), findsOneWidget);
+    expect(find.byKey(const Key('spec-editor-document')), findsOneWidget);
     expect(find.text('openapi: 3.0.3'), findsNothing);
 
     // A problem's line, near the end, is brought into view.
@@ -839,6 +842,16 @@ paths:
     await tester.tap(find.byKey(const Key('spec-problem-line-0')));
     await tester.pumpAndSettle();
     expect(find.text('      responses: {}'), findsOneWidget);
+
+    // And it can be edited: the line asked for is selected, and typing
+    // replaces it.
+    await input(tester, '      responses: {"200": {description: OK}}');
+    await tester.pump();
+    expect(
+      find.text('      responses: {"200": {description: OK}}'),
+      findsOneWidget,
+    );
+    expect(find.text('• big.yaml'), findsOneWidget);
   });
 
   testWidgets('a long spec is read in the background', (tester) async {

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:reqorb/shared/device.dart';
 import 'package:reqorb/transfer/import_actions.dart';
 import 'package:reqorb/protocols/grpc_view.dart';
 import 'package:reqorb/har/har_analysis.dart';
@@ -99,5 +100,17 @@ void main() {
     store.clearSession();
     expect(store.captured, isEmpty);
     expect(store.variablesFor(null), isEmpty);
+  });
+
+  test('a device short of memory keeps less of a response in it', () {
+    const gb = 1024 * 1024 * 1024;
+    expect(Device.spillFor(2 * gb), 8 * 1024 * 1024);
+    expect(Device.spillFor(3 * gb), 8 * 1024 * 1024);
+    expect(Device.spillFor(4 * gb), isNull);
+    expect(
+      Device.spillFor(null),
+      isNull,
+      reason: 'where the platform does not say',
+    );
   });
 }

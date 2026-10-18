@@ -154,7 +154,11 @@ pub async fn send_watched(
     }
     let console: Vec<String> = prepared.console.into_iter().chain(judged.console).collect();
     let graphql_errors = if request.effective_body_mode() == BodyMode::GraphQl {
-        graphql_errors(&response.body)
+        // A body too big to read whole is not looked through for errors.
+        response
+            .full_body()
+            .map(|body| graphql_errors(&body))
+            .unwrap_or_default()
     } else {
         Vec::new()
     };

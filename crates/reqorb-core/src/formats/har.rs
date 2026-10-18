@@ -272,11 +272,15 @@ pub(super) fn entry(exchange: &Exchange) -> Value {
 
 /// The response body: text as it is, anything else base64-encoded.
 pub(super) fn content(response: &crate::Response) -> Value {
+    let whole = response.full_body();
     let mut content = json!({
         "size": response.size_bytes,
         "mimeType": header(&response.headers, "content-type").unwrap_or(""),
-        "text": response.body,
+        "text": whole.as_deref().unwrap_or(&response.body),
     });
+    if whole.is_err() {
+        content["comment"] = json!("too large to export whole: only the start of the body is here");
+    }
     if let Some(bytes) = &response.bytes {
         content["text"] = json!(base64::engine::general_purpose::STANDARD.encode(bytes));
         content["encoding"] = json!("base64");
@@ -375,6 +379,7 @@ mod tests {
             body: r#"{"ok":true}"#.into(),
             size_bytes: 11,
             bytes: None,
+            body_file: None,
             elapsed_ms: 42,
         };
         let har = to_har(&[Exchange {
@@ -517,6 +522,7 @@ mod tests {
             body: String::new(),
             size_bytes: 3,
             bytes: Some(vec![0xff, 0x00, 0x10]),
+            body_file: None,
             elapsed_ms: 1,
         };
         let har = to_har(&[Exchange {
@@ -555,6 +561,7 @@ mod tests {
             body: String::new(),
             size_bytes: 0,
             bytes: None,
+            body_file: None,
             elapsed_ms: 1,
         };
         let exchanges: Vec<Exchange> = sent

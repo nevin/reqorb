@@ -142,6 +142,15 @@ fn run(
             .entry(variable.key.clone())
             .or_insert_with(|| variable.value.clone().into());
     }
+    // A body too big to read whole is given as its start, and said so.
+    let (body, cut) = match response.map(Response::full_body) {
+        Some(Ok(body)) => (Some(body), None),
+        Some(Err(e)) => (
+            response.map(|r| std::borrow::Cow::Borrowed(r.body.as_str())),
+            Some(format!("{e}: response.body holds only its first megabyte")),
+        ),
+        None => (None, None),
+    };
     let input = json!({
         "request": {
             "method": request.method,
@@ -153,7 +162,7 @@ fn run(
             "status": r.status,
             "statusText": r.status_text,
             "headers": r.headers,
-            "body": r.body,
+            "body": body,
             "time": r.elapsed_ms,
             "size": r.size_bytes,
         })),
@@ -231,7 +240,7 @@ fn run(
                 detail: t.detail,
             })
             .collect(),
-        console: finished.out.console,
+        console: cut.into_iter().chain(finished.out.console).collect(),
     };
     match failed {
         // What it printed before it stopped helps to see why it stopped.
@@ -361,6 +370,7 @@ mod tests {
             }],
             body: body.into(),
             bytes: None,
+            body_file: None,
             size_bytes: body.len() as u64,
             elapsed_ms: 42,
         }

@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:reqorb/bridge/engine.dart';
+import 'package:reqorb/document/memory_document.dart';
+import 'package:reqorb/document/text_document.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 
 Response response({int status = 200, String body = '{"ok":true}'}) => Response(
@@ -583,4 +585,30 @@ class FakeEngine extends Engine {
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw UnimplementedError('FakeEngine has no ${invocation.memberName}');
+
+  // ------------------------------------------------------------- documents
+
+  /// Every document handed out, so tests can see what became of them.
+  final documents = <MemoryDocument>[];
+
+  @override
+  TextDocument documentOf(String text) {
+    final document = MemoryDocument(text);
+    documents.add(document);
+    return document;
+  }
+
+  @override
+  TextDocument documentOfBytes(Uint8List bytes) {
+    final document = MemoryDocument.bytes(bytes);
+    documents.add(document);
+    return document;
+  }
+
+  @override
+  Future<TextDocument> openDocument(String path) async {
+    final document = await MemoryDocument.open(path);
+    documents.add(document);
+    return document;
+  }
 }

@@ -9,6 +9,8 @@
 //! - `formats`: import and export, one module per format.
 //! - `vars`, `checks`, `redact`, `analyze`, `data`: work done on requests
 //!   and responses without touching the network.
+//! - `document`: text of any size, up to a gigabyte, for the editor.
+//! - `spill`: response bodies too big to hold, written to files.
 //! - `vault`, `history`: what is kept on disk: the workspace, with its
 //!   credentials encrypted, and the requests sent.
 
@@ -17,6 +19,7 @@ mod auth;
 mod checks;
 mod codegen;
 mod data;
+mod document;
 mod error;
 mod files;
 mod formats;
@@ -27,6 +30,7 @@ mod http;
 mod model;
 mod redact;
 mod script;
+mod spill;
 mod subscribe;
 mod time;
 mod vars;
@@ -38,6 +42,10 @@ pub use auth::{Auth, AuthField, AuthKind, AuthParam, auth_fields};
 pub use checks::{TestResult, capture, run_tests};
 pub use codegen::{CodeTarget, generate_code};
 pub use data::parse_run_data;
+pub use document::{
+    Change, Document, Found, Indexing, JsonKind, JsonNode, JsonPage, MAX_KEPT, Query, ROW_BYTES,
+    Row, Snapshot,
+};
 pub use error::Error;
 pub use files::{DirAccess, FileAccess, check_directory};
 pub use formats::{
@@ -62,6 +70,10 @@ pub use model::{
     SendOptions, Settings, Variable, Workspace,
 };
 pub use redact::{REDACTED, redact_collection, redact_environment, redact_exchanges, redact_text};
+pub use spill::{
+    PREVIEW_BYTES, READ_LIMIT, SPILL_BYTES, clean_spilled, io_problem, new_spill_file,
+    read_spilled, set_spill_bytes, spill_bytes, spill_dir,
+};
 pub use vars::{Resolved, resolve};
 pub use vault::{
     KeyStore, Keychain, LOCKED, Loaded, check_keys, load_workspace, locked_secrets, save_workspace,

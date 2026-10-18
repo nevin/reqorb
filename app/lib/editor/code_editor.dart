@@ -1,10 +1,14 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:reqorb/document/caret.dart';
+import 'package:reqorb/document/text_document.dart';
 import 'package:reqorb/editor/code_controller.dart';
 import 'package:reqorb/editor/code_formatter.dart';
 import 'package:reqorb/editor/folding.dart';
-import 'package:reqorb/editor/line_view.dart';
+import 'package:reqorb/editor/document_view.dart';
+import 'package:reqorb/editor/large_editor.dart';
 import 'package:reqorb/editor/syntax.dart';
 import 'package:reqorb/shared/theme.dart';
 
@@ -122,7 +126,9 @@ class _CodeEditorState extends State<CodeEditor> {
   Offset _anchor = Offset.zero;
   double _lineHeight = 18;
 
-  late String _lastText = widget.controller.text;
+  /// The text as last seen, to tell an edit from the caret moving. Set
+  /// at the start: read lazily, it would be read after the first change.
+  late String _lastText;
   EditableTextState? _editableState;
 
   CodeController get _code => widget.controller;
@@ -130,6 +136,8 @@ class _CodeEditorState extends State<CodeEditor> {
   @override
   void initState() {
     super.initState();
+    _lastText = _code.text;
+    _large = _code.text.length > editLimit;
     _code.language = widget.language;
     _code.addListener(_changed);
     _code.lineSought.addListener(_goToLine);
@@ -198,8 +206,20 @@ class _CodeEditorState extends State<CodeEditor> {
     if (!_focus.hasFocus) _dismiss();
   }
 
+  /// Whether the text is too long for a text field, and is edited as a
+  /// document instead. Once it is, it stays so until well under the limit,
+  /// so that a few characters either way do not switch back and forth.
+  bool _large = false;
+
   void _changed() {
     final text = _code.text;
+    final large = _large
+        ? text.length > editLimit ~/ 2
+        : text.length > editLimit;
+    if (large != _large) {
+      setState(() => _large = large);
+      if (large) _dismiss();
+    }
     if (text == _lastText) {
       // The caret moved: a list for somewhere else no longer applies.
       if (_items.isNotEmpty) {
@@ -210,6 +230,7 @@ class _CodeEditorState extends State<CodeEditor> {
     }
     _lastText = text;
     widget.onChanged?.call(text);
+    if (_large) return;
     if (_finding) _search(keep: true);
     _suggest();
   }
@@ -574,6 +595,21 @@ class _CodeEditorState extends State<CodeEditor> {
 
   @override
   Widget build(BuildContext context) {
+    // Too long to lay out in a text field: edited as a document, which
+    // shows only what is in view. Completion and folding are for code of
+    // a size to read through.
+    if (_large) {
+      return LargeEditor(
+        name: '${widget.name}-document',
+        controller: _code,
+        language: widget.language,
+        readOnly: widget.readOnly,
+      );
+    }
+    return _build(context);
+  }
+
+  Widget _build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final style = mono;
@@ -1142,6 +1178,7 @@ class CodeView extends StatefulWidget {
     required this.text,
     this.language,
     this.onLink,
+    this.spanSought,
   });
 
   final String name;
@@ -1150,6 +1187,10 @@ class CodeView extends StatefulWidget {
 
   /// Called with a web address in the text when it is clicked.
   final ValueChanged<Uri>? onLink;
+
+  /// Bytes of the text, as UTF-8, to select and bring into view, as when
+  /// a value is picked in a tree of it.
+  final ValueListenable<DocSpan?>? spanSought;
 
   @override
   State<CodeView> createState() => _CodeViewState();
@@ -1165,11 +1206,30 @@ class _CodeViewState extends State<CodeView> {
   void initState() {
     super.initState();
     _measure();
+    widget.spanSought?.addListener(_goToSpan);
+    if (widget.spanSought?.value != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _goToSpan();
+      });
+    }
+  }
+
+  /// Selects the bytes asked for, everything folded being opened first.
+  void _goToSpan() {
+    final span = widget.spanSought?.value;
+    if (span == null || widget.text.length > editLimit) return;
+    _unfold();
+    final text = widget.text;
+    _code.show(unitsOf(text, span.start), unitsOf(text, span.end));
   }
 
   @override
   void didUpdateWidget(CodeView old) {
     super.didUpdateWidget(old);
+    if (old.spanSought != widget.spanSought) {
+      old.spanSought?.removeListener(_goToSpan);
+      widget.spanSought?.addListener(_goToSpan);
+    }
     if (old.text != widget.text || old.language != widget.language) {
       _folded.clear();
       _measure();
@@ -1179,6 +1239,7 @@ class _CodeViewState extends State<CodeView> {
 
   @override
   void dispose() {
+    widget.spanSought?.removeListener(_goToSpan);
     _code.dispose();
     super.dispose();
   }
@@ -1216,7 +1277,15 @@ class _CodeViewState extends State<CodeView> {
   Widget build(BuildContext context) {
     // Too long to lay out at once; nothing folds or is coloured at this
     // length anyway.
-    if (widget.text.length > editLimit) return LineView(controller: _code);
+    if (widget.text.length > editLimit) {
+      return DocumentText(
+        name: '${widget.name}-document',
+        text: widget.text,
+        language: widget.language,
+        onLink: widget.onLink,
+        spanSought: widget.spanSought,
+      );
+    }
     final shown = _shown;
     return CodeEditor(
       name: widget.name,
