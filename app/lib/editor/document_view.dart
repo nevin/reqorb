@@ -60,6 +60,7 @@ class DocumentView extends StatefulWidget {
     this.status = false,
     this.autofocus = false,
     this.onChanged,
+    this.onLink,
   });
 
   /// What is shown. Whoever made it disposes of it.
@@ -84,6 +85,10 @@ class DocumentView extends StatefulWidget {
 
   /// Called after each edit, undo and redo.
   final VoidCallback? onChanged;
+
+  /// Opens a web address in the text, clicked with Command (Control
+  /// elsewhere); null to leave addresses as text.
+  final ValueChanged<Uri>? onLink;
 
   @override
   State<DocumentView> createState() => _DocumentViewState();
@@ -148,6 +153,10 @@ class _DocumentViewState extends State<DocumentView> {
 
   /// What the input method is composing, as bytes, while it is.
   (int, int)? _composing;
+
+  /// The bracket beside the caret and its partner, as bytes, if both are
+  /// there.
+  (int, int)? _brackets;
 
   /// For telling a double or triple click from separate ones.
   DateTime _lastDown = DateTime(0);
@@ -410,6 +419,19 @@ class _DocumentViewState extends State<DocumentView> {
         ),
       );
     }
+    if (_brackets case (final a, final b)) {
+      for (final at in [a, b]) {
+        if (at >= row.start && at < row.end) {
+          marks.add(
+            _Mark(
+              _colIn(row, at),
+              _colIn(row, at + 1),
+              scheme.primary.withValues(alpha: 0.25),
+            ),
+          );
+        }
+      }
+    }
     final composing = _composing;
     if (composing != null &&
         composing.$1 <= row.end &&
@@ -491,8 +513,73 @@ class _DocumentViewState extends State<DocumentView> {
       _to = start == end ? _from : _doc.positionOf(end);
       _caret = extent == start ? _from : _to;
       _goalX = goalX;
+      _brackets = start == end ? _bracketsAt(start) : null;
     });
     _syncInput();
+  }
+
+  static const _opens = '{[(';
+  static const _closes = '}])';
+
+  /// How far to look for a bracket's partner, either way.
+  static const _reach = 64 * 1024;
+
+  /// The bracket just before or at [at] and its partner, in bytes, when
+  /// neither is in a string or a comment.
+  (int, int)? _bracketsAt(int at) {
+    if (_language == CodeLanguage.plain) return null;
+    final len = _info.len;
+    final near = _doc.text(math.max(0, at - 1), math.min(len, at + 1));
+    if (!near.split('').any((c) => _opens.contains(c) || _closes.contains(c))) {
+      return null;
+    }
+    final from = math.max(0, at - _reach);
+    final text = _doc.text(from, math.min(len, at + _reach));
+    // Where [at] is in the text, as UTF-16 units.
+    final caret = unitsOf(text, at - from);
+    final tokens = tokenize(text, _language);
+    bool quoted(int i) {
+      var low = 0, high = tokens.length - 1;
+      while (low <= high) {
+        final mid = (low + high) >> 1;
+        final t = tokens[mid];
+        if (i < t.start) {
+          high = mid - 1;
+        } else if (i >= t.end) {
+          low = mid + 1;
+        } else {
+          return t.kind == TokenKind.string ||
+              t.kind == TokenKind.comment ||
+              t.kind == TokenKind.key;
+        }
+      }
+      return false;
+    }
+
+    // The one just typed, before the caret, comes first.
+    for (final i in [caret - 1, caret]) {
+      if (i < 0 || i >= text.length) continue;
+      final char = text[i];
+      final opens = _opens.indexOf(char);
+      final closes = _closes.indexOf(char);
+      if ((opens < 0 && closes < 0) || quoted(i)) continue;
+      final forward = opens >= 0;
+      final own = char.codeUnitAt(0);
+      final other = (forward ? _closes[opens] : _opens[closes]).codeUnitAt(0);
+      var depth = 0;
+      for (var j = i; j >= 0 && j < text.length; j += forward ? 1 : -1) {
+        final unit = text.codeUnitAt(j);
+        if ((unit != own && unit != other) || quoted(j)) continue;
+        depth += unit == own ? 1 : -1;
+        if (depth == 0) {
+          final a = from + utf8Length(text, 0, forward ? i : j);
+          final b = from + utf8Length(text, 0, forward ? j : i);
+          return (a, b);
+        }
+      }
+      return null;
+    }
+    return null;
   }
 
   void _selectNothing() {
@@ -572,6 +659,21 @@ class _DocumentViewState extends State<DocumentView> {
     _lastDown = now;
     _lastDownAt = event.localPosition;
     final at = event.localPosition;
+    final keyboard = HardwareKeyboard.instance;
+    if (widget.onLink != null &&
+        (keyboard.isMetaPressed || keyboard.isControlPressed)) {
+      final (row, col) = _cellAt(at, gutter, gap);
+      final text = _rowAt(row)?.text ?? '';
+      for (final match in _address.allMatches(text)) {
+        if (col < match.start || col > match.end) continue;
+        final uri = Uri.tryParse(match[0]!);
+        if (uri != null && uri.host.isNotEmpty) {
+          _clicks = 0;
+          widget.onLink!(uri);
+          return;
+        }
+      }
+    }
     switch (_clicks) {
       case 2:
         final (start, end) = _wordAt(at, gutter, gap);
@@ -589,6 +691,12 @@ class _DocumentViewState extends State<DocumentView> {
         }
     }
   }
+
+  /// A web address up to a space or a quote, less the punctuation of the
+  /// sentence or code around it.
+  static final _address = RegExp(
+    r'''https?://[^\s"'<>`\\]*[^\s"'<>`\\.,;:!?)\]}]''',
+  );
 
   void _move(PointerMoveEvent event, double gutter, double gap, double height) {
     // A finger drags to scroll; it selects with handles, which are to come.
@@ -1080,6 +1188,17 @@ class _DocumentViewState extends State<DocumentView> {
     }
     final at = _at;
     if (at == 0) return;
+    if (!word && !row && (widget.language ?? _language).bracketed) {
+      final around = _doc.text(
+        math.max(0, at - 1),
+        math.min(_info.len, at + 1),
+      );
+      if (around.length == 2 && _pairs[around[0]] == around[1]) {
+        // An empty pair goes together.
+        _edit(at - 1, at + 1, '');
+        return;
+      }
+    }
     var from = row
         ? _rowEdge(start: true)
         : word
@@ -1444,6 +1563,13 @@ class _DocumentViewState extends State<DocumentView> {
         value.composing == _sent.composing) {
       return;
     }
+    if (deltas case [final TextEditingDeltaInsertion typed]
+        when typed.textInserted.length == 1 &&
+            value.composing.isCollapsed &&
+            _windowWhole &&
+            _pairTyped(typed, value)) {
+      return;
+    }
     if (!changed && !_windowWhole) {
       // A selection too big to tell stays as it is.
       return;
@@ -1465,6 +1591,44 @@ class _DocumentViewState extends State<DocumentView> {
     final extent = selection.isValid ? bytes(selection.extentOffset) : base;
     _select(base, extent);
     if (changed) _reveal(extent, minimal: true);
+  }
+
+  static const _pairs = {'{': '}', '[': ']', '(': ')', '"': '"'};
+
+  /// What typing one character does beyond putting it in, in code: an
+  /// opening bracket or quote brings its closing one, and typing a closing
+  /// one that is already there steps over it. True if it did either, the
+  /// character itself being in the document already.
+  bool _pairTyped(TextEditingDeltaInsertion typed, TextEditingValue value) {
+    final language = widget.language ?? _language;
+    if (!language.bracketed) return false;
+    final char = typed.textInserted;
+    // Where the character went, and the caret after it.
+    final at = _windowStart + utf8Length(_sent.text, 0, typed.insertionOffset);
+    final after = at + 1;
+    final len = _doc.info().len;
+    final next = _doc.text(after, math.min(len, after + 1));
+    if (_pairs.containsValue(char) && next == char) {
+      // Typed over: the one just put in goes, and the caret steps on.
+      _doc.replace(at, after, '', typing: true);
+      _sent = value;
+      _changed();
+      _select(after, after);
+      return true;
+    }
+    final closer = _pairs[char];
+    if (closer == null) return false;
+    if (next.isNotEmpty && !' \t\r\n)]},'.contains(next)) return false;
+    if (char == '"' &&
+        at > 0 &&
+        isWordChar(_doc.text(previousChar(_doc, at), at))) {
+      return false;
+    }
+    _doc.replace(after, after, closer, typing: true);
+    _sent = value;
+    _changed();
+    _select(after, after);
+    return true;
   }
 
   /// Tells the platform where the text and the caret are, so that a
@@ -1990,12 +2154,14 @@ class DocumentText extends StatefulWidget {
     this.name = 'document',
     this.language,
     this.lineSought,
+    this.onLink,
   });
 
   final String text;
   final String name;
   final CodeLanguage? language;
   final ValueListenable<int?>? lineSought;
+  final ValueChanged<Uri>? onLink;
 
   @override
   State<DocumentText> createState() => _DocumentTextState();
@@ -2035,5 +2201,6 @@ class _DocumentTextState extends State<DocumentText> {
     name: widget.name,
     language: widget.language,
     lineSought: widget.lineSought,
+    onLink: widget.onLink,
   );
 }

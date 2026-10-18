@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:reqorb/document/memory_document.dart';
 import 'package:reqorb/document/text_document.dart';
 import 'package:reqorb/editor/document_view.dart';
+import 'package:reqorb/editor/syntax.dart';
 
 import 'document_input.dart';
 
@@ -525,5 +526,69 @@ void main() {
       await input(tester, '>');
       expect(doc.text(0, 99), '>alpha beta! gamma');
     }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+  });
+
+  testWidgets('marks the partner of the bracket beside the caret', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: DocumentView(
+            name: 'doc',
+            document: MemoryDocument('{"a": [1, "]", 2]}'),
+            language: CodeLanguage.json,
+            editable: true,
+          ),
+        ),
+      ),
+    );
+    // Just after the opening `[`, at byte 7.
+    await tester.tapAt(at(tester, '{"a": [1, "]", 2]}', 0, 7));
+    await tester.pump();
+    final marked = <(int, int)>[];
+    for (final paint in tester.widgetList<CustomPaint>(
+      find.byType(CustomPaint),
+    )) {
+      final painter = paint.painter;
+      if (painter == null || '${painter.runtimeType}' != '_MarkPainter') {
+        continue;
+      }
+      for (final mark in (painter as dynamic).marks as List) {
+        final dynamic m = mark;
+        if (m.start + 1 == m.end) marked.add((m.start as int, m.end as int));
+      }
+    }
+    // The `]` in the string is passed over.
+    expect(marked, [(6, 7), (16, 17)]);
+  });
+
+  testWidgets('opens a web address clicked with Command', (tester) async {
+    tester.view.physicalSize = const Size(900, 400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final opened = <Uri>[];
+    const row = 'see https://example.com/docs, then';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: DocumentView(
+            name: 'doc',
+            document: MemoryDocument(row),
+            onLink: opened.add,
+          ),
+        ),
+      ),
+    );
+    await tester.tapAt(at(tester, row, 0, 10));
+    expect(opened, isEmpty, reason: 'a plain click places the caret');
+    await tester.pump(const Duration(seconds: 1));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.meta);
+    await tester.tapAt(at(tester, row, 0, 10));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.meta);
+    expect(opened, [Uri.parse('https://example.com/docs')]);
   });
 }

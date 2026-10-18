@@ -19,6 +19,10 @@ the new version when it is tagged.
   response or a file. A large JSON response is indented for **Pretty** without being
   parsed whole, and **Open file…** can format or minify a JSON file however big.
 - Binary responses and files can be shown as bytes, in hexadecimal.
+- Any code field, such as a request body, stays quick past a megabyte: pasting in a
+  20 MB body no longer stalls the app, and it can still be edited, with brackets
+  matched and closed as they are typed. A raw body over 16 MB offers to be sent from a
+  file instead, and API specs over a megabyte can now be edited too.
 
 ## 0.2.0 – 2026-10-17
 

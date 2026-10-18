@@ -427,6 +427,9 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('send')));
     await waitFor(tester, find.byKey(const Key('response-from-file')));
+    // Pretty: the JSON indented a megabyte at a time, into a file.
+    await waitFor(tester, find.text('  "id": 1234567,'));
+    await tester.tap(find.byKey(const Key('body-raw')));
     await waitFor(
       tester,
       find.text('{"id": 1234567, "name": "an ordinary record"}'),

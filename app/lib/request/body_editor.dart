@@ -144,15 +144,35 @@ class BodyEditor extends StatelessWidget {
                 style: TextStyle(color: scheme.onSurfaceVariant),
               ),
             ),
-            BodyMode.raw => CodeEditor(
-              name: 'body',
-              controller: raw,
-              // As labelled; otherwise as it looks.
-              language: rawLanguage == null
-                  ? null
-                  : CodeLanguage.ofContentType(rawLanguages[rawLanguage]!),
-              variables: variables,
-              hint: '{ "name": "reqorb" }',
+            BodyMode.raw => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // A body this big is kept in the workspace with the
+                // request; a file sent as it is is kept nowhere.
+                ListenableBuilder(
+                  listenable: raw,
+                  builder: (context, _) => raw.text.length <= largeBody
+                      ? const SizedBox.shrink()
+                      : _LargeBodyNote(
+                          size: raw.text.length,
+                          onSendFile: () => onModeChanged(BodyMode.binary),
+                        ),
+                ),
+                Expanded(
+                  child: CodeEditor(
+                    name: 'body',
+                    controller: raw,
+                    // As labelled; otherwise as it looks.
+                    language: rawLanguage == null
+                        ? null
+                        : CodeLanguage.ofContentType(
+                            rawLanguages[rawLanguage]!,
+                          ),
+                    variables: variables,
+                    hint: '{ "name": "reqorb" }',
+                  ),
+                ),
+              ],
             ),
             BodyMode.urlEncoded => KeyValueEditor(
               controller: urlEncoded,
@@ -424,6 +444,47 @@ class _FormDataEditorState extends State<FormDataEditor> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A raw body past this, in characters, is better sent from a file.
+const largeBody = 16 * 1024 * 1024;
+
+/// Over a raw body too big to keep well in the workspace: offers to send
+/// a file as it is instead.
+class _LargeBodyNote extends StatelessWidget {
+  const _LargeBodyNote({required this.size, required this.onSendFile});
+
+  final int size;
+  final VoidCallback onSendFile;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ColoredBox(
+      key: const Key('body-large'),
+      color: scheme.secondaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                'This body is ${(size / (1024 * 1024)).toStringAsFixed(0)} MB '
+                'and is saved with the request. To send a large file without '
+                'keeping a copy, send it from the file.',
+                style: TextStyle(color: scheme.onSecondaryContainer),
+              ),
+            ),
+            TextButton(
+              key: const Key('body-large-file'),
+              onPressed: onSendFile,
+              child: const Text('Send from a file'),
+            ),
+          ],
+        ),
       ),
     );
   }

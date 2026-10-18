@@ -139,6 +139,13 @@ document. Keys that edit or move the caret are handled by the view; everything e
 goes to the input method, which is what makes accents and Chinese or Japanese input
 work. `files/file_page.dart` puts it on a page of its own for **Open file…**.
 
+Every code field is a `CodeEditor`, a text field with colouring, completion and folding,
+for text up to a megabyte. Past that, as when a large body is pasted in, it hands over to
+`LargeEditor`, which holds the text in a document and edits it in a `DocumentView`,
+writing it back to the field's `CodeController` as it changes: at once up to 4 MB, and
+once typing pauses beyond, and always when the focus leaves. The view itself matches
+brackets, closes them as they are typed, and opens web addresses clicked with `⌘`.
+
 Start-up (`app/lib/main.dart`) initialises the bridge (`RustLib.init()`), loads
 `workspace.json` from the platform's application support directory, then loads history,
 the working directory and linked collection folders in parallel, and runs the app.

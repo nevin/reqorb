@@ -537,6 +537,13 @@ share one editor.
 
 ## Large files
 
+Every code field stays quick at any size. Past a megabyte, as when a large body is
+pasted in, the field turns into the large-file editor: still editable, with the
+partner of the bracket beside the caret marked and brackets and quotes closed as they
+are typed, though without completion or folding. A raw body over 16 MB is saved with
+the request, so the body offers **Send from a file** instead, which sends the file as
+it is.
+
 A response over 16 MB is written to a temporary file as it arrives instead of being
 held in memory, and shown from there; **Open to edit** opens it like a file. Tests,
 captures and scripts read it back when it is under 256 MB; past that, scripts see its
