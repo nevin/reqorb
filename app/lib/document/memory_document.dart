@@ -147,10 +147,29 @@ class MemoryDocument implements TextDocument {
           start: start,
           end: end,
           text: _decode(start, end),
+          quoted: part > 0 && _quotedAt(_lineStart(line), start),
         ),
       );
     }
     return rows;
+  }
+
+  /// Whether a string in double quotes is open at [at], reading from
+  /// [from], the start of its line.
+  bool _quotedAt(int from, int at) {
+    var open = false;
+    var escaped = false;
+    for (var i = from; i < at; i++) {
+      final b = _bytes[i];
+      if (escaped) {
+        escaped = false;
+      } else if (open && b == 0x5C) {
+        escaped = true;
+      } else if (b == 0x22) {
+        open = !open;
+      }
+    }
+    return open;
   }
 
   @override

@@ -3482,12 +3482,14 @@ impl SseDecode for crate::api::document::DocRow {
         let mut var_start = <u64>::sse_decode(deserializer);
         let mut var_end = <u64>::sse_decode(deserializer);
         let mut var_text = <String>::sse_decode(deserializer);
+        let mut var_quoted = <bool>::sse_decode(deserializer);
         return crate::api::document::DocRow {
             line: var_line,
             segment: var_segment,
             start: var_start,
             end: var_end,
             text: var_text,
+            quoted: var_quoted,
         };
     }
 }
@@ -5499,6 +5501,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::document::DocRow {
             self.start.into_into_dart().into_dart(),
             self.end.into_into_dart().into_dart(),
             self.text.into_into_dart().into_dart(),
+            self.quoted.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -6977,6 +6980,7 @@ impl SseEncode for crate::api::document::DocRow {
         <u64>::sse_encode(self.start, serializer);
         <u64>::sse_encode(self.end, serializer);
         <String>::sse_encode(self.text, serializer);
+        <bool>::sse_encode(self.quoted, serializer);
     }
 }
 

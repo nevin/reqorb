@@ -694,4 +694,83 @@ void main() {
       semantics.dispose();
     });
   });
+
+  group('colours', () {
+    /// The colour the start of [text], a row on show, is drawn in.
+    Color? colourOf(WidgetTester tester, String text) {
+      final shown = tester.widget<Text>(find.text(text));
+      var span = shown.textSpan! as TextSpan;
+      while (span.children != null && span.children!.isNotEmpty) {
+        span = span.children!.first as TextSpan;
+      }
+      return span.style?.color;
+    }
+
+    Future<void> goTo(
+      WidgetTester tester,
+      String text,
+      int line, {
+      CodeLanguage? language,
+    }) async {
+      final sought = ValueNotifier<int?>(null);
+      addTearDown(sought.dispose);
+      tester.view.physicalSize = const Size(900, 400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DocumentView(
+              name: 'doc',
+              document: MemoryDocument(text),
+              language: language,
+              lineSought: sought,
+            ),
+          ),
+        ),
+      );
+      sought.value = line;
+      await tester.pump();
+      await tester.pump();
+    }
+
+    testWidgets('a string goes on into the next block of rows', (tester) async {
+      // The 128th row, where a block of rows starts, is the second of a
+      // long line inside a string the first row opened.
+      // `[` and 126 lines take rows 0 to 126; the long line is 127 and 128.
+      final lines = [for (var i = 0; i < 126; i++) '{"n": $i},'];
+      final long = 'x' * 2048;
+      final text = '[\n${lines.join('\n')}\n"$long${'y' * 30}"]';
+      await goTo(tester, text, 129);
+      final string = tokenColor(
+        TokenKind.string,
+        Theme.of(tester.element(find.byType(DocumentView))).brightness,
+      );
+      expect(colourOf(tester, 'x${'y' * 30}"]'), string);
+    });
+
+    testWidgets('a comment goes on into the next block of rows', (
+      tester,
+    ) async {
+      final text = [
+        for (var i = 0; i < 120; i++) 'let a$i = $i;',
+        '/* a note',
+        for (var i = 0; i < 20; i++) 'still the note $i',
+        '*/',
+        'let after = 1;',
+      ].join('\n');
+      await goTo(tester, text, 130, language: CodeLanguage.javascript);
+      final brightness = Theme.of(tester.element(find.byType(DocumentView)))
+          .brightness;
+      // Row 129, in the second block, is inside the comment.
+      expect(
+        colourOf(tester, 'still the note 8'),
+        tokenColor(TokenKind.comment, brightness),
+      );
+      expect(
+        colourOf(tester, 'let after = 1;'),
+        isNot(tokenColor(TokenKind.comment, brightness)),
+      );
+    });
+  });
 }

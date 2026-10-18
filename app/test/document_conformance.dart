@@ -96,6 +96,12 @@ void documentConformance(MakeDocument make, OpenDocument open) {
       (2, 0),
     ]);
     expect(rows.sublist(1, 4).map((r) => r.text).join(), line);
+    expect(rows.map((r) => r.quoted), everyElement(isFalse));
+    // A string through a split: the row after begins inside it.
+    final quoted = await doc(
+      '["${'x' * 3000}\\"", "${'y' * 500}", ${'2, ' * 300}0]',
+    );
+    expect(quoted.rows(0, 9).map((r) => r.quoted), [false, true, false]);
     expect(d.rowOfLine(2), 4);
     // Columns count UTF-16 units: one for each é.
     final middle = 2 + 2 * 1500;

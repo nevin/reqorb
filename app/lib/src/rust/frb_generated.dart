@@ -3085,14 +3085,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   DocRow dco_decode_doc_row(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
     return DocRow(
       line: dco_decode_CastedPrimitive_u_64(arr[0]),
       segment: dco_decode_u_32(arr[1]),
       start: dco_decode_CastedPrimitive_u_64(arr[2]),
       end: dco_decode_CastedPrimitive_u_64(arr[3]),
       text: dco_decode_String(arr[4]),
+      quoted: dco_decode_bool(arr[5]),
     );
   }
 
@@ -4490,12 +4491,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_start = sse_decode_CastedPrimitive_u_64(deserializer);
     var var_end = sse_decode_CastedPrimitive_u_64(deserializer);
     var var_text = sse_decode_String(deserializer);
+    var var_quoted = sse_decode_bool(deserializer);
     return DocRow(
       line: var_line,
       segment: var_segment,
       start: var_start,
       end: var_end,
       text: var_text,
+      quoted: var_quoted,
     );
   }
 
@@ -6223,6 +6226,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_CastedPrimitive_u_64(self.start, serializer);
     sse_encode_CastedPrimitive_u_64(self.end, serializer);
     sse_encode_String(self.text, serializer);
+    sse_encode_bool(self.quoted, serializer);
   }
 
   @protected

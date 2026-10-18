@@ -124,6 +124,9 @@ pub struct DocRow {
     pub start: u64,
     pub end: u64,
     pub text: String,
+    /// Whether it begins inside a string in double quotes opened on an
+    /// earlier row of the same long line.
+    pub quoted: bool,
 }
 
 /// Up to `count` rows from row `first`.
@@ -138,6 +141,7 @@ pub fn doc_rows(id: u32, first: u64, count: u32) -> Vec<DocRow> {
                 start: r.start,
                 end: r.end,
                 text: r.text,
+                quoted: r.quoted,
             })
             .collect()
     })

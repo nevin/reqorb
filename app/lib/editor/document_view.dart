@@ -341,20 +341,56 @@ class _DocumentViewState extends State<DocumentView> {
     return spans[row - block * _block];
   }
 
+  /// Languages in which a comment, or a tag's text, can run over lines,
+  /// so that a block's colours depend on what came before it.
+  static const _spansLines = {
+    CodeLanguage.javascript,
+    CodeLanguage.source,
+    CodeLanguage.xml,
+    CodeLanguage.graphql,
+  };
+
+  /// How far before a block is read to colour it from the right start.
+  static const _lookBack = 64 * 1024;
+
+  /// What to colour before [first], the first row of a block, so that
+  /// the block starts in the right state: an opening quote for a row
+  /// that begins inside a string, or, where comments span lines, the
+  /// lines before it, as far as [_lookBack].
+  String _before(DocRow first) {
+    if (first.segment > 0) return first.quoted ? '"' : '';
+    if (!_spansLines.contains(_language) || first.start == 0) return '';
+    final from = math.max(0, first.start - _lookBack);
+    final text = _doc.text(from, first.start);
+    if (from == 0) return text;
+    // From a line's start, not the middle of one.
+    final line = text.indexOf('\n');
+    return line < 0 ? '' : text.substring(line + 1);
+  }
+
   List<TextSpan> _colour(List<DocRow> rows, Brightness brightness) {
-    if (_language == CodeLanguage.plain) {
+    if (_language == CodeLanguage.plain || rows.isEmpty) {
       return [for (final r in rows) TextSpan(text: r.text)];
     }
-    final joined = rows.map((r) => r.text).join('\n');
-    final tokens = joined.length > highlightLimit
+    // The rows of one line go on from each other; lines are joined with
+    // the line break between them.
+    final before = _before(rows.first);
+    final joined = StringBuffer(before);
+    final starts = <int>[];
+    for (final (i, r) in rows.indexed) {
+      if (i > 0 && r.segment == 0) joined.write('\n');
+      starts.add(joined.length);
+      joined.write(r.text);
+    }
+    final text = joined.toString();
+    final tokens = text.length - before.length > highlightLimit
         ? const <Token>[]
-        : tokenize(joined, _language);
+        : tokenize(text, _language);
     final out = <TextSpan>[];
     var t = 0;
-    var at = 0;
-    for (final r in rows) {
-      final start = at;
-      final end = at + r.text.length;
+    for (final (i, r) in rows.indexed) {
+      final start = starts[i];
+      final end = start + r.text.length;
       final children = <TextSpan>[];
       var pos = start;
       while (t < tokens.length && tokens[t].end <= start) {
@@ -364,10 +400,10 @@ class _DocumentViewState extends State<DocumentView> {
         final token = tokens[t];
         final s = math.max(token.start, start);
         final e = math.min(token.end, end);
-        if (s > pos) children.add(TextSpan(text: joined.substring(pos, s)));
+        if (s > pos) children.add(TextSpan(text: text.substring(pos, s)));
         children.add(
           TextSpan(
-            text: joined.substring(s, e),
+            text: text.substring(s, e),
             style: TextStyle(color: tokenColor(token.kind, brightness)),
           ),
         );
@@ -376,9 +412,8 @@ class _DocumentViewState extends State<DocumentView> {
         if (token.end > end) break;
         t++;
       }
-      if (pos < end) children.add(TextSpan(text: joined.substring(pos, end)));
+      if (pos < end) children.add(TextSpan(text: text.substring(pos, end)));
       out.add(TextSpan(children: children));
-      at = end + 1;
     }
     return out;
   }

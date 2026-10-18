@@ -145,7 +145,11 @@ for text up to a megabyte. Past that, as when a large body is pasted in, it hand
 writing it back to the field's `CodeController` as it changes: at once up to 4 MB, and
 once typing pauses beyond, and always when the focus leaves. The view itself matches
 brackets, closes them as they are typed, and opens web addresses clicked with `⌘`.
-A finger or a pen is followed by gestures (a tap, a long press, a hand-detected double
+Rows are coloured 128 at a time. So that a block need not be coloured from the top
+of the document, each row of a long line carries whether it begins inside a string,
+which the engine finds by reading the line once as far as the rows asked for, keeping
+what it found before any later edit; and in languages whose comments run over lines,
+a block is coloured from up to 64 KB before it. A finger or a pen is followed by gestures (a tap, a long press, a hand-detected double
 tap, since a recognizer for one would hold every tap back) while the mouse is followed
 by pointer events; a selection made by touch has handles and a menu laid over the rows.
 

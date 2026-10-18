@@ -414,12 +414,17 @@ class DocRow {
   final int end;
   final String text;
 
+  /// Whether it begins inside a string in double quotes opened on an
+  /// earlier row of the same long line.
+  final bool quoted;
+
   const DocRow({
     required this.line,
     required this.segment,
     required this.start,
     required this.end,
     required this.text,
+    required this.quoted,
   });
 
   @override
@@ -428,7 +433,8 @@ class DocRow {
       segment.hashCode ^
       start.hashCode ^
       end.hashCode ^
-      text.hashCode;
+      text.hashCode ^
+      quoted.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -439,7 +445,8 @@ class DocRow {
           segment == other.segment &&
           start == other.start &&
           end == other.end &&
-          text == other.text;
+          text == other.text &&
+          quoted == other.quoted;
 }
 
 /// News of a search: matches found since the last, how far it has got,

@@ -20,6 +20,7 @@ mod source;
 mod tests;
 mod text;
 
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -61,6 +62,10 @@ pub struct Row {
     pub end: u64,
     /// Those bytes as text; anything not UTF-8 shows as `�`.
     pub text: String,
+    /// Whether it begins inside a string in double quotes that an earlier
+    /// row of the same long line opened, so that colouring it alone can
+    /// start in the string. Always false for a line's first row.
+    pub quoted: bool,
 }
 
 /// How far finding a document's lines has got.
@@ -190,7 +195,32 @@ pub struct Document {
     saved: Option<u64>,
     /// Changes with every edit, undo and redo.
     version: u64,
+    /// For the long lines shown lately, whether each of their rows begins
+    /// inside a string, as of `version`.
+    quoted: Mutex<Quoted>,
 }
+
+/// Which rows of long lines begin inside a string, worked out as far as
+/// rows are asked for, and kept until the document changes.
+#[derive(Default)]
+struct Quoted {
+    version: u64,
+    lines: HashMap<u64, Scan>,
+}
+
+/// How far through a long line the strings have been followed.
+struct Scan {
+    /// For each row read past so far, whether it begins inside a string,
+    /// and just after a backslash in one.
+    rows: Vec<(bool, bool)>,
+    /// Where reading got to, and what it was in there.
+    at: u64,
+    in_string: bool,
+    escaped: bool,
+}
+
+/// How many long lines' rows are kept.
+const QUOTED_LINES: usize = 16;
 
 impl Document {
     /// A document holding `bytes`, not yet saved anywhere.
@@ -239,6 +269,7 @@ impl Document {
             next_id: 1,
             saved: None,
             version: 0,
+            quoted: Mutex::default(),
         };
         doc.indexing();
         doc
@@ -471,10 +502,112 @@ impl Document {
                 start,
                 end,
                 text: String::from_utf8_lossy(&bytes).into_owned(),
+                quoted: part > 0 && self.quoted_at(line, part),
             });
             row += 1;
         }
         rows
+    }
+
+    /// Whether row `part` of long line `line` begins inside a string in
+    /// double quotes. The line is read from its start as far as that row,
+    /// once; what was found is kept for the rows before it.
+    fn quoted_at(&self, line: u64, part: u64) -> bool {
+        // Until every line is found, the part not yet read through looks
+        // like one long line, and would be read again as each part is
+        // found; the colours are put right once it is.
+        if !self.settled {
+            return false;
+        }
+        let mut quoted = lock(&self.quoted);
+        if quoted.version != self.version {
+            quoted.lines.clear();
+            quoted.version = self.version;
+        }
+        if !quoted.lines.contains_key(&line) && quoted.lines.len() >= QUOTED_LINES {
+            quoted.lines.clear();
+        }
+        let (ls, le) = (self.line_start(line), self.line_end(line));
+        let scan = quoted.lines.entry(line).or_insert(Scan {
+            rows: vec![(false, false)],
+            at: ls,
+            in_string: false,
+            escaped: false,
+        });
+        while scan.rows.len() as u64 <= part {
+            let start = self.part_start(ls, le, scan.rows.len() as u64);
+            self.follow_strings(scan, start);
+            scan.rows.push((scan.in_string, scan.escaped));
+        }
+        scan.rows[part as usize].0
+    }
+
+    /// Takes in an edit from byte `at`, before the text changes: what was
+    /// found about strings before it still holds, and is kept, so that
+    /// typing in a long line reads it again only from the edit's row on.
+    /// With `same_lines`, the edit puts in and takes out no line breaks,
+    /// so the lines after it keep their numbers and what was found there.
+    fn edited_from(&self, at: u64, same_lines: bool) {
+        let line = self.line_of(at);
+        let ls = self.line_start(line);
+        let le = self.line_end(line);
+        let mut quoted = lock(&self.quoted);
+        // Lines after it may be numbered differently, or not be there.
+        quoted.lines.retain(|&l, _| l <= line || same_lines);
+        if let Some(scan) = quoted.lines.get_mut(&line) {
+            let mut keep = scan.rows.len();
+            while keep > 1 && self.part_start(ls, le, keep as u64 - 1) > at {
+                keep -= 1;
+            }
+            scan.rows.truncate(keep);
+            let (in_string, escaped) = scan.rows[keep - 1];
+            scan.at = self.part_start(ls, le, keep as u64 - 1);
+            scan.in_string = in_string;
+            scan.escaped = escaped;
+        }
+        quoted.version = self.version;
+    }
+
+    /// Reads on from where `scan` got to, up to `to`, following strings in
+    /// double quotes: in one, a backslash takes the character after it as
+    /// it is. Jumps from quote to quote rather than reading each byte.
+    fn follow_strings(&self, scan: &mut Scan, to: u64) {
+        while scan.at < to {
+            let end = (scan.at + CHUNK).min(to);
+            let bytes = self.text.read(scan.at, end);
+            let mut i = 0;
+            if scan.escaped && !bytes.is_empty() {
+                scan.escaped = false;
+                i = 1;
+            }
+            while i < bytes.len() {
+                if scan.in_string {
+                    match memchr::memchr2(b'"', b'\\', &bytes[i..]) {
+                        None => i = bytes.len(),
+                        Some(k) if bytes[i + k] == b'"' => {
+                            scan.in_string = false;
+                            i += k + 1;
+                        }
+                        Some(k) => {
+                            i += k + 2;
+                            if i > bytes.len() {
+                                // The character it escapes is in the next read.
+                                scan.escaped = true;
+                            }
+                        }
+                    }
+                } else {
+                    match memchr::memchr(b'"', &bytes[i..]) {
+                        None => i = bytes.len(),
+                        Some(k) => {
+                            scan.in_string = true;
+                            i += k + 1;
+                        }
+                    }
+                }
+            }
+            scan.at = end;
+        }
     }
 
     /// The row and column byte `at` is shown at.
@@ -527,6 +660,9 @@ impl Document {
         }
         self.redo.clear();
         self.version += 1;
+        let same_lines = !text.contains('\n')
+            && self.text.newlines_before(end) == self.text.newlines_before(start);
+        self.edited_from(start, same_lines);
         if typing && start == end && !text.contains('\n') && self.join(start, text.as_bytes()) {
             return;
         }
@@ -600,6 +736,7 @@ impl Document {
         }
         self.redo.clear();
         self.version += 1;
+        self.edited_from(ranges[0].0, false);
         let len = self.text.len();
         let piece = (!text.is_empty()).then(|| self.text.append(text.as_bytes()));
         let before = self.text.pieces().to_vec();
@@ -638,6 +775,7 @@ impl Document {
     pub fn undo(&mut self) -> Option<Change> {
         let step = self.undo.pop()?;
         self.version += 1;
+        self.edited_from(step.at, false);
         self.text
             .splice(step.at, step.at + total_len(&step.inserted), &step.removed);
         self.swap_long(
@@ -658,6 +796,7 @@ impl Document {
     pub fn redo(&mut self) -> Option<Change> {
         let step = self.redo.pop()?;
         self.version += 1;
+        self.edited_from(step.at, false);
         self.text
             .splice(step.at, step.at + total_len(&step.removed), &step.inserted);
         self.swap_long(

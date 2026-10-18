@@ -6,6 +6,10 @@ the new version when it is tagged.
 
 ## Unreleased
 
+- Colours in the large-file viewer stay right where a string or a comment runs from
+  one screenful into the next, and through a long line split over rows: a 44 MB
+  line of JSON is coloured as it reads at any point along it.
+
 - **Open file…**, in the sidebar, the `⌘K` box and `⌘O`, opens a file of any size to
   read and edit: a gigabyte opens at once. Typing works with accents and Chinese or
   Japanese input, with undo, cut, copy and paste, indenting, and find and replace.

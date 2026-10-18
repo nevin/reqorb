@@ -750,6 +750,27 @@ fn large_json_stays_fast() {
     assert_eq!(items.nodes.len(), 200);
     assert_eq!(top.nodes[1].preview, "end");
 
+    // All of it is one line: the first look at its end reads it once to
+    // find where strings are; the next is at once.
+    let started = Instant::now();
+    let last = doc.row_count() - 1;
+    doc.rows(last, 1);
+    let first_look = started.elapsed();
+    let started = Instant::now();
+    doc.rows(last - 1000, 40);
+    let next_look = started.elapsed();
+    // Typing near the end reads again only from the edit's row.
+    let started = Instant::now();
+    let near = doc.len() - 100;
+    doc.replace(near, near, "\"", true);
+    doc.rows(doc.row_count() - 1, 1);
+    let typed = started.elapsed();
+    doc.undo();
+    eprintln!(
+        "end of the line: first look {first_look:?}, then {next_look:?}, \
+         after typing there {typed:?}"
+    );
+
     let started = Instant::now();
     let mut out = std::io::sink();
     snapshot
@@ -760,4 +781,79 @@ fn large_json_stays_fast() {
         "{} MB: root {root_took:?}, two pages {page_took:?}, indenting {format_took:?}",
         len / (1024 * 1024)
     );
+}
+
+#[test]
+fn tells_which_rows_of_a_long_line_begin_in_a_string() {
+    // A string through the first two rows, escaped quotes and all; then
+    // one that ends in the third, and code after.
+    let long = format!(
+        "[\"{}\\\"{}\", {}\"{}\"]",
+        "a".repeat(2500),
+        "b".repeat(1000),
+        "1, ".repeat(400),
+        "c".repeat(3000),
+    );
+    let mut doc = Document::from_text(&format!("first\n{long}\nlast"));
+    doc.wait_indexed();
+    let rows = doc.rows(0, 100);
+    let quoted: Vec<_> = rows.iter().map(|r| (r.line, r.part, r.quoted)).collect();
+    let expected_in = |part: u32| {
+        // Where the row starts in the long line, and whether a string is
+        // open there, worked out the plain way.
+        let start = rows
+            .iter()
+            .find(|r| r.line == 1 && r.part == part)
+            .unwrap()
+            .start as usize
+            - 6;
+        let (mut open, mut escaped) = (false, false);
+        for b in long.as_bytes()[..start].iter() {
+            if escaped {
+                escaped = false;
+            } else if open && *b == b'\\' {
+                escaped = true;
+            } else if *b == b'"' {
+                open = !open;
+            }
+        }
+        open
+    };
+    for &(line, part, q) in &quoted {
+        if line == 1 && part > 0 {
+            assert_eq!(q, expected_in(part), "row {part}");
+        } else {
+            assert!(!q, "line {line}");
+        }
+    }
+    assert!(quoted.iter().any(|&(_, _, q)| q));
+    assert!(quoted.iter().any(|&(l, p, q)| l == 1 && p > 0 && !q));
+
+    // Edits anywhere, of quotes, escapes, line breaks and plain text,
+    // leave every row as a document made afresh would show it, though
+    // what was found before an edit is kept.
+    let mut rng = Rng(11);
+    let pieces = ["\"", "\\", "\n", "x", "\\\"", "y y"];
+    for step in 0..200 {
+        let len = doc.len();
+        let at = rng.below(len + 1);
+        let end = (at + rng.below(4)).min(len);
+        let text = pieces[rng.below(pieces.len() as u64) as usize];
+        match rng.below(6) {
+            0 => {
+                doc.undo();
+            }
+            1 => {
+                doc.redo();
+            }
+            _ => doc.replace(at, end, text, rng.below(2) == 0),
+        }
+        // Looked at as an editor would, a screenful here and there.
+        let rows = doc.row_count();
+        let first = rng.below(rows);
+        let shown: Vec<_> = doc.rows(first, 40).iter().map(|r| r.quoted).collect();
+        let fresh = Document::from_text(&doc.text(0, u64::MAX));
+        let expected: Vec<_> = fresh.rows(first, 40).iter().map(|r| r.quoted).collect();
+        assert_eq!(shown, expected, "step {step}");
+    }
 }
