@@ -165,16 +165,16 @@ void main() {
     final row = 'alpha beta gamma';
 
     // A double click selects a word.
-    await tester.tapAt(at(tester, row, 0, 7));
+    await tester.tapAt(at(tester, row, 0, 7), kind: PointerDeviceKind.mouse);
     await tester.pump(const Duration(milliseconds: 50));
-    await tester.tapAt(at(tester, row, 0, 7));
+    await tester.tapAt(at(tester, row, 0, 7), kind: PointerDeviceKind.mouse);
     await tester.pump();
     await press(tester, LogicalKeyboardKey.keyC);
     expect(copied.last, 'beta');
 
     // A third click selects the line.
     await tester.pump(const Duration(milliseconds: 50));
-    await tester.tapAt(at(tester, row, 0, 7));
+    await tester.tapAt(at(tester, row, 0, 7), kind: PointerDeviceKind.mouse);
     await tester.pump();
     await press(tester, LogicalKeyboardKey.keyC);
     expect(copied.last, 'alpha beta gamma');
@@ -583,12 +583,115 @@ void main() {
         ),
       ),
     );
-    await tester.tapAt(at(tester, row, 0, 10));
+    await tester.tapAt(at(tester, row, 0, 10), kind: PointerDeviceKind.mouse);
     expect(opened, isEmpty, reason: 'a plain click places the caret');
     await tester.pump(const Duration(seconds: 1));
     await tester.sendKeyDownEvent(LogicalKeyboardKey.meta);
-    await tester.tapAt(at(tester, row, 0, 10));
+    await tester.tapAt(at(tester, row, 0, 10), kind: PointerDeviceKind.mouse);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.meta);
     expect(opened, [Uri.parse('https://example.com/docs')]);
+  });
+
+  group('touch and assistive technology', () {
+    testWidgets('a long press selects a word, with handles and a menu', (
+      tester,
+    ) async {
+      final doc = MemoryDocument('alpha beta gamma\nsecond line');
+      await show(tester, doc, editable: true);
+      const row = 'alpha beta gamma';
+      final hold = await tester.startGesture(at(tester, row, 0, 7));
+      await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+      await hold.up();
+      await tester.pump();
+      expect(find.byKey(const Key('doc-handle-start')), findsOneWidget);
+      expect(find.byKey(const Key('doc-handle-end')), findsOneWidget);
+      expect(find.byKey(const Key('doc-menu')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('doc-menu-copy')));
+      await tester.pump();
+      expect(copied.last, 'beta');
+      expect(find.byKey(const Key('doc-menu')), findsNothing);
+
+      // The end handle drags the selection on.
+      final end = tester.getCenter(find.byKey(const Key('doc-handle-end')));
+      final target = at(tester, row, 0, 16);
+      final drag = await tester.startGesture(end);
+      await drag.moveTo(Offset(target.dx, end.dy));
+      await drag.up();
+      await tester.pump();
+      await press(tester, LogicalKeyboardKey.keyC);
+      expect(copied.last, 'beta gamma');
+
+      // A tap places the caret, and the handles go.
+      await tester.tapAt(at(tester, 'second line', 1, 3));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byKey(const Key('doc-handle-start')), findsNothing);
+      await input(tester, '!');
+      expect(doc.text(0, 99), 'alpha beta gamma\nsec!ond line');
+    });
+
+    testWidgets('a right click brings up the menu', (tester) async {
+      final doc = MemoryDocument('one two');
+      await show(tester, doc, editable: true);
+      final click = await tester.startGesture(
+        at(tester, 'one two', 0, 1),
+        kind: PointerDeviceKind.mouse,
+        buttons: kSecondaryButton,
+      );
+      await click.up();
+      await tester.pump();
+      expect(find.byKey(const Key('doc-menu-paste')), findsOneWidget);
+      expect(find.byKey(const Key('doc-menu-copy')), findsNothing);
+      await tester.tap(find.byKey(const Key('doc-menu-select-all')));
+      await tester.pump();
+      await press(tester, LogicalKeyboardKey.keyC);
+      expect(copied.last, 'one two');
+      // Escape puts it away.
+      final again = await tester.startGesture(
+        at(tester, 'one two', 0, 1),
+        kind: PointerDeviceKind.mouse,
+        buttons: kSecondaryButton,
+      );
+      await again.up();
+      await tester.pump();
+      expect(find.byKey(const Key('doc-menu')), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(find.byKey(const Key('doc-menu')), findsNothing);
+    });
+
+    testWidgets('a screen reader hears the lines, and where the caret goes', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+      final heard = <String>[];
+      tester.binding.defaultBinaryMessenger
+          .setMockDecodedMessageHandler<dynamic>(SystemChannels.accessibility, (
+            message,
+          ) async {
+            final data = (message as Map)['data'] as Map;
+            if (data['message'] case final String said) heard.add(said);
+            return null;
+          });
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger
+            .setMockDecodedMessageHandler(SystemChannels.accessibility, null),
+      );
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(accessibleNavigation: true);
+      addTearDown(
+        tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
+      );
+      await show(tester, MemoryDocument('first\n\nthird'), editable: true);
+      expect(find.bySemanticsLabel(RegExp('^Line 3')), findsOneWidget);
+      await tester.tapAt(
+        at(tester, 'first', 0, 2),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      await key(tester, LogicalKeyboardKey.arrowDown);
+      await key(tester, LogicalKeyboardKey.arrowDown);
+      expect(heard, ['Line 1: first', 'Line 2, blank', 'Line 3: third']);
+      semantics.dispose();
+    });
   });
 }

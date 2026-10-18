@@ -145,6 +145,9 @@ for text up to a megabyte. Past that, as when a large body is pasted in, it hand
 writing it back to the field's `CodeController` as it changes: at once up to 4 MB, and
 once typing pauses beyond, and always when the focus leaves. The view itself matches
 brackets, closes them as they are typed, and opens web addresses clicked with `⌘`.
+A finger or a pen is followed by gestures (a tap, a long press, a hand-detected double
+tap, since a recognizer for one would hold every tap back) while the mouse is followed
+by pointer events; a selection made by touch has handles and a menu laid over the rows.
 
 Start-up (`app/lib/main.dart`) initialises the bridge (`RustLib.init()`), loads
 `workspace.json` from the platform's application support directory, then loads history,

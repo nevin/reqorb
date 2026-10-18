@@ -23,6 +23,10 @@ the new version when it is tagged.
   20 MB body no longer stalls the app, and it can still be edited, with brackets
   matched and closed as they are typed. A raw body over 16 MB offers to be sent from a
   file instead, and API specs over a megabyte can now be edited too.
+- On iPad, the large-file editor selects a word with a long press or a double tap,
+  with handles to drag either end, and a menu to cut, copy, paste or select all; a
+  right click brings the same menu up on the Mac. Screen readers hear each line by
+  its number, and the line the caret moves to.
 
 ## 0.2.0 – 2026-10-17
 

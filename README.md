@@ -581,6 +581,10 @@ bytes in hexadecimal, sixteen to a row, with the characters beside them.
   offers **Format JSON** and **Minify JSON**, which rewrite the whole file a megabyte
   at a time; saving then writes the result over it.
 - On iPad a picked file is a copy, so it is exported (up to 64 MB) rather than saved.
+- With a finger, a tap places the caret, and a long press or a double tap selects a
+  word, with handles to drag either end and a menu to cut, copy, paste or select all.
+  A right click brings up the same menu. With VoiceOver on, each line is read with its
+  number, and moving the caret reads the line it moves to.
 
 ## Code generation
 

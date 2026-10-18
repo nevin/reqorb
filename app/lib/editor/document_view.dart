@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:reqorb/bridge/engine.dart';
 import 'package:reqorb/document/caret.dart';
@@ -158,6 +159,18 @@ class _DocumentViewState extends State<DocumentView> {
   /// there.
   (int, int)? _brackets;
 
+  /// Whether the selection was made by touch, which shows handles to
+  /// change it.
+  bool _byTouch = false;
+
+  /// The menu of Cut, Copy, Paste and Select All: shown over the
+  /// selection, or at a point in the view; none while it is hidden.
+  bool _menuOverSelection = false;
+  Offset? _menuAt;
+
+  /// The line a screen reader was last told the caret is on.
+  int? _announced;
+
   /// For telling a double or triple click from separate ones.
   DateTime _lastDown = DateTime(0);
   Offset _lastDownAt = Offset.zero;
@@ -188,6 +201,21 @@ class _DocumentViewState extends State<DocumentView> {
     _open();
     widget.lineSought?.addListener(_goToLine);
     _focus.addListener(_focusChanged);
+    // Handles and the menu move with the text.
+    _vertical.addListener(_scrolled);
+    _horizontal.addListener(_scrolled);
+  }
+
+  void _scrolled() {
+    if (_byTouch || _menuOverSelection) setState(() {});
+  }
+
+  void _hideMenu() {
+    if (_menuAt == null && !_menuOverSelection) return;
+    setState(() {
+      _menuAt = null;
+      _menuOverSelection = false;
+    });
   }
 
   @override
@@ -222,6 +250,8 @@ class _DocumentViewState extends State<DocumentView> {
     _indexing?.cancel();
     _search?.cancel();
     _searchSoon?.cancel();
+    _vertical.removeListener(_scrolled);
+    _horizontal.removeListener(_scrolled);
     _vertical.dispose();
     _horizontal.dispose();
     _focus.dispose();
@@ -475,6 +505,7 @@ class _DocumentViewState extends State<DocumentView> {
         SizedBox(
           width: gutter,
           child: Text(
+            semanticsLabel: row.segment == 0 ? 'Line ${row.line + 1}' : '',
             row.segment == 0 ? '${row.line + 1}' : '',
             key: ValueKey('${widget.name}-number-$index'),
             textAlign: TextAlign.right,
@@ -516,6 +547,24 @@ class _DocumentViewState extends State<DocumentView> {
       _brackets = start == end ? _bracketsAt(start) : null;
     });
     _syncInput();
+    _announce();
+  }
+
+  /// Tells a screen reader the line the caret has moved to, and what is
+  /// on it.
+  void _announce() {
+    if (!(MediaQuery.maybeOf(context)?.accessibleNavigation ?? false)) return;
+    final caret = _caret;
+    if (caret == null) return;
+    final row = _rowAt(caret.row);
+    if (row == null || row.line == _announced) return;
+    _announced = row.line;
+    final text = row.text.trim();
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      'Line ${row.line + 1}${text.isEmpty ? ', blank' : ': $text'}',
+      TextDirection.ltr,
+    );
   }
 
   static const _opens = '{[(';
@@ -647,9 +696,27 @@ class _DocumentViewState extends State<DocumentView> {
   }
 
   void _down(PointerDownEvent event, double gutter, double gap) {
+    // A finger or a pen is followed by the gestures below.
+    if (event.kind == PointerDeviceKind.touch ||
+        event.kind == PointerDeviceKind.stylus) {
+      return;
+    }
+    if (event.buttons == kSecondaryButton) {
+      _focus.requestFocus();
+      final offset = _offsetAt(event.localPosition, gutter, gap);
+      final selection = _selection;
+      if (selection == null || offset < selection.$1 || offset > selection.$2) {
+        _select(offset, offset);
+      }
+      setState(() {
+        _menuOverSelection = false;
+        _menuAt = event.localPosition - Offset(_horizontalOffset, 0);
+      });
+      return;
+    }
     if (event.buttons != kPrimaryButton) return;
-    // A tap on text already being edited brings back the keyboard.
-    if (_focus.hasPrimaryFocus) _input?.show();
+    _byTouch = false;
+    _hideMenu();
     _focus.requestFocus();
     final now = DateTime.now();
     final again =
@@ -697,6 +764,68 @@ class _DocumentViewState extends State<DocumentView> {
   static final _address = RegExp(
     r'''https?://[^\s"'<>`\\]*[^\s"'<>`\\.,;:!?)\]}]''',
   );
+
+  double get _horizontalOffset =>
+      _horizontal.hasClients ? _horizontal.offset : 0;
+
+  /// A tap with a finger: the caret goes there, and the keyboard comes up.
+  void _tapTouch(Offset local, double gutter, double gap) {
+    final now = DateTime.now();
+    final again =
+        now.difference(_lastDown) < kDoubleTapTimeout &&
+        (local - _lastDownAt).distance < kDoubleTapSlop;
+    _lastDown = again ? DateTime(0) : now;
+    _lastDownAt = local;
+    if (again) {
+      _wordTouch(local, gutter, gap);
+      return;
+    }
+    _focus.requestFocus();
+    final offset = _offsetAt(local, gutter, gap);
+    final selection = _selection;
+    // A tap on what is already selected brings the menu up for it.
+    if (selection != null && offset >= selection.$1 && offset <= selection.$2) {
+      setState(() => _menuOverSelection = true);
+      return;
+    }
+    _byTouch = false;
+    _hideMenu();
+    _select(offset, offset);
+    _input?.show();
+  }
+
+  /// A long press or a double tap with a finger: the word there is
+  /// selected, with handles to change it and the menu over it.
+  void _wordTouch(Offset local, double gutter, double gap) {
+    _focus.requestFocus();
+    final (start, end) = _wordAt(local, gutter, gap);
+    _select(start, end);
+    setState(() {
+      _byTouch = true;
+      _menuAt = null;
+      _menuOverSelection = true;
+    });
+  }
+
+  /// Moves one end of a selection made by touch to where its handle is
+  /// dragged; [start] for the handle at its start.
+  void _dragHandle(Offset global, {required bool start}) {
+    final box = _viewKey.currentContext?.findRenderObject() as RenderBox?;
+    final selection = _selection;
+    if (box == null || selection == null) return;
+    final local = box.globalToLocal(global);
+    final gutter = _gutterWidth();
+    // The handle hangs below the row it marks.
+    final offset = _offsetAt(
+      Offset(local.dx + _horizontalOffset, local.dy - _rowHeight),
+      gutter,
+      CodeStyle.fontSize,
+    );
+    final other = start ? selection.$2 : selection.$1;
+    if (offset == other) return;
+    _select(other, offset);
+    setState(() => _menuOverSelection = false);
+  }
 
   void _move(PointerMoveEvent event, double gutter, double gap, double height) {
     // A finger drags to scroll; it selects with handles, which are to come.
@@ -943,6 +1072,11 @@ class _DocumentViewState extends State<DocumentView> {
     final key = event.logicalKey;
     final keyboard = HardwareKeyboard.instance;
     final command = keyboard.isMetaPressed || keyboard.isControlPressed;
+    if (_menuAt != null || _menuOverSelection) {
+      _hideMenu();
+      if (key == LogicalKeyboardKey.escape) return KeyEventResult.handled;
+    }
+    _byTouch = false;
 
     // While the input method composes, every key is for it.
     if (_composing != null && _focus.hasPrimaryFocus) {
@@ -1140,6 +1274,8 @@ class _DocumentViewState extends State<DocumentView> {
   void _changed() {
     setState(() {
       _info = _doc.info();
+      _menuAt = null;
+      _menuOverSelection = false;
       if (_finding) {
         _found = const [];
         _current = -1;
@@ -1689,7 +1825,7 @@ class _DocumentViewState extends State<DocumentView> {
         final width = math.max(constraints.maxWidth, gutter + gap + textWidth);
         // The scrollbar down the side stays in view however far it is
         // scrolled across; it is for the list, one level in.
-        return Scrollbar(
+        final scrolled = Scrollbar(
           controller: _vertical,
           thumbVisibility: true,
           interactive: true,
@@ -1706,21 +1842,47 @@ class _DocumentViewState extends State<DocumentView> {
                   onPointerDown: (e) => _down(e, gutter, gap),
                   onPointerMove: (e) =>
                       _move(e, gutter, gap, constraints.maxHeight),
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.text,
-                    child: ListView.builder(
-                      key: Key(name),
-                      controller: _vertical,
-                      padding: const EdgeInsets.symmetric(vertical: _padding),
-                      itemExtent: _rowHeight,
-                      itemCount: _info.rowCount,
-                      itemBuilder: (context, row) =>
-                          _row(context, row, gutter, gap),
+                  child: GestureDetector(
+                    supportedDevices: const {
+                      PointerDeviceKind.touch,
+                      PointerDeviceKind.stylus,
+                    },
+                    // A double tap is told apart by hand: a recognizer for
+                    // it would hold every single tap back until it knew.
+                    onTapUp: (d) => _tapTouch(d.localPosition, gutter, gap),
+                    onLongPressStart: (d) =>
+                        _wordTouch(d.localPosition, gutter, gap),
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.text,
+                      child: ListView.builder(
+                        key: Key(name),
+                        controller: _vertical,
+                        padding: const EdgeInsets.symmetric(vertical: _padding),
+                        itemExtent: _rowHeight,
+                        itemCount: _info.rowCount,
+                        itemBuilder: (context, row) =>
+                            _row(context, row, gutter, gap),
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
+          ),
+        );
+        return Semantics(
+          container: true,
+          textField: widget.editable,
+          readOnly: !widget.editable,
+          multiline: true,
+          label: widget.name,
+          child: Stack(
+            clipBehavior: Clip.hardEdge,
+            children: [
+              scrolled,
+              ..._handles(scheme),
+              ?_menu(theme, constraints),
+            ],
           ),
         );
       },
@@ -1751,6 +1913,87 @@ class _DocumentViewState extends State<DocumentView> {
             child: _finding ? _findBar(theme) : _findButton(scheme),
           ),
         ],
+      ),
+    );
+  }
+
+  /// The handles at either end of a selection made by touch, to drag.
+  List<Widget> _handles(ColorScheme scheme) {
+    final selection = _selection;
+    if (!_byTouch || selection == null || _composing != null) return const [];
+    Widget handle(int offset, {required bool start}) {
+      final rect = _caretRect(offset);
+      if (rect == null) return const SizedBox.shrink();
+      const size = 22.0;
+      return Positioned(
+        left: rect.left - size / 2,
+        top: rect.bottom,
+        child: GestureDetector(
+          key: Key('${widget.name}-handle-${start ? 'start' : 'end'}'),
+          behavior: HitTestBehavior.opaque,
+          onPanUpdate: (d) => _dragHandle(d.globalPosition, start: start),
+          onPanEnd: (_) => setState(() => _menuOverSelection = true),
+          child: CustomPaint(
+            size: const Size(size, size),
+            painter: _HandlePainter(scheme.primary),
+          ),
+        ),
+      );
+    }
+
+    return [
+      handle(selection.$1, start: true),
+      handle(selection.$2, start: false),
+    ];
+  }
+
+  /// Cut, Copy, Paste and Select All, over the selection or where the
+  /// view was right-clicked.
+  Widget? _menu(ThemeData theme, BoxConstraints constraints) {
+    Offset? at = _menuAt;
+    if (at == null && _menuOverSelection) {
+      final rect = _caretRect(_selection?.$1 ?? _at);
+      if (rect != null) {
+        // Above the selection, or, with no room there, below it and its
+        // handles, so that it never covers what it is for.
+        final below = _caretRect(_selection?.$2 ?? _at) ?? rect;
+        at = rect.top >= 48
+            ? Offset(rect.left, rect.top - 44)
+            : Offset(rect.left, below.bottom + 28);
+      }
+    }
+    if (at == null) return null;
+    final name = widget.name;
+    final selected = _selection != null;
+    final editable = widget.editable;
+    Widget item(String key, String label, VoidCallback onTap) => TextButton(
+      key: Key('$name-menu-$key'),
+      style: TextButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+      ),
+      onPressed: () {
+        _hideMenu();
+        onTap();
+      },
+      child: Text(label),
+    );
+    final items = [
+      if (editable && selected) item('cut', 'Cut', _cut),
+      if (selected) item('copy', 'Copy', _copy),
+      if (editable) item('paste', 'Paste', _paste),
+      item('select-all', 'Select All', () => _select(0, _info.len)),
+    ];
+    const width = 300.0;
+    return Positioned(
+      left: at.dx.clamp(0, math.max(0, constraints.maxWidth - width)),
+      top: at.dy.clamp(0, math.max(0, constraints.maxHeight - 44)),
+      child: Material(
+        key: Key('$name-menu'),
+        elevation: 4,
+        borderRadius: BorderRadius.circular(8),
+        color: theme.colorScheme.surfaceContainerHigh,
+        child: Row(mainAxisSize: MainAxisSize.min, children: items),
       ),
     );
   }
@@ -2079,6 +2322,25 @@ class _InputClient with TextInputClient, DeltaTextInputClient {
 
   @override
   void connectionClosed() => view._inputClosed();
+}
+
+/// A selection handle: a round head on a stem, under the end it marks.
+class _HandlePainter extends CustomPainter {
+  _HandlePainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    final r = size.width / 2;
+    canvas
+      ..drawRect(Rect.fromLTWH(r - 1, 0, 2, r), paint)
+      ..drawCircle(Offset(r, r + r / 2), r / 1.6, paint);
+  }
+
+  @override
+  bool shouldRepaint(_HandlePainter old) => old.color != color;
 }
 
 class _MarkPainter extends CustomPainter {
