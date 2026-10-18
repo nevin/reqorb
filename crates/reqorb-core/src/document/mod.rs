@@ -240,6 +240,11 @@ impl Document {
     }
 
     fn open_paged(path: &Path, page: u64) -> Result<Self, Error> {
+        // Asked first: Windows refuses to open a folder at all, which would
+        // say only that access was denied.
+        if fs::metadata(path).is_ok_and(|meta| meta.is_dir()) {
+            return Err(Error::Io(format!("{} is a folder", path.display())));
+        }
         let file = File::open(path)
             .map_err(|e| Error::Io(format!("{} could not be opened: {e}", path.display())))?;
         let meta = file

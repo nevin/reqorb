@@ -99,4 +99,9 @@ jobs:
           cache: true
       - run: flutter config --enable-macos-desktop
       - run: flutter pub get
-      - run: flutter test integration_test -d macos
+      # A file at a time: given several, flutter starts the app for the next
+      # before the last has closed, and on macOS that start fails.
+      - run: |
+          for test in integration_test/*_test.dart; do
+            flutter test "$test" -d macos
+          done
