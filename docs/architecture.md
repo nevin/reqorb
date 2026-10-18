@@ -57,7 +57,7 @@ The workspace forbids `unsafe` code and denies `dbg!`, `todo!` and `unimplemente
 | `redact`, `analyze`, `data` | Removing credentials from exports; the HAR report; the data file of a collection run |
 | `vault`, `history` | What is kept on disk: the workspace with its credentials encrypted, and the requests sent |
 | `files` | Checking that a working directory can be read and written |
-| `spill.rs` | Response bodies over 16 MB, written to a temporary file as they arrive; the `Response` keeps the first megabyte as text and the file's path in `body_file`. Tests, captures and HAR export read the file back when it is under 256 MB; scripts get the first megabyte past that. Only the last 8 files are kept, history keeps none, and the app deletes them all when it starts |
+| `spill.rs` | Response bodies over 16 MB (8 MB on an iPad with 3 GB of memory or less, as `set_spill_bytes` says at start-up), written to a temporary file as they arrive; the `Response` keeps the first megabyte as text and the file's path in `body_file`. Tests, captures and HAR export read the file back when it is under 256 MB; scripts get the first megabyte past that. Only the last 8 files are kept, history keeps none, and the app deletes them all when it starts |
 | `document/` | Text of any size, up to about a gigabyte, for the editor. The original bytes are read from memory or a file a page at a time (`source.rs`); a background thread counts newlines every 4 KB (`index.rs`); edits are a piece table over the original and an append-only buffer, so undo copies no text (`text.rs`); search runs over a snapshot a megabyte at a time (`search.rs`). Lines over 2 KB are shown over several rows, and columns are counted in UTF-16 units, as Dart counts them. `json.rs` lists the children of one object or array at a time, reading only as far as they go, and writes the whole of a document's JSON out again indented or minified, a megabyte at a time. Saving writes beside the file and renames it into place; where only the file itself may be written, as in the macOS sandbox, it first keeps a copy of the original to read from and then writes over the file |
 
 ## The CLI
@@ -174,7 +174,7 @@ The `app/lib/` folders are features:
 | `sidebar/`, `environments/`, `settings/`, `har/`, `history/` | What their names say |
 | `transfer/` | Import and export actions |
 | `workspace/` | The store and the collection actions |
-| `shared/` | Theme, messages, folders and small reusable widgets |
+| `shared/` | Theme, messages, folders, what the device has (`device.dart`, answered on iPad by `AppDelegate.swift`: its memory and free space) and small reusable widgets |
 | `src/rust/` | The generated bindings; never edited by hand |
 
 ## The bridge

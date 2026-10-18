@@ -14,8 +14,32 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::{Error, Response};
 
-/// Bodies larger than this are written to a file.
+/// Bodies larger than this are written to a file, unless
+/// [`set_spill_bytes`] says otherwise.
 pub const SPILL_BYTES: u64 = 16 * 1024 * 1024;
+
+static SPILL_AT: AtomicU64 = AtomicU64::new(SPILL_BYTES);
+
+/// Sets how large a body is held in memory before it goes to a file: less
+/// on a device with little memory.
+pub fn set_spill_bytes(bytes: u64) {
+    SPILL_AT.store(bytes.max(PREVIEW_BYTES as u64), Ordering::Relaxed);
+}
+
+/// How large a body is held in memory before it goes to a file.
+pub fn spill_bytes() -> u64 {
+    SPILL_AT.load(Ordering::Relaxed)
+}
+
+/// What went wrong reading or writing a file, put plainly when the disk
+/// is full.
+pub fn io_problem(e: &io::Error) -> String {
+    if e.kind() == io::ErrorKind::StorageFull {
+        "there is not enough free space on the disk".into()
+    } else {
+        e.to_string()
+    }
+}
 
 /// How much of a body written to a file is kept in memory, as text.
 pub const PREVIEW_BYTES: usize = 1024 * 1024;
@@ -75,12 +99,17 @@ pub(crate) struct BodySink {
 impl BodySink {
     pub(crate) fn push(&mut self, chunk: &[u8]) -> Result<(), Error> {
         self.len += chunk.len() as u64;
-        let failed = |e: io::Error| Error::Io(format!("the response could not be saved: {e}"));
+        let failed = |e: io::Error| {
+            Error::Io(format!(
+                "the response could not be kept on disk: {}",
+                io_problem(&e)
+            ))
+        };
         if let Some((file, _)) = &mut self.file {
             return file.write_all(chunk).map_err(failed);
         }
         self.bytes.extend_from_slice(chunk);
-        if self.len > SPILL_BYTES {
+        if self.len > spill_bytes() {
             let (mut file, path) = new_spill_file().map_err(failed)?;
             file.write_all(&self.bytes).map_err(failed)?;
             self.bytes.truncate(PREVIEW_BYTES);
@@ -104,8 +133,12 @@ impl BodySink {
         match self.file {
             None => Ok((self.bytes, None)),
             Some((file, path)) => {
-                file.sync_all()
-                    .map_err(|e| Error::Io(format!("the response could not be saved: {e}")))?;
+                file.sync_all().map_err(|e| {
+                    Error::Io(format!(
+                        "the response could not be kept on disk: {}",
+                        io_problem(&e)
+                    ))
+                })?;
                 Ok((self.bytes, Some(path.display().to_string())))
             }
         }
@@ -182,6 +215,17 @@ mod tests {
         };
         assert!(response.full_body().unwrap().ends_with("éend"));
         fs::remove_file(file).unwrap();
+    }
+
+    #[test]
+    fn a_full_disk_is_said_plainly() {
+        let full = io::Error::from(io::ErrorKind::StorageFull);
+        assert_eq!(
+            io_problem(&full),
+            "there is not enough free space on the disk"
+        );
+        let other = io::Error::other("something else");
+        assert_eq!(io_problem(&other), "something else");
     }
 
     #[test]

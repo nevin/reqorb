@@ -347,6 +347,11 @@ String exportExtension({required ExportFormat format}) =>
 Future<void> cleanSpilledBodies() =>
     RustLib.instance.api.crateApiCoreCleanSpilledBodies();
 
+/// Sets how large a response body is held in memory before it goes to a
+/// file: less on a device with little memory.
+void setSpillBytes({required int bytes}) =>
+    RustLib.instance.api.crateApiCoreSetSpillBytes(bytes: bytes);
+
 enum AppTheme { system, light, dark }
 
 class Auth {

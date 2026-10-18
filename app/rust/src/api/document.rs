@@ -443,8 +443,12 @@ pub fn doc_format_json(
     lock(&JOBS).insert(job, cancel.clone());
     let total = snapshot.len();
     let result = (|| {
-        let (mut file, path) = reqorb_core::new_spill_file()
-            .map_err(|e| format!("could not make a file to write to: {e}"))?;
+        let (mut file, path) = reqorb_core::new_spill_file().map_err(|e| {
+            format!(
+                "could not make a file to write to: {}",
+                reqorb_core::io_problem(&e)
+            )
+        })?;
         let written = snapshot.format_json(indent.as_deref(), &mut file, &cancel, &mut |read| {
             let _ = sink.add(DocFormatUpdate {
                 read,

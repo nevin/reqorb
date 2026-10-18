@@ -12,6 +12,7 @@ import 'package:reqorb/editor/document_view.dart';
 import 'package:reqorb/editor/hex_view.dart';
 import 'package:reqorb/editor/json_tree_view.dart';
 import 'package:reqorb/editor/syntax.dart';
+import 'package:reqorb/shared/device.dart';
 import 'package:reqorb/shared/messages.dart';
 import 'package:reqorb/shared/theme.dart';
 
@@ -140,6 +141,9 @@ class _FilePageState extends State<FilePage> {
   /// that looks binary starts as bytes.
   _View _view = _View.text;
 
+  /// A value picked in the tree, to show selected in the text.
+  final _sought = ValueNotifier<DocSpan?>(null);
+
   /// Whether the text is JSON written out again, not yet saved over the
   /// file: the document is then a temporary file of its own.
   bool _rewritten = false;
@@ -178,6 +182,7 @@ class _FilePageState extends State<FilePage> {
 
   @override
   void dispose() {
+    _sought.dispose();
     _watch?.cancel();
     _rewrite?.cancel();
     _doc?.dispose();
@@ -404,11 +409,23 @@ class _FilePageState extends State<FilePage> {
   /// file of its own, and shows that in place of the text, to save over
   /// the file. It takes the text with any edits as it is when asked; undo
   /// starts afresh after.
-  void _rewriteJson({String? indent}) {
+  Future<void> _rewriteJson({String? indent}) async {
     final doc = _doc;
     if (doc == null || _rewrite != null) return;
     final messenger = ScaffoldMessenger.of(context);
     final engine = Engine.of(context);
+    // Indenting can make it a few times longer; minifying, no longer.
+    final len = doc.info().len;
+    final short = await lackOfRoom(
+      Directory.systemTemp.path,
+      indent == null ? len : len * 3,
+      indent == null ? 'minify $_name' : 'format $_name',
+    );
+    if (!mounted) return;
+    if (short != null) {
+      notify(messenger, short);
+      return;
+    }
     setState(() => _rewriting = 0);
     _rewrite = doc.formatJson(indent: indent).listen((u) async {
       if (!mounted) return;
@@ -516,6 +533,12 @@ class _FilePageState extends State<FilePage> {
                 key: ValueKey(doc),
                 document: doc,
                 name: 'file-tree',
+                onShow: (node) {
+                  setState(() => _view = _View.text);
+                  _sought
+                    ..value = null
+                    ..value = DocSpan(start: node.start, end: node.end);
+                },
               ),
             )
           else
@@ -525,6 +548,7 @@ class _FilePageState extends State<FilePage> {
                 document: doc,
                 name: 'file',
                 language: _language,
+                spanSought: _sought,
                 editable: true,
                 status: true,
                 autofocus: true,
@@ -586,7 +610,10 @@ class _FilePageState extends State<FilePage> {
                     CheckedPopupMenuItem(
                       key: const Key('file-view-text'),
                       checked: _view == _View.text,
-                      value: () => setState(() => _view = _View.text),
+                      value: () => setState(() {
+                        _view = _View.text;
+                        _sought.value = null;
+                      }),
                       child: const Text('Text'),
                     ),
                     CheckedPopupMenuItem(

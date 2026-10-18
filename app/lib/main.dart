@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:reqorb/bridge/engine.dart';
 import 'package:reqorb/request/request_page.dart';
+import 'package:reqorb/shared/device.dart';
 import 'package:reqorb/shared/folders.dart';
 import 'package:reqorb/shared/theme.dart';
 import 'package:reqorb/src/rust/api/core.dart';
@@ -18,6 +19,7 @@ Future<void> main() async {
   await Future.wait([
     // Bodies an earlier run wrote to files are no longer shown anywhere.
     cleanSpilledBodies(),
+    Device.fitToMemory(),
     store.loadHistory(),
     store.restoreWorkingDir(folders),
     store.restoreLinks(folders),

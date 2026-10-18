@@ -1,6 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:reqorb/document/caret.dart';
+import 'package:reqorb/document/text_document.dart';
 import 'package:reqorb/editor/code_controller.dart';
 import 'package:reqorb/editor/code_formatter.dart';
 import 'package:reqorb/editor/folding.dart';
@@ -1175,6 +1178,7 @@ class CodeView extends StatefulWidget {
     required this.text,
     this.language,
     this.onLink,
+    this.spanSought,
   });
 
   final String name;
@@ -1183,6 +1187,10 @@ class CodeView extends StatefulWidget {
 
   /// Called with a web address in the text when it is clicked.
   final ValueChanged<Uri>? onLink;
+
+  /// Bytes of the text, as UTF-8, to select and bring into view, as when
+  /// a value is picked in a tree of it.
+  final ValueListenable<DocSpan?>? spanSought;
 
   @override
   State<CodeView> createState() => _CodeViewState();
@@ -1198,11 +1206,30 @@ class _CodeViewState extends State<CodeView> {
   void initState() {
     super.initState();
     _measure();
+    widget.spanSought?.addListener(_goToSpan);
+    if (widget.spanSought?.value != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _goToSpan();
+      });
+    }
+  }
+
+  /// Selects the bytes asked for, everything folded being opened first.
+  void _goToSpan() {
+    final span = widget.spanSought?.value;
+    if (span == null || widget.text.length > editLimit) return;
+    _unfold();
+    final text = widget.text;
+    _code.show(unitsOf(text, span.start), unitsOf(text, span.end));
   }
 
   @override
   void didUpdateWidget(CodeView old) {
     super.didUpdateWidget(old);
+    if (old.spanSought != widget.spanSought) {
+      old.spanSought?.removeListener(_goToSpan);
+      widget.spanSought?.addListener(_goToSpan);
+    }
     if (old.text != widget.text || old.language != widget.language) {
       _folded.clear();
       _measure();
@@ -1212,6 +1239,7 @@ class _CodeViewState extends State<CodeView> {
 
   @override
   void dispose() {
+    widget.spanSought?.removeListener(_goToSpan);
     _code.dispose();
     super.dispose();
   }
@@ -1255,6 +1283,7 @@ class _CodeViewState extends State<CodeView> {
         text: widget.text,
         language: widget.language,
         onLink: widget.onLink,
+        spanSought: widget.spanSought,
       );
     }
     final shown = _shown;

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -19,6 +20,7 @@ import 'package:reqorb/editor/json_tree_view.dart';
 import 'package:reqorb/files/file_page.dart';
 import 'package:reqorb/editor/syntax.dart';
 import 'package:reqorb/response/sse.dart';
+import 'package:reqorb/shared/device.dart';
 import 'package:reqorb/shared/messages.dart';
 import 'package:reqorb/transfer/export_actions.dart';
 import 'package:reqorb/src/rust/api/core.dart';
@@ -236,6 +238,23 @@ class _LoadedState extends State<_Loaded> {
   /// Kept from one response to the next, as is [_format].
   _BodyMode _mode = _BodyMode.pretty;
 
+  /// A value picked in the tree, to show in the body as received.
+  final _sought = ValueNotifier<DocSpan?>(null);
+
+  @override
+  void dispose() {
+    _sought.dispose();
+    super.dispose();
+  }
+
+  /// Shows [node], picked in the tree, selected in the body as received.
+  void _showInText(DocJsonNode node) {
+    setState(() => _mode = _BodyMode.raw);
+    _sought
+      ..value = null
+      ..value = DocSpan(start: node.start, end: node.end);
+  }
+
   /// What the body is read as; null to go by its type and how it looks.
   CodeLanguage? _format;
 
@@ -337,7 +356,10 @@ class _LoadedState extends State<_Loaded> {
       mode: mode,
       canPreview: canPreview,
       canTree: canTree,
-      onMode: (mode) => setState(() => _mode = mode),
+      onMode: (mode) => setState(() {
+        _mode = mode;
+        _sought.value = null;
+      }),
       format: _format,
       onFormat: (format) => setState(() => _format = format),
       // Where the page cannot be shown here, a browser shows it.
@@ -355,6 +377,8 @@ class _LoadedState extends State<_Loaded> {
         text: response.body.isNotEmpty,
         language: raw ? CodeLanguage.plain : language,
         mode: mode,
+        onShow: _showInText,
+        spanSought: _sought,
       );
       bodyView = response.body.isEmpty
           ? file
@@ -388,12 +412,18 @@ class _LoadedState extends State<_Loaded> {
             child: mode == _BodyMode.preview
                 ? _HtmlPreview(html: response.body, url: url)
                 : mode == _BodyMode.tree
-                ? _TreeBody(key: ValueKey(response.body), text: response.body)
+                ? _TreeBody(
+                    key: ValueKey(response.body),
+                    text: response.body,
+                    onShow: _showInText,
+                  )
                 : CodeView(
                     name: 'responseBody',
                     text: body,
                     language: language,
                     onLink: openLink,
+                    // As received, where a value picked in the tree is.
+                    spanSought: raw ? _sought : null,
                   ),
           ),
         ],
@@ -1255,7 +1285,13 @@ class _FileBody extends StatefulWidget {
     required this.text,
     required this.language,
     required this.mode,
+    this.onShow,
+    this.spanSought,
   });
+
+  /// Shows a value picked in the tree in the body as received.
+  final ValueChanged<DocJsonNode>? onShow;
+  final ValueListenable<DocSpan?>? spanSought;
 
   final String path;
   final int size;
@@ -1320,22 +1356,39 @@ class _FileBodyState extends State<_FileBody> {
     if (!_wantsPretty || document == null) return;
     if (_pretty != null || _indenting != null || _notJson != null) return;
     _indented = 0;
-    _indenting = document.formatJson(indent: CodeStyle.indent).listen((u) {
-      if (!mounted) return;
-      if (!u.done) {
-        setState(() => _indented = u.total == 0 ? null : u.read / u.total);
-        return;
-      }
-      final path = u.path;
-      if (path == null) {
-        setState(() => _notJson = u.error ?? 'not valid JSON');
-        return;
-      }
-      _open(path).then((pretty) {
-        if (!mounted) return pretty.dispose();
-        setState(() => _pretty = pretty);
-      });
-    });
+    // Indenting can make it a few times longer; with no room for that, it
+    // is shown as received.
+    final len = document.info().len;
+    _indenting =
+        Stream.fromFuture(
+              lackOfRoom(Directory.systemTemp.path, len * 3, 'indent it'),
+            )
+            .asyncExpand((short) {
+              if (short == null) {
+                return document.formatJson(indent: CodeStyle.indent);
+              }
+              return Stream.value(
+                DocFormatUpdate(read: 0, total: len, done: true, error: short),
+              );
+            })
+            .listen((u) {
+              if (!mounted) return;
+              if (!u.done) {
+                setState(
+                  () => _indented = u.total == 0 ? null : u.read / u.total,
+                );
+                return;
+              }
+              final path = u.path;
+              if (path == null) {
+                setState(() => _notJson = u.error ?? 'not valid JSON');
+                return;
+              }
+              _open(path).then((pretty) {
+                if (!mounted) return pretty.dispose();
+                setState(() => _pretty = pretty);
+              });
+            });
   }
 
   @override
@@ -1365,7 +1418,11 @@ class _FileBodyState extends State<_FileBody> {
     } else if (!widget.text) {
       shown = HexView(document: document, name: 'responseHex');
     } else if (widget.mode == _BodyMode.tree) {
-      shown = JsonTreeView(document: document, name: 'responseTree');
+      shown = JsonTreeView(
+        document: document,
+        name: 'responseTree',
+        onShow: widget.onShow,
+      );
     } else if (_wantsPretty && _notJson == null) {
       final pretty = _pretty;
       shown = pretty != null
@@ -1397,6 +1454,7 @@ class _FileBodyState extends State<_FileBody> {
         name: 'responseBody-document',
         document: document,
         language: widget.language,
+        spanSought: widget.spanSought,
       );
     }
     return Column(
@@ -1449,9 +1507,10 @@ class _FileBodyState extends State<_FileBody> {
 
 /// A JSON body held in memory, explored as a tree.
 class _TreeBody extends StatefulWidget {
-  const _TreeBody({super.key, required this.text});
+  const _TreeBody({super.key, required this.text, this.onShow});
 
   final String text;
+  final ValueChanged<DocJsonNode>? onShow;
 
   @override
   State<_TreeBody> createState() => _TreeBodyState();
@@ -1475,8 +1534,11 @@ class _TreeBodyState extends State<_TreeBody> {
   }
 
   @override
-  Widget build(BuildContext context) =>
-      JsonTreeView(document: _document!, name: 'responseTree');
+  Widget build(BuildContext context) => JsonTreeView(
+    document: _document!,
+    name: 'responseTree',
+    onShow: widget.onShow,
+  );
 }
 
 /// Binary bytes held in memory, in hexadecimal.

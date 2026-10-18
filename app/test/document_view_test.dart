@@ -629,6 +629,35 @@ void main() {
       expect(doc.text(0, 99), 'alpha beta gamma\nsec!ond line');
     });
 
+    testWidgets('dragging on from a long press selects as it goes', (
+      tester,
+    ) async {
+      await show(
+        tester,
+        MemoryDocument('alpha beta gamma delta'),
+        editable: true,
+      );
+      const row = 'alpha beta gamma delta';
+      final finger = await tester.startGesture(at(tester, row, 0, 12));
+      await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+      await finger.moveTo(at(tester, row, 0, 19));
+      await tester.pump();
+      expect(find.byKey(const Key('doc-menu')), findsNothing);
+      await finger.up();
+      await tester.pump();
+      expect(find.byKey(const Key('doc-menu')), findsOneWidget);
+      await press(tester, LogicalKeyboardKey.keyC);
+      expect(copied.last, 'gamma de');
+      // And back, before the word pressed.
+      final again = await tester.startGesture(at(tester, row, 0, 12));
+      await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+      await again.moveTo(at(tester, row, 0, 2));
+      await again.up();
+      await tester.pump();
+      await press(tester, LogicalKeyboardKey.keyC);
+      expect(copied.last, 'pha beta gamma');
+    });
+
     testWidgets('a right click brings up the menu', (tester) async {
       final doc = MemoryDocument('one two');
       await show(tester, doc, editable: true);

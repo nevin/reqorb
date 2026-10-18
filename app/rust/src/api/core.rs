@@ -1092,3 +1092,10 @@ pub fn init_app() {
 pub fn clean_spilled_bodies() {
     reqorb_core::clean_spilled();
 }
+
+/// Sets how large a response body is held in memory before it goes to a
+/// file: less on a device with little memory.
+#[frb(sync)]
+pub fn set_spill_bytes(bytes: u64) {
+    reqorb_core::set_spill_bytes(bytes);
+}

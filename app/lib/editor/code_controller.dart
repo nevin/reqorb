@@ -58,6 +58,19 @@ class CodeController extends TextEditingController {
       ..value = index + 1;
   }
 
+  /// Selects [start] to [end] and asks whatever shows the text to scroll
+  /// it into view.
+  void show(int start, int end) {
+    final at = start.clamp(0, text.length);
+    selection = TextSelection(
+      baseOffset: at,
+      extentOffset: end.clamp(at, text.length),
+    );
+    _lineSought
+      ..value = null
+      ..value = at;
+  }
+
   /// The offset [goToLine] last asked to be shown, for the editor.
   ValueListenable<int?> get lineSought => _lineSought;
   final _lineSought = ValueNotifier<int?>(null);

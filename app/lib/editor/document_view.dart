@@ -62,6 +62,7 @@ class DocumentView extends StatefulWidget {
     this.autofocus = false,
     this.onChanged,
     this.onLink,
+    this.spanSought,
   });
 
   /// What is shown. Whoever made it disposes of it.
@@ -90,6 +91,10 @@ class DocumentView extends StatefulWidget {
   /// Opens a web address in the text, clicked with Command (Control
   /// elsewhere); null to leave addresses as text.
   final ValueChanged<Uri>? onLink;
+
+  /// Bytes to select and bring into view, as when a value is picked in a
+  /// tree of the same text. Asking for the same again goes through null.
+  final ValueListenable<DocSpan?>? spanSought;
 
   @override
   State<DocumentView> createState() => _DocumentViewState();
@@ -171,6 +176,9 @@ class _DocumentViewState extends State<DocumentView> {
   /// The line a screen reader was last told the caret is on.
   int? _announced;
 
+  /// The word a long press selected, which dragging on from it extends.
+  (int, int)? _pressedWord;
+
   /// For telling a double or triple click from separate ones.
   DateTime _lastDown = DateTime(0);
   Offset _lastDownAt = Offset.zero;
@@ -200,6 +208,14 @@ class _DocumentViewState extends State<DocumentView> {
     super.initState();
     _open();
     widget.lineSought?.addListener(_goToLine);
+    widget.spanSought?.addListener(_goToSpan);
+    // Asked for before this view was made, as when it takes over from a
+    // tree: shown once it is laid out.
+    if (widget.spanSought?.value != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _goToSpan();
+      });
+    }
     _focus.addListener(_focusChanged);
     // Handles and the menu move with the text.
     _vertical.addListener(_scrolled);
@@ -225,6 +241,10 @@ class _DocumentViewState extends State<DocumentView> {
       old.lineSought?.removeListener(_goToLine);
       widget.lineSought?.addListener(_goToLine);
     }
+    if (old.spanSought != widget.spanSought) {
+      old.spanSought?.removeListener(_goToSpan);
+      widget.spanSought?.addListener(_goToSpan);
+    }
     if (old.document != widget.document) {
       _search?.cancel();
       _anchor = _extent = _from = _to = _caret = null;
@@ -247,6 +267,7 @@ class _DocumentViewState extends State<DocumentView> {
   void dispose() {
     _input?.close();
     widget.lineSought?.removeListener(_goToLine);
+    widget.spanSought?.removeListener(_goToSpan);
     _indexing?.cancel();
     _search?.cancel();
     _searchSoon?.cancel();
@@ -834,12 +855,28 @@ class _DocumentViewState extends State<DocumentView> {
   void _wordTouch(Offset local, double gutter, double gap) {
     _focus.requestFocus();
     final (start, end) = _wordAt(local, gutter, gap);
+    _pressedWord = (start, end);
     _select(start, end);
     setState(() {
       _byTouch = true;
       _menuAt = null;
       _menuOverSelection = true;
     });
+  }
+
+  /// Dragging on after a long press: the selection runs from the word
+  /// pressed to where the finger is, whichever way it goes. The menu
+  /// waits for the finger to lift.
+  void _dragFromWord(Offset local, double gutter, double gap) {
+    final word = _pressedWord;
+    if (word == null) return;
+    final at = _offsetAt(local, gutter, gap);
+    if (at < word.$1) {
+      _select(word.$2, at);
+    } else {
+      _select(word.$1, math.max(at, word.$2));
+    }
+    setState(() => _menuOverSelection = false);
   }
 
   /// Moves one end of a selection made by touch to where its handle is
@@ -953,6 +990,15 @@ class _DocumentViewState extends State<DocumentView> {
     if (!_vertical.hasClients) return;
     final v = _vertical.position;
     v.jumpTo((v.pixels + by).clamp(0, v.maxScrollExtent));
+  }
+
+  void _goToSpan() {
+    final span = widget.spanSought?.value;
+    if (span == null) return;
+    final len = _doc.info().len;
+    _focus.requestFocus();
+    _select(span.start.clamp(0, len), span.end.clamp(0, len));
+    _reveal(span.start.clamp(0, len));
   }
 
   void _goToLine() {
@@ -1887,6 +1933,13 @@ class _DocumentViewState extends State<DocumentView> {
                     onTapUp: (d) => _tapTouch(d.localPosition, gutter, gap),
                     onLongPressStart: (d) =>
                         _wordTouch(d.localPosition, gutter, gap),
+                    onLongPressMoveUpdate: (d) =>
+                        _dragFromWord(d.localPosition, gutter, gap),
+                    onLongPressEnd: (_) {
+                      if (_pressedWord != null) {
+                        setState(() => _menuOverSelection = true);
+                      }
+                    },
                     child: MouseRegion(
                       cursor: SystemMouseCursors.text,
                       child: ListView.builder(
@@ -2452,6 +2505,7 @@ class DocumentText extends StatefulWidget {
     this.language,
     this.lineSought,
     this.onLink,
+    this.spanSought,
   });
 
   final String text;
@@ -2459,6 +2513,7 @@ class DocumentText extends StatefulWidget {
   final CodeLanguage? language;
   final ValueListenable<int?>? lineSought;
   final ValueChanged<Uri>? onLink;
+  final ValueListenable<DocSpan?>? spanSought;
 
   @override
   State<DocumentText> createState() => _DocumentTextState();
@@ -2499,5 +2554,6 @@ class _DocumentTextState extends State<DocumentText> {
     language: widget.language,
     lineSought: widget.lineSought,
     onLink: widget.onLink,
+    spanSought: widget.spanSought,
   );
 }

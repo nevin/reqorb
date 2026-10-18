@@ -6,6 +6,13 @@ the new version when it is tagged.
 
 ## Unreleased
 
+- In a JSON tree, a value can be shown in the text: tap a value, or the button at
+  the end of its row, and the text opens with it selected.
+- On iPad, dragging on after a long press selects as the finger goes.
+- On an iPad with 3 GB of memory or less, such as an iPad Air 2, responses go to a
+  file from 8 MB rather than 16. Formatting JSON, or indenting a large response,
+  first checks there is room for it, and a full disk is said plainly.
+
 - Colours in the large-file viewer stay right where a string or a comment runs from
   one screenful into the next, and through a long line split over rows: a 44 MB
   line of JSON is coloured as it reads at any point along it.

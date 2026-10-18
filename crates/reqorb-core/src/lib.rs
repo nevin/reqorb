@@ -71,7 +71,8 @@ pub use model::{
 };
 pub use redact::{REDACTED, redact_collection, redact_environment, redact_exchanges, redact_text};
 pub use spill::{
-    PREVIEW_BYTES, READ_LIMIT, SPILL_BYTES, clean_spilled, new_spill_file, read_spilled, spill_dir,
+    PREVIEW_BYTES, READ_LIMIT, SPILL_BYTES, clean_spilled, io_problem, new_spill_file,
+    read_spilled, set_spill_bytes, spill_bytes, spill_dir,
 };
 pub use vars::{Resolved, resolve};
 pub use vault::{

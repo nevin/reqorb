@@ -558,7 +558,8 @@ goes, and `Enter` steps through them.
 
 JSON, whatever its size, can be shown as a **Tree** (beside **Pretty** and **Raw** in a
 response, and under the view button of **Open file…**): each object or array opens to
-list what is in it, 200 at a time, and only that much of the text is read. A large
+list what is in it, 200 at a time, and only that much of the text is read. Tapping a
+value, or the button at the end of its row, shows it selected in the text. A large
 JSON response is indented for **Pretty** a megabyte at a time, into a file of its own,
 with a bar showing how far it has got. A binary response or file can be shown as its
 bytes in hexadecimal, sixteen to a row, with the characters beside them.
@@ -583,6 +584,7 @@ bytes in hexadecimal, sixteen to a row, with the characters beside them.
 - On iPad a picked file is a copy, so it is exported (up to 64 MB) rather than saved.
 - With a finger, a tap places the caret, and a long press or a double tap selects a
   word, with handles to drag either end and a menu to cut, copy, paste or select all.
+  Dragging on after a long press selects as the finger goes.
   A right click brings up the same menu. With VoiceOver on, each line is read with its
   number, and moving the caret reads the line it moves to.
 

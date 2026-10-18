@@ -376,4 +376,29 @@ void main() {
     expect(find.textContaining('00 01 41 ff'), findsOneWidget);
     expect(find.textContaining('..A.'), findsOneWidget);
   });
+
+  testWidgets('a value picked in the tree is shown as received', (
+    tester,
+  ) async {
+    await show(
+      tester,
+      headers: const [Header(name: 'content-type', value: 'application/json')],
+      body: '{"a": [1, 2], "b": "x"}',
+    );
+    await tester.tap(find.byKey(const Key('body-tree')));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+    // Row 2 is "b", after the top and "a".
+    await tester.tap(find.byKey(const Key('responseTree-show-2')));
+    await tester.pumpAndSettle();
+    final field = tester.widget<TextField>(
+      find.byKey(const Key('responseBody')),
+    );
+    final selection = field.controller!.selection;
+    expect(
+      field.controller!.text.substring(selection.start, selection.end),
+      '"x"',
+    );
+  });
 }

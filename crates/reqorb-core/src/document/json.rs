@@ -351,7 +351,12 @@ pub(super) fn format(
     progress: &mut dyn FnMut(u64),
 ) -> Result<(), Error> {
     const CHUNK: u64 = 1024 * 1024;
-    let failed = |e: std::io::Error| Error::Io(format!("the JSON could not be written: {e}"));
+    let failed = |e: std::io::Error| {
+        Error::Io(format!(
+            "the JSON could not be written: {}",
+            crate::spill::io_problem(&e)
+        ))
+    };
     let mut out = std::io::BufWriter::with_capacity(256 * 1024, out);
     let mut stack: Vec<u8> = Vec::new();
     let mut in_string = false;

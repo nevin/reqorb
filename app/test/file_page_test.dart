@@ -219,6 +219,48 @@ void main() {
     expect(find.text('249: 249'), findsOneWidget);
   }, variant: _mac);
 
+  testWidgets('a value picked in the tree is shown in the text', (
+    tester,
+  ) async {
+    File(path).writeAsStringSync('{"name": "reqorb", "n": 12345}');
+    await start(tester);
+    await tester.tap(find.byKey(const Key('file-view')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('file-view-tree')));
+    await settle(tester);
+    // Row 2 is "n", after the top and "name".
+    await tester.tap(find.byKey(const Key('file-tree-show-2')));
+    await settle(tester);
+    expect(find.byKey(const Key('file')), findsOneWidget);
+    expect(find.textContaining('5 B selected'), findsOneWidget);
+  }, variant: _mac);
+
+  testWidgets('formatting says so when there is no room for it', (
+    tester,
+  ) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('reqorb/device'),
+      (call) async => call.method == 'freeSpace' ? 1024 * 1024 : null,
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('reqorb/device'),
+        null,
+      ),
+    );
+    File(path).writeAsStringSync('[${List.filled(200000, '1').join(',')}]');
+    await start(tester);
+    await tester.tap(find.byKey(const Key('file-view')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('file-format')));
+    await settle(tester);
+    expect(
+      find.textContaining('Not enough free space to format notes.json'),
+      findsWidgets,
+    );
+    expect(find.byKey(const Key('file-rewriting')), findsNothing);
+  }, variant: _mac);
+
   testWidgets('JSON is formatted or minified, and saved over the file', (
     tester,
   ) async {

@@ -927,8 +927,13 @@ impl SaveJob {
     /// over instead, by `write_over`.
     pub fn write(&self) -> Result<(), Error> {
         let target = &self.target;
-        let failed =
-            |e: io::Error| Error::Io(format!("{} could not be saved: {e}", target.display()));
+        let failed = |e: io::Error| {
+            Error::Io(format!(
+                "{} could not be saved: {}",
+                target.display(),
+                crate::spill::io_problem(&e)
+            ))
+        };
         let name = target
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())

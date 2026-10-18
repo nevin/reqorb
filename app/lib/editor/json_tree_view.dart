@@ -44,7 +44,8 @@ class _Entry {
 /// of JSON is explored as easily as a kilobyte.
 ///
 /// Keyed `<name>`; each row `<name>-row-<n>`, its arrow `<name>-open-<n>`,
-/// and the row bringing more `<name>-more-<n>`.
+/// its button showing it in the text `<name>-show-<n>`, and the row
+/// bringing more `<name>-more-<n>`.
 class JsonTreeView extends StatefulWidget {
   const JsonTreeView({
     super.key,
@@ -284,6 +285,18 @@ class _JsonTreeViewState extends State<JsonTreeView> {
                 style: mono.copyWith(color: scheme.onSurface),
               ),
             ),
+            if (widget.onShow != null)
+              IconButton(
+                key: Key('$name-show-$index'),
+                tooltip: 'Show in the text',
+                iconSize: 16,
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 24),
+                color: scheme.onSurfaceVariant,
+                icon: const Icon(Icons.subject),
+                onPressed: () => widget.onShow!(node),
+              ),
           ],
         ),
       ),
