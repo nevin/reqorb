@@ -53,7 +53,9 @@ void main() {
     await tester.pump();
     expect(find.text(record), findsWidgets);
     final opened = DateTime.now().difference(started);
-    expect(opened, lessThan(const Duration(seconds: 1)));
+    // A guard against reading the whole file to open it, which takes many
+    // seconds, rather than a benchmark: CI machines are slower than ours.
+    expect(opened, lessThan(const Duration(seconds: 5)));
 
     // Every line is found in the background.
     for (var i = 0; i < 100 && document.info().indexingDone == false; i++) {
