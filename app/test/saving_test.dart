@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:reqorb/src/rust/api/core.dart';
 import 'package:reqorb/workspace/workspace_store.dart';
 
 import 'fake_engine.dart';
@@ -44,4 +46,51 @@ void main() {
       expect(engine.saved!.environments, hasLength(1));
     });
   });
+
+  test('saves run one after another, the latest written last', () async {
+    final engine = _SlowEngine();
+    final store = WorkspaceStore('unused.json', engine: engine);
+
+    store.addEnvironment();
+    final first = store.flush();
+    await pumpEventQueue();
+    expect(engine.writing, 1);
+
+    // Changed again while the first save is still being written.
+    store.addEnvironment();
+    final second = store.flush();
+    await pumpEventQueue();
+    expect(engine.writing, 1, reason: 'the second waits for the first');
+
+    engine.finish();
+    await pumpEventQueue();
+    engine.finish();
+    await Future.wait([first, second]);
+    expect(engine.most, 1);
+    expect(engine.saved!.environments, hasLength(2));
+  });
+}
+
+/// Writes a workspace only when told to, so that saves can overlap.
+class _SlowEngine extends FakeEngine {
+  final _waiting = <Completer<void>>[];
+  int writing = 0;
+  int most = 0;
+
+  void finish() => _waiting.removeAt(0).complete();
+
+  @override
+  Future<String?> saveWorkspace({
+    required String path,
+    required Workspace workspace,
+  }) async {
+    writing++;
+    if (writing > most) most = writing;
+    final done = Completer<void>();
+    _waiting.add(done);
+    await done.future;
+    saved = workspace;
+    writing--;
+    return null;
+  }
 }

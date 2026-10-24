@@ -221,7 +221,16 @@ class WorkspaceStore extends ChangeNotifier {
   // The save in progress, so that [flush] can wait for one the timer started.
   Future<void>? _saving;
 
-  Future<void> _save() => _saving = _write();
+  /// Starts a save once the one under way is done, so that two are never
+  /// written at once and an older one cannot finish last. Each writes the
+  /// workspace as it is when it starts, which is the latest.
+  Future<void> _save() {
+    final before = _saving;
+    return _saving = () async {
+      await before;
+      await _write();
+    }();
+  }
 
   Future<void> _write() async {
     try {
