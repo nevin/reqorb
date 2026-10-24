@@ -185,16 +185,15 @@ impl Source {
         let Bytes::File { file, .. } = &self.bytes else {
             return Ok(());
         };
-        let copy = std::env::temp_dir().join(format!(
-            "reqorb-original-{}-{}",
+        let copy = crate::spill::originals_dir().join(format!(
+            "original-{}-{}",
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
         // Held while copying, so that nothing reads the file meanwhile.
         let mut held = write_lock(file);
         let kept = (|| {
-            // On APFS this clones the file, taking no time or space.
-            fs::copy(path, &copy)?;
+            crate::spill::private_copy(path, &copy)?;
             let opened = File::open(&copy)?;
             if opened.metadata()?.len() != self.len {
                 return Err(io::Error::other("the copy came out a different size"));
