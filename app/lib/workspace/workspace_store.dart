@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 import 'package:reqorb/bridge/engine.dart';
 import 'package:reqorb/shared/folders.dart';
@@ -48,6 +50,9 @@ class WorkspaceStore extends ChangeNotifier {
     cookies: const [],
   );
   Timer? _saveTimer;
+
+  /// Set once disposed, when a last save may still be finishing.
+  bool _disposed = false;
 
   /// The last load or save failure, if any.
   String? error;
@@ -195,6 +200,24 @@ class WorkspaceStore extends ChangeNotifier {
     await _saving;
   }
 
+  /// Saves at once whenever the app may be about to stop: when it loses
+  /// focus, is hidden or sent to the background, and before it quits.
+  /// Otherwise a change made just before would wait for a timer that may
+  /// never fire.
+  AppLifecycleListener saveWhenLeaving() {
+    void now() => unawaited(flush());
+    return AppLifecycleListener(
+      onInactive: now,
+      onHide: now,
+      onPause: now,
+      onDetach: now,
+      onExitRequested: () async {
+        await flush();
+        return AppExitResponse.exit;
+      },
+    );
+  }
+
   // The save in progress, so that [flush] can wait for one the timer started.
   Future<void>? _saving;
 
@@ -213,11 +236,11 @@ class WorkspaceStore extends ChangeNotifier {
       if (why != unprotected || locked != lockedSecrets) {
         unprotected = why;
         lockedSecrets = locked;
-        notifyListeners();
+        if (!_disposed) notifyListeners();
       }
     } catch (e) {
       error = e.toString();
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
   }
 
@@ -1023,7 +1046,12 @@ class WorkspaceStore extends ChangeNotifier {
 
   @override
   void dispose() {
-    _saveTimer?.cancel();
+    _disposed = true;
+    // A change still waiting to be written is written, not dropped.
+    if (_saveTimer?.isActive ?? false) {
+      _saveTimer!.cancel();
+      unawaited(_save());
+    }
     super.dispose();
   }
 }
