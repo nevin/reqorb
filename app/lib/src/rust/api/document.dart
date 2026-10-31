@@ -8,7 +8,7 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `keep`, `lock`, `node`, `shared`, `with`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
 
 /// A new document holding `text`, not saved anywhere.
 int docFromText({required String text}) =>
@@ -81,6 +81,30 @@ String docText({required int id, required int start, required int end}) =>
       start: start,
       end: end,
     );
+
+/// The bracket just before `at`, or at it, and its partner, when neither
+/// is quoted and they are near enough.
+DocSpan? docBracketPair({
+  required int id,
+  required int at,
+  required DocQuoting quoting,
+}) => RustLib.instance.api.crateApiDocumentDocBracketPair(
+  id: id,
+  at: at,
+  quoting: quoting,
+);
+
+/// What, put before the text from `at`, has it coloured as it would be
+/// with all that comes before it.
+String docOpenerAt({
+  required int id,
+  required int at,
+  required DocQuoting quoting,
+}) => RustLib.instance.api.crateApiDocumentDocOpenerAt(
+  id: id,
+  at: at,
+  quoting: quoting,
+);
 
 /// Puts `text` in place of bytes `start..end`. With `typing`, text that
 /// carries straight on from the last edit joins it as one step of undo.
@@ -403,6 +427,10 @@ class DocQuery {
           caseSensitive == other.caseSensitive &&
           wholeWord == other.wholeWord;
 }
+
+/// How a language quotes text and writes comments, for pairing brackets
+/// and colouring part of a document.
+enum DocQuoting { json, javaScript, source, script, graphql, xml }
 
 /// One row of a document as shown.
 class DocRow {
