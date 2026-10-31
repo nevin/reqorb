@@ -113,7 +113,7 @@ pub(crate) fn private_dir(name: &str) -> PathBuf {
 
 /// This user's cache folder, as the XDG convention has it, from the
 /// environment variables `var` reads; none when neither is set.
-#[cfg(any(test, all(unix, not(target_vendor = "apple"))))]
+#[cfg(all(unix, any(test, not(target_vendor = "apple"))))]
 fn cache_dir(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> Option<PathBuf> {
     let absolute = |key: &str| var(key).map(PathBuf::from).filter(|p| p.is_absolute());
     absolute("XDG_CACHE_HOME").or_else(|| absolute("HOME").map(|home| home.join(".cache")))
@@ -342,6 +342,9 @@ mod tests {
         assert_eq!(preview(&[b'a', 0xff, b'b']), "a\u{fffd}b");
     }
 
+    // Only Unix keeps a cache folder this way; elsewhere `/c` is not even
+    // an absolute path.
+    #[cfg(unix)]
     #[test]
     fn the_cache_folder_follows_xdg_then_home() {
         let env = |pairs: &'static [(&'static str, &'static str)]| {
