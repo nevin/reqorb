@@ -24,6 +24,8 @@ Future<void> main() async {
     store.restoreWorkingDir(folders),
     store.restoreLinks(folders),
   ]);
+  // Kept for as long as the app runs.
+  store.saveWhenLeaving();
   runApp(ReqorbApp(store: store));
 }
 
