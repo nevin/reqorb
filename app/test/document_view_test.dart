@@ -149,6 +149,57 @@ void main() {
     expect(find.text('line 10000'), findsOneWidget);
   });
 
+  testWidgets('the numbers stay in view, beside their rows', (tester) async {
+    final lines = [
+      for (var i = 1; i <= 400; i++) 'line $i ${'x' * 300} end $i',
+    ];
+    await show(tester, MemoryDocument(lines.join('\n')), editable: true);
+    final view = tester.getRect(find.byType(DocumentView));
+
+    // Scrolled down and far across.
+    final rows = find.descendant(
+      of: find.byKey(const Key('doc')),
+      matching: find.byType(Scrollable),
+    );
+    tester.state<ScrollableState>(rows.first).position.jumpTo(2000);
+    await tester.pump();
+    final across = Scrollable.of(
+      tester.element(rows.first),
+      axis: Axis.horizontal,
+    ).position;
+    across.jumpTo(across.maxScrollExtent);
+    await tester.pump();
+
+    final shown = <int>[];
+    for (var row = 0; row < 400; row++) {
+      final numbered = find.byKey(ValueKey('doc-number-$row'));
+      final text = find.byKey(ValueKey('doc-row-$row'));
+      if (numbered.evaluate().isEmpty || text.evaluate().isEmpty) continue;
+      final place = tester.getRect(numbered);
+      if (place.top < view.top || place.bottom > view.bottom) continue;
+      expect(number(tester, row), '${row + 1}');
+      expect(place.left, inInclusiveRange(view.left, view.left + 10));
+      expect(
+        place.center.dy,
+        tester.getRect(text).center.dy,
+        reason: 'row $row',
+      );
+      shown.add(row);
+    }
+    expect(shown.length, greaterThan(5));
+    expect(shown.first, greaterThan(50));
+
+    // A click on the text, scrolled across, puts the caret where it is.
+    final row = shown[shown.length ~/ 2];
+    final line = lines[row];
+    await tester.tapAt(
+      at(tester, line, row, line.length - 1),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+    expect(status(tester), startsWith('Ln ${row + 1}, Col ${line.length}'));
+  });
+
   testWidgets('a long line goes on over rows without numbers', (tester) async {
     final long = List.filled(3000, 'ab').join(',');
     await show(tester, MemoryDocument('first\n$long\nlast'));

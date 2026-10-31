@@ -103,6 +103,9 @@ class DocumentView extends StatefulWidget {
 class _DocumentViewState extends State<DocumentView> {
   final _vertical = ScrollController();
   final _horizontal = ScrollController();
+
+  /// The line numbers' own list, kept where the text's is.
+  final _numbers = ScrollController();
   final _focus = FocusNode(debugLabel: 'document');
   final _query = TextEditingController();
   final _queryFocus = FocusNode(debugLabel: 'document find');
@@ -223,7 +226,15 @@ class _DocumentViewState extends State<DocumentView> {
   }
 
   void _scrolled() {
+    _followText();
     if (_byTouch || _menuOverSelection) setState(() {});
+  }
+
+  /// Scrolls the line numbers to where the text is.
+  void _followText() {
+    if (!_numbers.hasClients || !_vertical.hasClients) return;
+    final to = _vertical.offset.clamp(0.0, _numbers.position.maxScrollExtent);
+    if (_numbers.offset != to) _numbers.jumpTo(to);
   }
 
   void _hideMenu() {
@@ -275,6 +286,7 @@ class _DocumentViewState extends State<DocumentView> {
     _horizontal.removeListener(_scrolled);
     _vertical.dispose();
     _horizontal.dispose();
+    _numbers.dispose();
     _focus.dispose();
     _query.dispose();
     _queryFocus.dispose();
@@ -541,7 +553,23 @@ class _DocumentViewState extends State<DocumentView> {
 
   bool get _showsCaret => widget.editable && _focus.hasPrimaryFocus;
 
-  Widget _row(BuildContext context, int index, double gutter, double gap) {
+  /// The number beside row [index]: its line's, on the line's first row.
+  Widget _number(BuildContext context, int index) {
+    final row = _rowAt(index);
+    if (row == null) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    return Text(
+      semanticsLabel: row.segment == 0 ? 'Line ${row.line + 1}' : '',
+      row.segment == 0 ? '${row.line + 1}' : '',
+      key: ValueKey('${widget.name}-number-$index'),
+      textAlign: TextAlign.right,
+      style: _style.copyWith(
+        color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
+      ),
+    );
+  }
+
+  Widget _row(BuildContext context, int index, double gap) {
     final row = _rowAt(index);
     if (row == null) return const SizedBox.shrink();
     final theme = Theme.of(context);
@@ -558,18 +586,6 @@ class _DocumentViewState extends State<DocumentView> {
     );
     return Row(
       children: [
-        SizedBox(
-          width: gutter,
-          child: Text(
-            semanticsLabel: row.segment == 0 ? 'Line ${row.line + 1}' : '',
-            row.segment == 0 ? '${row.line + 1}' : '',
-            key: ValueKey('${widget.name}-number-$index'),
-            textAlign: TextAlign.right,
-            style: _style.copyWith(
-              color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
-            ),
-          ),
-        ),
         SizedBox(width: gap),
         Expanded(
           child: marks.isEmpty
@@ -696,7 +712,9 @@ class _DocumentViewState extends State<DocumentView> {
     return (_doc.offsetOf(row, start), _doc.offsetOf(row, end));
   }
 
-  void _down(PointerDownEvent event, double gutter, double gap) {
+  /// A pointer going down at [local], a place in the text as if the
+  /// numbers scrolled across with it.
+  void _down(PointerDownEvent event, Offset local, double gutter, double gap) {
     // A finger or a pen is followed by the gestures below.
     if (event.kind == PointerDeviceKind.touch ||
         event.kind == PointerDeviceKind.stylus) {
@@ -704,14 +722,14 @@ class _DocumentViewState extends State<DocumentView> {
     }
     if (event.buttons == kSecondaryButton) {
       _focus.requestFocus();
-      final offset = _offsetAt(event.localPosition, gutter, gap);
+      final offset = _offsetAt(local, gutter, gap);
       final selection = _selection;
       if (selection == null || offset < selection.$1 || offset > selection.$2) {
         _select(offset, offset);
       }
       setState(() {
         _menuOverSelection = false;
-        _menuAt = event.localPosition - Offset(_horizontalOffset, 0);
+        _menuAt = local - Offset(_horizontalOffset, 0);
       });
       return;
     }
@@ -722,11 +740,11 @@ class _DocumentViewState extends State<DocumentView> {
     final now = DateTime.now();
     final again =
         now.difference(_lastDown) < kDoubleTapTimeout &&
-        (event.localPosition - _lastDownAt).distance < kDoubleTapSlop;
+        (local - _lastDownAt).distance < kDoubleTapSlop;
     _clicks = again ? _clicks % 3 + 1 : 1;
     _lastDown = now;
-    _lastDownAt = event.localPosition;
-    final at = event.localPosition;
+    _lastDownAt = local;
+    final at = local;
     final keyboard = HardwareKeyboard.instance;
     if (widget.onLink != null &&
         (keyboard.isMetaPressed || keyboard.isControlPressed)) {
@@ -844,7 +862,13 @@ class _DocumentViewState extends State<DocumentView> {
     setState(() => _menuOverSelection = false);
   }
 
-  void _move(PointerMoveEvent event, double gutter, double gap, double height) {
+  void _move(
+    PointerMoveEvent event,
+    Offset local,
+    double gutter,
+    double gap,
+    double height,
+  ) {
     // A finger drags to scroll; it selects with handles, which are to come.
     if (event.buttons != kPrimaryButton ||
         _clicks != 1 ||
@@ -853,7 +877,7 @@ class _DocumentViewState extends State<DocumentView> {
       return;
     }
     // Dragging past the top or bottom scrolls on.
-    final y = event.localPosition.dy;
+    final y = local.dy;
     if (_vertical.hasClients && (y < 0 || y > height)) {
       final position = _vertical.position;
       position.jumpTo(
@@ -863,7 +887,7 @@ class _DocumentViewState extends State<DocumentView> {
         ),
       );
     }
-    _select(_anchor!, _offsetAt(event.localPosition, gutter, gap));
+    _select(_anchor!, _offsetAt(local, gutter, gap));
   }
 
   /// Copies the selection; false if there is none, or it is too big.
@@ -1893,7 +1917,10 @@ class _DocumentViewState extends State<DocumentView> {
     final view = LayoutBuilder(
       key: _viewKey,
       builder: (context, constraints) {
-        final width = math.max(constraints.maxWidth, gutter + gap + textWidth);
+        final width = math.max(constraints.maxWidth - gutter, gap + textWidth);
+        // Where a point in the text is as if the numbers scrolled across
+        // with it, as the view works places out from.
+        Offset withGutter(Offset local) => local + Offset(gutter, 0);
         // The scrollbar down the side stays in view however far it is
         // scrolled across; it is for the list, one level in.
         final scrolled = Scrollbar(
@@ -1910,9 +1937,15 @@ class _DocumentViewState extends State<DocumentView> {
                 width: width,
                 height: constraints.maxHeight,
                 child: Listener(
-                  onPointerDown: (e) => _down(e, gutter, gap),
-                  onPointerMove: (e) =>
-                      _move(e, gutter, gap, constraints.maxHeight),
+                  onPointerDown: (e) =>
+                      _down(e, withGutter(e.localPosition), gutter, gap),
+                  onPointerMove: (e) => _move(
+                    e,
+                    withGutter(e.localPosition),
+                    gutter,
+                    gap,
+                    constraints.maxHeight,
+                  ),
                   child: GestureDetector(
                     supportedDevices: const {
                       PointerDeviceKind.touch,
@@ -1920,11 +1953,12 @@ class _DocumentViewState extends State<DocumentView> {
                     },
                     // A double tap is told apart by hand: a recognizer for
                     // it would hold every single tap back until it knew.
-                    onTapUp: (d) => _tapTouch(d.localPosition, gutter, gap),
+                    onTapUp: (d) =>
+                        _tapTouch(withGutter(d.localPosition), gutter, gap),
                     onLongPressStart: (d) =>
-                        _wordTouch(d.localPosition, gutter, gap),
+                        _wordTouch(withGutter(d.localPosition), gutter, gap),
                     onLongPressMoveUpdate: (d) =>
-                        _dragFromWord(d.localPosition, gutter, gap),
+                        _dragFromWord(withGutter(d.localPosition), gutter, gap),
                     onLongPressEnd: (_) {
                       if (_pressedWord != null) {
                         setState(() => _menuOverSelection = true);
@@ -1938,8 +1972,7 @@ class _DocumentViewState extends State<DocumentView> {
                         padding: const EdgeInsets.symmetric(vertical: _padding),
                         itemExtent: _rowHeight,
                         itemCount: _info.rowCount,
-                        itemBuilder: (context, row) =>
-                            _row(context, row, gutter, gap),
+                        itemBuilder: (context, row) => _row(context, row, gap),
                       ),
                     ),
                   ),
@@ -1948,6 +1981,29 @@ class _DocumentViewState extends State<DocumentView> {
             ),
           ),
         );
+        // The numbers stay in view however far the text is scrolled
+        // across; they follow it up and down, and scroll it from there.
+        final numbers = SizedBox(
+          width: gutter,
+          child: Listener(
+            onPointerSignal: (e) {
+              if (e is PointerScrollEvent) _scrollBy(e.scrollDelta.dy);
+            },
+            onPointerPanZoomUpdate: (e) => _scrollBy(-e.panDelta.dy),
+            child: GestureDetector(
+              onVerticalDragUpdate: (d) => _scrollBy(-d.delta.dy),
+              child: ListView.builder(
+                controller: _numbers,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(vertical: _padding),
+                itemExtent: _rowHeight,
+                itemCount: _info.rowCount,
+                itemBuilder: _number,
+              ),
+            ),
+          ),
+        );
+        WidgetsBinding.instance.addPostFrameCallback((_) => _followText());
         return Semantics(
           container: true,
           textField: widget.editable,
@@ -1957,7 +2013,13 @@ class _DocumentViewState extends State<DocumentView> {
           child: Stack(
             clipBehavior: Clip.hardEdge,
             children: [
-              scrolled,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  numbers,
+                  Expanded(child: scrolled),
+                ],
+              ),
               ..._handles(scheme),
               ?_menu(theme, constraints),
             ],
