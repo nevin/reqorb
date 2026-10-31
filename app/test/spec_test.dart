@@ -851,6 +851,8 @@ paths:
       find.text('      responses: {"200": {description: OK}}'),
       findsOneWidget,
     );
+    // Marked changed once typing pauses and the text is written back.
+    await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('• big.yaml'), findsOneWidget);
   });
 
