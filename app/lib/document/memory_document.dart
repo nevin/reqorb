@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:reqorb/document/json_scan.dart';
+import 'package:reqorb/document/lex.dart' as lex;
 import 'package:reqorb/document/text_document.dart';
 
 /// A document held whole in Dart, which works as the Rust engine's does
@@ -400,6 +401,41 @@ class MemoryDocument implements TextDocument {
       done: true,
       count: found.length,
     );
+  }
+
+  @override
+  DocSpan? bracketPair(int at, DocQuoting quoting) {
+    at = at.clamp(0, _bytes.length);
+    final back = math.max(0, at - lex.lexReach);
+    final from = _lineAfter(back, at) ?? back;
+    final to = math.min(_bytes.length, at + lex.lexReach);
+    final pair = lex.bracketPair(
+      Uint8List.sublistView(_bytes, from, to),
+      at - from,
+      quoting,
+    );
+    return pair == null
+        ? null
+        : DocSpan(start: from + pair.$1, end: from + pair.$2);
+  }
+
+  @override
+  String openerAt(int at, DocQuoting quoting) {
+    at = at.clamp(0, _bytes.length);
+    final from = _lineAfter(math.max(0, at - lex.lexReach), at);
+    if (from == null) return '';
+    return lex.openerAfter(Uint8List.sublistView(_bytes, from, at), quoting);
+  }
+
+  /// Where a scan back from [limit] to [from] starts: at [from] at the
+  /// start of the text, otherwise where the next line starts, as the
+  /// middle of a line may be the middle of a string; none if no line
+  /// starts by [limit].
+  int? _lineAfter(int from, int limit) {
+    if (from == 0) return 0;
+    final line = lineOf(from);
+    final next = line + 1 < _lineCount ? _lineStart(line + 1) : _bytes.length;
+    return next <= limit ? next : null;
   }
 
   @override

@@ -362,31 +362,30 @@ class _DocumentViewState extends State<DocumentView> {
     return spans[row - block * _block];
   }
 
-  /// Languages in which a comment, or a tag's text, can run over lines,
-  /// so that a block's colours depend on what came before it.
-  static const _spansLines = {
-    CodeLanguage.javascript,
-    CodeLanguage.source,
-    CodeLanguage.xml,
-    CodeLanguage.graphql,
+  /// How the language shown quotes text and writes comments, for the
+  /// engine to pair brackets and tell what a block starts inside; none for
+  /// plain words.
+  DocQuoting? get _quoting => switch (_language) {
+    CodeLanguage.json => DocQuoting.json,
+    CodeLanguage.javascript => DocQuoting.javaScript,
+    CodeLanguage.source => DocQuoting.source,
+    CodeLanguage.script => DocQuoting.script,
+    CodeLanguage.graphql => DocQuoting.graphql,
+    CodeLanguage.xml => DocQuoting.xml,
+    _ => null,
   };
 
-  /// How far before a block is read to colour it from the right start.
-  static const _lookBack = 64 * 1024;
-
   /// What to colour before [first], the first row of a block, so that
-  /// the block starts in the right state: an opening quote for a row
-  /// that begins inside a string, or, where comments span lines, the
-  /// lines before it, as far as [_lookBack].
+  /// the block starts in the right state: an opening quote for a row that
+  /// begins inside a string, or, where strings and comments can run over
+  /// lines, the opening of the one it begins inside.
   String _before(DocRow first) {
     if (first.segment > 0) return first.quoted ? '"' : '';
-    if (!_spansLines.contains(_language) || first.start == 0) return '';
-    final from = math.max(0, first.start - _lookBack);
-    final text = _doc.text(from, first.start);
-    if (from == 0) return text;
-    // From a line's start, not the middle of one.
-    final line = text.indexOf('\n');
-    return line < 0 ? '' : text.substring(line + 1);
+    final quoting = _quoting;
+    if (quoting == null || quoting == DocQuoting.json || first.start == 0) {
+      return '';
+    }
+    return _doc.openerAt(first.start, quoting);
   }
 
   List<TextSpan> _colour(List<DocRow> rows, Brightness brightness) {
@@ -623,68 +622,13 @@ class _DocumentViewState extends State<DocumentView> {
     );
   }
 
-  static const _opens = '{[(';
-  static const _closes = '}])';
-
-  /// How far to look for a bracket's partner, either way.
-  static const _reach = 64 * 1024;
-
-  /// The bracket just before or at [at] and its partner, in bytes, when
-  /// neither is in a string or a comment.
+  /// The bracket beside [at] and its partner, in bytes, when neither is
+  /// in a string or a comment.
   (int, int)? _bracketsAt(int at) {
-    if (_language == CodeLanguage.plain) return null;
-    final len = _info.len;
-    final near = _doc.text(math.max(0, at - 1), math.min(len, at + 1));
-    if (!near.split('').any((c) => _opens.contains(c) || _closes.contains(c))) {
-      return null;
-    }
-    final from = math.max(0, at - _reach);
-    final text = _doc.text(from, math.min(len, at + _reach));
-    // Where [at] is in the text, as UTF-16 units.
-    final caret = unitsOf(text, at - from);
-    final tokens = tokenize(text, _language);
-    bool quoted(int i) {
-      var low = 0, high = tokens.length - 1;
-      while (low <= high) {
-        final mid = (low + high) >> 1;
-        final t = tokens[mid];
-        if (i < t.start) {
-          high = mid - 1;
-        } else if (i >= t.end) {
-          low = mid + 1;
-        } else {
-          return t.kind == TokenKind.string ||
-              t.kind == TokenKind.comment ||
-              t.kind == TokenKind.key;
-        }
-      }
-      return false;
-    }
-
-    // The one just typed, before the caret, comes first.
-    for (final i in [caret - 1, caret]) {
-      if (i < 0 || i >= text.length) continue;
-      final char = text[i];
-      final opens = _opens.indexOf(char);
-      final closes = _closes.indexOf(char);
-      if ((opens < 0 && closes < 0) || quoted(i)) continue;
-      final forward = opens >= 0;
-      final own = char.codeUnitAt(0);
-      final other = (forward ? _closes[opens] : _opens[closes]).codeUnitAt(0);
-      var depth = 0;
-      for (var j = i; j >= 0 && j < text.length; j += forward ? 1 : -1) {
-        final unit = text.codeUnitAt(j);
-        if ((unit != own && unit != other) || quoted(j)) continue;
-        depth += unit == own ? 1 : -1;
-        if (depth == 0) {
-          final a = from + utf8Length(text, 0, forward ? i : j);
-          final b = from + utf8Length(text, 0, forward ? j : i);
-          return (a, b);
-        }
-      }
-      return null;
-    }
-    return null;
+    final quoting = _quoting;
+    if (quoting == null) return null;
+    final pair = _doc.bracketPair(at, quoting);
+    return pair == null ? null : (pair.start, pair.end);
   }
 
   void _selectNothing() {

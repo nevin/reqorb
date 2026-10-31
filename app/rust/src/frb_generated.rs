@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1987943147;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1570196396;
 
 // Section: executor
 
@@ -422,6 +422,42 @@ fn wire__crate__api__core__default_settings_impl(
             deserializer.end();
             transform_result_sse::<_, ()>((move || {
                 let output_ok = Ok::<_, ()>(crate::api::core::default_settings())?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__document__doc_bracket_pair_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "doc_bracket_pair",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_id = <u32>::sse_decode(&mut deserializer);
+            let api_at = <u64>::sse_decode(&mut deserializer);
+            let api_quoting = <crate::api::document::DocQuoting>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Ok::<_, ()>(crate::api::document::doc_bracket_pair(
+                    api_id,
+                    api_at,
+                    api_quoting,
+                ))?;
                 std::result::Result::Ok(output_ok)
             })())
         },
@@ -975,6 +1011,42 @@ fn wire__crate__api__document__doc_open_impl(
                     std::result::Result::Ok(output_ok)
                 })())
             }
+        },
+    )
+}
+fn wire__crate__api__document__doc_opener_at_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "doc_opener_at",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_id = <u32>::sse_decode(&mut deserializer);
+            let api_at = <u64>::sse_decode(&mut deserializer);
+            let api_quoting = <crate::api::document::DocQuoting>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Ok::<_, ()>(crate::api::document::doc_opener_at(
+                    api_id,
+                    api_at,
+                    api_quoting,
+                ))?;
+                std::result::Result::Ok(output_ok)
+            })())
         },
     )
 }
@@ -3506,6 +3578,22 @@ impl SseDecode for crate::api::document::DocQuery {
     }
 }
 
+impl SseDecode for crate::api::document::DocQuoting {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::document::DocQuoting::Json,
+            1 => crate::api::document::DocQuoting::JavaScript,
+            2 => crate::api::document::DocQuoting::Source,
+            3 => crate::api::document::DocQuoting::Script,
+            4 => crate::api::document::DocQuoting::Graphql,
+            5 => crate::api::document::DocQuoting::Xml,
+            _ => unreachable!("Invalid variant for DocQuoting: {}", inner),
+        };
+    }
+}
+
 impl SseDecode for crate::api::document::DocRow {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -4942,51 +5030,51 @@ fn pde_ffi_dispatcher_primary_impl(
         7 => wire__crate__api__core__clean_spilled_bodies_impl(port, ptr, rust_vec_len, data_len),
         8 => wire__crate__api__core__clear_history_impl(port, ptr, rust_vec_len, data_len),
         10 => wire__crate__api__core__collection_dir_stamp_impl(port, ptr, rust_vec_len, data_len),
-        17 => wire__crate__api__document__doc_format_json_impl(port, ptr, rust_vec_len, data_len),
-        18 => wire__crate__api__document__doc_format_update_default_impl(
+        18 => wire__crate__api__document__doc_format_json_impl(port, ptr, rust_vec_len, data_len),
+        19 => wire__crate__api__document__doc_format_update_default_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        22 => wire__crate__api__document__doc_info_default_impl(port, ptr, rust_vec_len, data_len),
-        23 => wire__crate__api__document__doc_json_children_impl(port, ptr, rust_vec_len, data_len),
-        24 => wire__crate__api__document__doc_json_root_impl(port, ptr, rust_vec_len, data_len),
-        29 => wire__crate__api__document__doc_open_impl(port, ptr, rust_vec_len, data_len),
-        31 => wire__crate__api__document__doc_query_default_impl(port, ptr, rust_vec_len, data_len),
-        34 => wire__crate__api__document__doc_replace_all_impl(port, ptr, rust_vec_len, data_len),
-        37 => wire__crate__api__document__doc_save_impl(port, ptr, rust_vec_len, data_len),
-        38 => wire__crate__api__document__doc_search_impl(port, ptr, rust_vec_len, data_len),
-        39 => wire__crate__api__document__doc_search_update_default_impl(
+        23 => wire__crate__api__document__doc_info_default_impl(port, ptr, rust_vec_len, data_len),
+        24 => wire__crate__api__document__doc_json_children_impl(port, ptr, rust_vec_len, data_len),
+        25 => wire__crate__api__document__doc_json_root_impl(port, ptr, rust_vec_len, data_len),
+        30 => wire__crate__api__document__doc_open_impl(port, ptr, rust_vec_len, data_len),
+        33 => wire__crate__api__document__doc_query_default_impl(port, ptr, rust_vec_len, data_len),
+        36 => wire__crate__api__document__doc_replace_all_impl(port, ptr, rust_vec_len, data_len),
+        39 => wire__crate__api__document__doc_save_impl(port, ptr, rust_vec_len, data_len),
+        40 => wire__crate__api__document__doc_search_impl(port, ptr, rust_vec_len, data_len),
+        41 => wire__crate__api__document__doc_search_update_default_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        42 => wire__crate__api__core__export_collection_impl(port, ptr, rust_vec_len, data_len),
-        43 => wire__crate__api__core__export_environment_impl(port, ptr, rust_vec_len, data_len),
-        50 => wire__crate__api__core__graphql_schema_impl(port, ptr, rust_vec_len, data_len),
-        51 => wire__crate__api__core__grpc_call_impl(port, ptr, rust_vec_len, data_len),
-        52 => wire__crate__api__core__grpc_call_watched_impl(port, ptr, rust_vec_len, data_len),
-        54 => wire__crate__api__core__grpc_load_proto_impl(port, ptr, rust_vec_len, data_len),
-        55 => wire__crate__api__core__grpc_reflect_impl(port, ptr, rust_vec_len, data_len),
-        56 => wire__crate__api__core__import_har_impl(port, ptr, rust_vec_len, data_len),
-        57 => wire__crate__api__core__import_text_impl(port, ptr, rust_vec_len, data_len),
-        58 => wire__crate__api__core__import_url_impl(port, ptr, rust_vec_len, data_len),
-        59 => wire__crate__api__core__init_app_impl(port, ptr, rust_vec_len, data_len),
-        61 => wire__crate__api__core__keychain_problem_impl(port, ptr, rust_vec_len, data_len),
-        62 => wire__crate__api__core__load_history_impl(port, ptr, rust_vec_len, data_len),
-        63 => wire__crate__api__core__load_workspace_impl(port, ptr, rust_vec_len, data_len),
-        66 => wire__crate__api__core__read_collection_dir_impl(port, ptr, rust_vec_len, data_len),
-        67 => wire__crate__api__core__read_environments_dir_impl(port, ptr, rust_vec_len, data_len),
-        72 => wire__crate__api__core__save_workspace_impl(port, ptr, rust_vec_len, data_len),
-        73 => wire__crate__api__core__send_request_impl(port, ptr, rust_vec_len, data_len),
-        74 => wire__crate__api__core__send_request_watched_impl(port, ptr, rust_vec_len, data_len),
-        76 => wire__crate__api__core__write_collection_dir_impl(port, ptr, rust_vec_len, data_len),
-        77 => {
+        44 => wire__crate__api__core__export_collection_impl(port, ptr, rust_vec_len, data_len),
+        45 => wire__crate__api__core__export_environment_impl(port, ptr, rust_vec_len, data_len),
+        52 => wire__crate__api__core__graphql_schema_impl(port, ptr, rust_vec_len, data_len),
+        53 => wire__crate__api__core__grpc_call_impl(port, ptr, rust_vec_len, data_len),
+        54 => wire__crate__api__core__grpc_call_watched_impl(port, ptr, rust_vec_len, data_len),
+        56 => wire__crate__api__core__grpc_load_proto_impl(port, ptr, rust_vec_len, data_len),
+        57 => wire__crate__api__core__grpc_reflect_impl(port, ptr, rust_vec_len, data_len),
+        58 => wire__crate__api__core__import_har_impl(port, ptr, rust_vec_len, data_len),
+        59 => wire__crate__api__core__import_text_impl(port, ptr, rust_vec_len, data_len),
+        60 => wire__crate__api__core__import_url_impl(port, ptr, rust_vec_len, data_len),
+        61 => wire__crate__api__core__init_app_impl(port, ptr, rust_vec_len, data_len),
+        63 => wire__crate__api__core__keychain_problem_impl(port, ptr, rust_vec_len, data_len),
+        64 => wire__crate__api__core__load_history_impl(port, ptr, rust_vec_len, data_len),
+        65 => wire__crate__api__core__load_workspace_impl(port, ptr, rust_vec_len, data_len),
+        68 => wire__crate__api__core__read_collection_dir_impl(port, ptr, rust_vec_len, data_len),
+        69 => wire__crate__api__core__read_environments_dir_impl(port, ptr, rust_vec_len, data_len),
+        74 => wire__crate__api__core__save_workspace_impl(port, ptr, rust_vec_len, data_len),
+        75 => wire__crate__api__core__send_request_impl(port, ptr, rust_vec_len, data_len),
+        76 => wire__crate__api__core__send_request_watched_impl(port, ptr, rust_vec_len, data_len),
+        78 => wire__crate__api__core__write_collection_dir_impl(port, ptr, rust_vec_len, data_len),
+        79 => {
             wire__crate__api__core__write_environments_dir_impl(port, ptr, rust_vec_len, data_len)
         }
-        79 => wire__crate__api__core__ws_open_impl(port, ptr, rust_vec_len, data_len),
+        81 => wire__crate__api__core__ws_open_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -5006,41 +5094,43 @@ fn pde_ffi_dispatcher_sync_impl(
         9 => wire__crate__api__core__code_choices_impl(ptr, rust_vec_len, data_len),
         11 => wire__crate__api__core__default_request_settings_impl(ptr, rust_vec_len, data_len),
         12 => wire__crate__api__core__default_settings_impl(ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__document__doc_bytes_impl(ptr, rust_vec_len, data_len),
-        14 => wire__crate__api__document__doc_cancel_search_impl(ptr, rust_vec_len, data_len),
-        15 => wire__crate__api__document__doc_changed_on_disk_impl(ptr, rust_vec_len, data_len),
-        16 => wire__crate__api__document__doc_close_impl(ptr, rust_vec_len, data_len),
-        19 => wire__crate__api__document__doc_from_bytes_impl(ptr, rust_vec_len, data_len),
-        20 => wire__crate__api__document__doc_from_text_impl(ptr, rust_vec_len, data_len),
-        21 => wire__crate__api__document__doc_info_impl(ptr, rust_vec_len, data_len),
-        25 => wire__crate__api__document__doc_line_of_impl(ptr, rust_vec_len, data_len),
-        26 => wire__crate__api__document__doc_line_span_impl(ptr, rust_vec_len, data_len),
-        27 => wire__crate__api__document__doc_looks_binary_impl(ptr, rust_vec_len, data_len),
-        28 => wire__crate__api__document__doc_offset_impl(ptr, rust_vec_len, data_len),
-        30 => wire__crate__api__document__doc_position_impl(ptr, rust_vec_len, data_len),
-        32 => wire__crate__api__document__doc_redo_impl(ptr, rust_vec_len, data_len),
-        33 => wire__crate__api__document__doc_replace_impl(ptr, rust_vec_len, data_len),
-        35 => wire__crate__api__document__doc_row_of_line_impl(ptr, rust_vec_len, data_len),
-        36 => wire__crate__api__document__doc_rows_impl(ptr, rust_vec_len, data_len),
-        40 => wire__crate__api__document__doc_text_impl(ptr, rust_vec_len, data_len),
-        41 => wire__crate__api__document__doc_undo_impl(ptr, rust_vec_len, data_len),
-        44 => wire__crate__api__core__export_extension_impl(ptr, rust_vec_len, data_len),
-        45 => wire__crate__api__core__export_har_impl(ptr, rust_vec_len, data_len),
-        46 => wire__crate__api__core__generate_code_impl(ptr, rust_vec_len, data_len),
-        47 => wire__crate__api__core__graphql_draft_impl(ptr, rust_vec_len, data_len),
-        48 => wire__crate__api__core__graphql_format_impl(ptr, rust_vec_len, data_len),
-        49 => wire__crate__api__core__graphql_inspect_impl(ptr, rust_vec_len, data_len),
-        53 => wire__crate__api__core__grpc_cancel_impl(ptr, rust_vec_len, data_len),
-        60 => wire__crate__api__core__is_collection_dir_impl(ptr, rust_vec_len, data_len),
-        64 => wire__crate__api__core__locked_secrets_impl(ptr, rust_vec_len, data_len),
-        65 => wire__crate__api__core__parse_run_data_impl(ptr, rust_vec_len, data_len),
-        68 => wire__crate__api__core__redact_collection_impl(ptr, rust_vec_len, data_len),
-        69 => wire__crate__api__core__redact_environment_impl(ptr, rust_vec_len, data_len),
-        70 => wire__crate__api__core__redact_exchanges_impl(ptr, rust_vec_len, data_len),
-        71 => wire__crate__api__core__redact_text_impl(ptr, rust_vec_len, data_len),
-        75 => wire__crate__api__core__set_spill_bytes_impl(ptr, rust_vec_len, data_len),
-        78 => wire__crate__api__core__ws_close_impl(ptr, rust_vec_len, data_len),
-        80 => wire__crate__api__core__ws_send_impl(ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__document__doc_bracket_pair_impl(ptr, rust_vec_len, data_len),
+        14 => wire__crate__api__document__doc_bytes_impl(ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__document__doc_cancel_search_impl(ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__document__doc_changed_on_disk_impl(ptr, rust_vec_len, data_len),
+        17 => wire__crate__api__document__doc_close_impl(ptr, rust_vec_len, data_len),
+        20 => wire__crate__api__document__doc_from_bytes_impl(ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__document__doc_from_text_impl(ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__document__doc_info_impl(ptr, rust_vec_len, data_len),
+        26 => wire__crate__api__document__doc_line_of_impl(ptr, rust_vec_len, data_len),
+        27 => wire__crate__api__document__doc_line_span_impl(ptr, rust_vec_len, data_len),
+        28 => wire__crate__api__document__doc_looks_binary_impl(ptr, rust_vec_len, data_len),
+        29 => wire__crate__api__document__doc_offset_impl(ptr, rust_vec_len, data_len),
+        31 => wire__crate__api__document__doc_opener_at_impl(ptr, rust_vec_len, data_len),
+        32 => wire__crate__api__document__doc_position_impl(ptr, rust_vec_len, data_len),
+        34 => wire__crate__api__document__doc_redo_impl(ptr, rust_vec_len, data_len),
+        35 => wire__crate__api__document__doc_replace_impl(ptr, rust_vec_len, data_len),
+        37 => wire__crate__api__document__doc_row_of_line_impl(ptr, rust_vec_len, data_len),
+        38 => wire__crate__api__document__doc_rows_impl(ptr, rust_vec_len, data_len),
+        42 => wire__crate__api__document__doc_text_impl(ptr, rust_vec_len, data_len),
+        43 => wire__crate__api__document__doc_undo_impl(ptr, rust_vec_len, data_len),
+        46 => wire__crate__api__core__export_extension_impl(ptr, rust_vec_len, data_len),
+        47 => wire__crate__api__core__export_har_impl(ptr, rust_vec_len, data_len),
+        48 => wire__crate__api__core__generate_code_impl(ptr, rust_vec_len, data_len),
+        49 => wire__crate__api__core__graphql_draft_impl(ptr, rust_vec_len, data_len),
+        50 => wire__crate__api__core__graphql_format_impl(ptr, rust_vec_len, data_len),
+        51 => wire__crate__api__core__graphql_inspect_impl(ptr, rust_vec_len, data_len),
+        55 => wire__crate__api__core__grpc_cancel_impl(ptr, rust_vec_len, data_len),
+        62 => wire__crate__api__core__is_collection_dir_impl(ptr, rust_vec_len, data_len),
+        66 => wire__crate__api__core__locked_secrets_impl(ptr, rust_vec_len, data_len),
+        67 => wire__crate__api__core__parse_run_data_impl(ptr, rust_vec_len, data_len),
+        70 => wire__crate__api__core__redact_collection_impl(ptr, rust_vec_len, data_len),
+        71 => wire__crate__api__core__redact_environment_impl(ptr, rust_vec_len, data_len),
+        72 => wire__crate__api__core__redact_exchanges_impl(ptr, rust_vec_len, data_len),
+        73 => wire__crate__api__core__redact_text_impl(ptr, rust_vec_len, data_len),
+        77 => wire__crate__api__core__set_spill_bytes_impl(ptr, rust_vec_len, data_len),
+        80 => wire__crate__api__core__ws_close_impl(ptr, rust_vec_len, data_len),
+        82 => wire__crate__api__core__ws_send_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -5522,6 +5612,31 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::document::DocQuery>
     for crate::api::document::DocQuery
 {
     fn into_into_dart(self) -> crate::api::document::DocQuery {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::document::DocQuoting {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Json => 0.into_dart(),
+            Self::JavaScript => 1.into_dart(),
+            Self::Source => 2.into_dart(),
+            Self::Script => 3.into_dart(),
+            Self::Graphql => 4.into_dart(),
+            Self::Xml => 5.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::document::DocQuoting
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::document::DocQuoting>
+    for crate::api::document::DocQuoting
+{
+    fn into_into_dart(self) -> crate::api::document::DocQuoting {
         self
     }
 }
@@ -7002,6 +7117,26 @@ impl SseEncode for crate::api::document::DocQuery {
         <bool>::sse_encode(self.regex, serializer);
         <bool>::sse_encode(self.case_sensitive, serializer);
         <bool>::sse_encode(self.whole_word, serializer);
+    }
+}
+
+impl SseEncode for crate::api::document::DocQuoting {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::document::DocQuoting::Json => 0,
+                crate::api::document::DocQuoting::JavaScript => 1,
+                crate::api::document::DocQuoting::Source => 2,
+                crate::api::document::DocQuoting::Script => 3,
+                crate::api::document::DocQuoting::Graphql => 4,
+                crate::api::document::DocQuoting::Xml => 5,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
     }
 }
 

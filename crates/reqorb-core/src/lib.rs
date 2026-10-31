@@ -43,8 +43,8 @@ pub use checks::{TestResult, capture, run_tests};
 pub use codegen::{CodeTarget, generate_code};
 pub use data::parse_run_data;
 pub use document::{
-    Change, Document, Found, Indexing, JsonKind, JsonNode, JsonPage, MAX_KEPT, Query, ROW_BYTES,
-    Row, Snapshot,
+    Change, Document, Found, Indexing, JsonKind, JsonNode, JsonPage, MAX_KEPT, Query, Quoting,
+    ROW_BYTES, Row, Snapshot,
 };
 pub use error::Error;
 pub use files::{DirAccess, FileAccess, check_directory};
