@@ -43,8 +43,8 @@ const _indentLimit = 100000;
 /// Chinese or Japanese input work. It is told only the rows around the
 /// selection, never the whole text.
 ///
-/// The rows are keyed `<name>`; the numbers beside them
-/// `<name>-number-<row>`; the status line `<name>-status`; the find bar's
+/// The rows are keyed `<name>`; each row's text `<name>-row-<row>`; the
+/// numbers beside them `<name>-number-<row>`; the status line `<name>-status`; the find bar's
 /// parts `<name>-find`, `<name>-find-field`, `<name>-find-count`,
 /// `<name>-find-next`, `<name>-find-previous`, `<name>-find-close`,
 /// `<name>-find-case`, `<name>-find-regex` and `<name>-find-word`; and
@@ -550,6 +550,7 @@ class _DocumentViewState extends State<DocumentView> {
     final span = _spanOf(index, theme.brightness);
     final text = Text.rich(
       span,
+      key: ValueKey('${widget.name}-row-$index'),
       maxLines: 1,
       softWrap: false,
       overflow: TextOverflow.clip,
@@ -1071,6 +1072,7 @@ class _DocumentViewState extends State<DocumentView> {
     final found = _found;
     final total = _count;
     final messenger = ScaffoldMessenger.maybeOf(context);
+    _editedAt(found.first.start);
     await _doc.replaceAll(found, _replacement.text);
     if (!mounted) return;
     _composing = null;
@@ -1296,9 +1298,47 @@ class _DocumentViewState extends State<DocumentView> {
 
   /// Takes in an edit: what the document holds now, and whoever is
   /// listening. A search open is run again, as what it found has moved.
+  /// Where the first edit since the view last took one in was made, if
+  /// the rows fetched were all of the version before it.
+  int? _editedFrom;
+
+  /// Notes an edit about to be made at byte [at], so that only the rows
+  /// from there on are fetched again.
+  void _editedAt(int at) {
+    final from = _editedFrom;
+    if (from != null) {
+      // Another edit before the view takes them in, as a closing bracket
+      // put in after an opening one.
+      _editedFrom = math.min(from, at);
+      return;
+    }
+    // Rows found meanwhile, or a version not taken in, may have moved any
+    // row; then none is kept.
+    if (_cachedVersion != _doc.info().version || !_info.indexingDone) {
+      _cachedVersion = -1;
+      return;
+    }
+    _editedFrom = at;
+  }
+
+  /// Keeps the rows and colours fetched before the first edit noted, and
+  /// lets go of the rest, which an edit there may have changed or moved.
+  void _keepRowsBeforeEdit(DocInfo info) {
+    final from = _editedFrom;
+    _editedFrom = null;
+    if (from == null || _cachedVersion < 0) return;
+    // The row before the edit too, as joining two lines changes it.
+    final row = _doc.positionOf(math.max(0, from - 1)).row;
+    final block = math.max(0, row - 1) ~/ _block;
+    _blocks.removeWhere((b, _) => b >= block);
+    _spans.removeWhere((b, _) => b >= block);
+    _cachedVersion = info.version;
+  }
+
   void _changed() {
     setState(() {
       _info = _doc.info();
+      _keepRowsBeforeEdit(_info);
       _menuAt = null;
       _menuOverSelection = false;
       if (_finding) {
@@ -1322,6 +1362,7 @@ class _DocumentViewState extends State<DocumentView> {
   }) {
     if (!widget.editable) return;
     _composing = null;
+    _editedAt(start);
     _doc.replace(start, end, text, typing: typing);
     final at = caret ?? start + utf8Length(text);
     _changed();
@@ -1335,6 +1376,7 @@ class _DocumentViewState extends State<DocumentView> {
 
   void _afterUndo(DocSpan? changed) {
     if (changed == null) return;
+    _editedAt(changed.start);
     _composing = null;
     _changed();
     _select(changed.end, changed.end);
@@ -1461,6 +1503,7 @@ class _DocumentViewState extends State<DocumentView> {
     }
     if (spans.isEmpty) return;
     _composing = null;
+    _editedAt(spans.first.start);
     await _doc.replaceAll(spans, outdent ? '' : unit);
     if (!mounted) return;
     _changed();
@@ -1700,6 +1743,7 @@ class _DocumentViewState extends State<DocumentView> {
       };
       if (range != null) {
         final (start, end) = _bytesOf(value.text, range);
+        _editedAt(start);
         _doc.replace(start, end, inserted, typing: true);
         changed = true;
         if (!_windowWhole) {
@@ -1771,6 +1815,7 @@ class _DocumentViewState extends State<DocumentView> {
     final next = _doc.text(after, math.min(len, after + 1));
     if (_pairs.containsValue(char) && next == char) {
       // Typed over: the one just put in goes, and the caret steps on.
+      _editedAt(at);
       _doc.replace(at, after, '', typing: true);
       _sent = value;
       _changed();
@@ -1785,6 +1830,7 @@ class _DocumentViewState extends State<DocumentView> {
         isWordChar(_doc.text(previousChar(_doc, at), at))) {
       return false;
     }
+    _editedAt(after);
     _doc.replace(after, after, closer, typing: true);
     _sent = value;
     _changed();

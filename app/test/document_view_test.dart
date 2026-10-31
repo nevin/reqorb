@@ -801,5 +801,74 @@ void main() {
         isNot(tokenColor(TokenKind.comment, brightness)),
       );
     });
+
+    testWidgets('edits fetch again only what they change, and all of that', (
+      tester,
+    ) async {
+      // Lines 0 to 199, so that rows 120 to 140, either side of where
+      // the second block of rows starts, are on show around the caret.
+      final document = MemoryDocument(
+        [for (var i = 0; i < 200; i++) 'let line$i = $i;'].join('\n'),
+      );
+      final sought = ValueNotifier<int?>(null);
+      addTearDown(sought.dispose);
+      tester.view.physicalSize = const Size(900, 400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DocumentView(
+              name: 'doc',
+              document: document,
+              language: CodeLanguage.javascript,
+              editable: true,
+              lineSought: sought,
+            ),
+          ),
+        ),
+      );
+      final brightness = Theme.of(tester.element(find.byType(DocumentView)))
+          .brightness;
+      final comment = tokenColor(TokenKind.comment, brightness);
+
+      /// Every row on show is the document's row.
+      void shownAsDocument() {
+        final rows = document.rows(0, document.info().rowCount);
+        var checked = 0;
+        for (var i = 0; i < rows.length; i++) {
+          final shown = find.byKey(ValueKey('doc-row-$i'));
+          if (shown.evaluate().isEmpty) continue;
+          final text = tester.widget<Text>(shown).textSpan!.toPlainText();
+          expect(text, rows[i].text, reason: 'row $i');
+          checked++;
+        }
+        expect(checked, greaterThan(10));
+      }
+
+      // The caret at the start of line 127, the last row of the first block.
+      sought.value = 128;
+      await tester.pump();
+      await tester.pump();
+      await key(tester, LogicalKeyboardKey.arrowLeft);
+      shownAsDocument();
+
+      // A new line moves every row after it down.
+      await input(tester, '\n');
+      await tester.pump();
+      shownAsDocument();
+      // Rubbing it out joins the lines again.
+      await key(tester, LogicalKeyboardKey.backspace);
+      shownAsDocument();
+
+      // A comment opened here colours the rows after it, in the next block.
+      await input(tester, '/*');
+      await tester.pump();
+      shownAsDocument();
+      expect(colourOf(tester, 'let line130 = 130;'), comment);
+      await press(tester, LogicalKeyboardKey.keyZ, modifier: control);
+      shownAsDocument();
+      expect(colourOf(tester, 'let line130 = 130;'), isNot(comment));
+    });
   });
 }
