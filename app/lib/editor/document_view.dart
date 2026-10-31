@@ -31,6 +31,9 @@ const _block = 128;
 /// Space above and below the rows.
 const _padding = 8.0;
 
+/// How many blocks of rows are kept once fetched.
+const _blocksKept = 64;
+
 /// The most lines indented or outdented at once.
 const _indentLimit = 100000;
 
@@ -326,11 +329,29 @@ class _DocumentViewState extends State<DocumentView> {
   /// would no longer place them exactly.
   double get _rowHeight => (CodeStyle.fontSize * 1.4).ceilToDouble();
 
-  double _measure(String text) => (TextPainter(
-    text: TextSpan(text: text, style: _style),
-    textDirection: TextDirection.ltr,
-    textScaler: MediaQuery.textScalerOf(context),
-  )..layout()).width;
+  /// [text] laid out on one line as the rows are, for [use] to measure;
+  /// let go of after.
+  T _laidOut<T>(String text, T Function(TextPainter painter) use) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: _style),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    try {
+      return use(painter);
+    } finally {
+      painter.dispose();
+    }
+  }
+
+  double _measure(String text) => _laidOut(text, (p) => p.width);
+
+  /// The column of [text] nearest [x] across it.
+  int _columnAt(String text, double x) => _laidOut(
+    text,
+    (p) => p.getPositionForOffset(Offset(x, p.height / 2)).offset,
+  );
 
   DocRow? _rowAt(int row) {
     if (_info.version != _cachedVersion) {
@@ -338,13 +359,19 @@ class _DocumentViewState extends State<DocumentView> {
       _spans.clear();
       _cachedVersion = _info.version;
     }
-    // A long scroll leaves blocks behind; they are cheap to fetch again.
-    if (_blocks.length > 64) {
-      _blocks.clear();
-      _spans.clear();
-    }
     final block = row ~/ _block;
-    final rows = _blocks[block] ??= _fetch(block);
+    var rows = _blocks.remove(block);
+    if (rows == null) {
+      // A long scroll leaves blocks behind; the one used longest ago goes.
+      if (_blocks.length >= _blocksKept) {
+        final oldest = _blocks.keys.first;
+        _blocks.remove(oldest);
+        _spans.remove(oldest);
+      }
+      rows = _fetch(block);
+    }
+    // Put back last, as the one used most recently.
+    _blocks[block] = rows;
     final i = row - block * _block;
     return i < rows.length ? rows[i] : null;
   }
@@ -675,16 +702,7 @@ class _DocumentViewState extends State<DocumentView> {
     if (r == null) return (row, 0);
     final x = local.dx - gutter - gap;
     if (x <= 0) return (row, 0);
-    final painter = TextPainter(
-      text: TextSpan(text: r.text, style: _style),
-      textDirection: TextDirection.ltr,
-      textScaler: MediaQuery.textScalerOf(context),
-      maxLines: 1,
-    )..layout();
-    return (
-      row,
-      painter.getPositionForOffset(Offset(x, painter.height / 2)).offset,
-    );
+    return (row, _columnAt(r.text, x));
   }
 
   int _offsetAt(Offset local, double gutter, double gap) {
@@ -1619,16 +1637,7 @@ class _DocumentViewState extends State<DocumentView> {
       _moveTo(_info.len, extend: extend, goalX: x);
       return;
     }
-    final text = _rowAt(target)?.text ?? '';
-    final painter = TextPainter(
-      text: TextSpan(text: text, style: _style),
-      textDirection: TextDirection.ltr,
-      textScaler: MediaQuery.textScalerOf(context),
-      maxLines: 1,
-    )..layout();
-    final col = painter
-        .getPositionForOffset(Offset(x, painter.height / 2))
-        .offset;
+    final col = _columnAt(_rowAt(target)?.text ?? '', x);
     _moveTo(_doc.offsetOf(target, col), extend: extend, goalX: x);
   }
 
@@ -2536,6 +2545,7 @@ class _MarkPainter extends CustomPainter {
         paint,
       );
     }
+    painter.dispose();
   }
 
   @override
