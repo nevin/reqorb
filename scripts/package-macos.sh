@@ -6,7 +6,9 @@
 # workflow sets them from the repository's secrets:
 #   MACOS_SIGNING_IDENTITY   e.g. "Developer ID Application: Name (TEAMID)",
 #                            already in a keychain this user can use
-#   APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD   for notarization
+#   APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD   for notarization, or
+#   NOTARY_PROFILE           a profile kept in the keychain with
+#                            `xcrun notarytool store-credentials`
 # Otherwise it is signed ad hoc, which runs here but which Gatekeeper refuses
 # on other machines until they allow it.
 set -euo pipefail
@@ -43,9 +45,13 @@ archive="$out/reqorb-$version-macos.zip"
 rm -f "$archive"
 ditto -c -k --keepParent "$app" "$archive"
 
-if [[ "$identity" != "-" && -n "${APPLE_ID:-}" ]]; then
-  xcrun notarytool submit "$archive" --wait \
-    --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" >&2
+if [[ -n "${NOTARY_PROFILE:-}" ]]; then
+  notary=(--keychain-profile "$NOTARY_PROFILE")
+elif [[ -n "${APPLE_ID:-}" ]]; then
+  notary=(--apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD")
+fi
+if [[ "$identity" != "-" && -n "${notary+set}" ]]; then
+  xcrun notarytool submit "$archive" --wait "${notary[@]}" >&2
   xcrun stapler staple "$app" >&2
   # The stapled ticket is in the app now, so it is packed again.
   rm -f "$archive"

@@ -61,9 +61,18 @@ scripts/package-cli.sh x86_64-apple-darwin
 scripts/package-macos.sh                  # the macOS app, signed ad hoc
 ```
 
-To sign and notarize locally, set the variables listed at the top of
-`scripts/package-macos.sh` first. The certificate must already be in a keychain you can
-use.
+To sign and notarize locally, keep the notarization password in the keychain once,
+then name the identity and that profile:
+
+```bash
+xcrun notarytool store-credentials reqorb --apple-id YOUR_APPLE_ID --team-id YOUR_TEAM_ID
+MACOS_SIGNING_IDENTITY="Developer ID Application: Name (TEAMID)" NOTARY_PROFILE=reqorb \
+  scripts/package-macos.sh
+```
+
+The certificate must already be in a keychain you can use: Xcode's **Settings ›
+Accounts › Manage Certificates** makes it there. The other variables at the top of the
+script are what the release workflow uses instead of a profile.
 
 ## The app icon
 

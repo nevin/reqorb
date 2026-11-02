@@ -37,7 +37,7 @@ Hot reload works for Dart. **Changes to Rust need a full restart** (`R` in `flut
 or stop and run again): the native library is built and loaded once.
 
 The macOS app is sandboxed, so its files are inside its container:
-`~/Library/Containers/dev.reqorb.reqorb/Data/Library/Application Support/dev.reqorb.reqorb/`.
+`~/Library/Containers/com.codersworld.reqorb/Data/Library/Application Support/com.codersworld.reqorb/`.
 Delete `workspace.json` there to start from an empty workspace. Credentials in it are
 encrypted with a key kept in the login keychain (service `reqorb`, account
 `workspace-key`).

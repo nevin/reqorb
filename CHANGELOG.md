@@ -6,6 +6,12 @@ the new version when it is tagged.
 
 ## Unreleased
 
+- The app's identifier is now `com.codersworld.reqorb`, for signing and the App Store.
+  On macOS this gives it a new data folder: to keep a workspace from 1.0, quit reqorb
+  and copy `workspace.json` from
+  `~/Library/Containers/dev.reqorb.reqorb/Data/Library/Application Support/dev.reqorb.reqorb/`
+  to the same place under `com.codersworld.reqorb`.
+
 ## 1.0.0 – 2026-10-18
 
 The large-file editor: text of any size, up to a gigabyte or so, opens at once to read,
