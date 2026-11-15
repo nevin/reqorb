@@ -6,6 +6,19 @@ the new version when it is tagged.
 
 ## Unreleased
 
+- On a Mac the menu bar now has the app's commands: **File**, **View**, **Request** and
+  **Tools** menus, **Settings…** (`⌘,`) and **Help › Keyboard Shortcuts**.
+- `⌘/` lists every keyboard shortcut, on any platform.
+- A right click on a tab closes the others or those to its right, or duplicates it;
+  the middle button closes it, and `⇧⌘T` opens the tab closed last again.
+- A right click on a saved request or a collection in the sidebar shows its actions,
+  which now include **Open** and **Copy address** for a request.
+- A curl command pasted where the address goes fills in the whole request.
+- `⌘+`, `⌘-` and `⌘0` change the size of code.
+- The Mac window opens larger the first time, and after that where it was left.
+- History, API specs, Open file, the HAR analyser and Settings sit side by side at the
+  foot of the sidebar, leaving the height to the list of requests.
+
 ## 1.0.0 – 2026-10-18
 
 The large-file editor: text of any size, up to a gigabyte or so, opens at once to read,

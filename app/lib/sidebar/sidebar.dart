@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:reqorb/files/file_page.dart';
 
 import 'package:reqorb/runner/collection_run.dart';
@@ -238,44 +239,52 @@ class _SidebarState extends State<Sidebar> {
                   ],
                 ),
               ),
-            ListTile(
-              key: const Key('history'),
-              dense: true,
-              leading: const Icon(Icons.history, size: 20),
-              title: Text(
-                store.history.isEmpty
-                    ? 'History'
-                    : 'History · ${store.history.length}',
+            // The places of the app, side by side so that the list above
+            // keeps the height.
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              child: Row(
+                children: [
+                  _Place(
+                    key: const Key('history'),
+                    icon: Icons.history,
+                    label: 'History',
+                    tooltip: store.history.isEmpty
+                        ? 'Requests sent before'
+                        : 'History · ${store.history.length}',
+                    count: store.history.length,
+                    onTap: widget.onHistory,
+                  ),
+                  _Place(
+                    key: const Key('api-specs'),
+                    icon: Icons.description_outlined,
+                    label: 'Specs',
+                    tooltip: 'API specs: OpenAPI and Swagger',
+                    onTap: widget.onSpecs,
+                  ),
+                  _Place(
+                    key: const Key('open-file'),
+                    icon: Icons.file_open_outlined,
+                    label: 'File',
+                    tooltip: 'Open file… (${shortcutModifier}O)',
+                    onTap: () => openFile(context),
+                  ),
+                  _Place(
+                    key: const Key('har-analyser'),
+                    icon: Icons.insights,
+                    label: 'HAR',
+                    tooltip: 'HAR analyser',
+                    onTap: () => analyzeHarFile(context, store),
+                  ),
+                  _Place(
+                    key: const Key('settings'),
+                    icon: Icons.settings_outlined,
+                    label: 'Settings',
+                    tooltip: 'Settings',
+                    onTap: () => SettingsDialog.show(context, store),
+                  ),
+                ],
               ),
-              onTap: widget.onHistory,
-            ),
-            ListTile(
-              key: const Key('api-specs'),
-              dense: true,
-              leading: const Icon(Icons.description_outlined, size: 20),
-              title: const Text('API specs'),
-              onTap: widget.onSpecs,
-            ),
-            ListTile(
-              key: const Key('open-file'),
-              dense: true,
-              leading: const Icon(Icons.file_open_outlined, size: 20),
-              title: const Text('Open file…'),
-              onTap: () => openFile(context),
-            ),
-            ListTile(
-              key: const Key('har-analyser'),
-              dense: true,
-              leading: const Icon(Icons.insights, size: 20),
-              title: const Text('HAR analyser'),
-              onTap: () => analyzeHarFile(context, store),
-            ),
-            ListTile(
-              key: const Key('settings'),
-              dense: true,
-              leading: const Icon(Icons.settings_outlined, size: 20),
-              title: const Text('Settings'),
-              onTap: () => SettingsDialog.show(context, store),
             ),
           ],
         ),
@@ -406,6 +415,10 @@ class _SidebarState extends State<Sidebar> {
       selected: widget.selected == ref,
       onTap: () => widget.onOpen(ref),
       onRename: () => _rename(ref),
+      onCopyAddress: () {
+        Clipboard.setData(ClipboardData(text: request.url));
+        showMessage(context, 'Copied the address');
+      },
       onDuplicate: () => store.duplicateItem(ref),
       onDelete: () => _remove(ref),
     );
@@ -432,89 +445,36 @@ class _SidebarState extends State<Sidebar> {
       controlAffinity: ListTileControlAffinity.leading,
       shape: const Border(),
       tilePadding: const EdgeInsets.only(left: 8, right: 4),
-      title: Row(
-        children: [
-          Flexible(
-            child: Text(
-              collection.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600),
+      title: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onSecondaryTapUp: (details) =>
+            _menuAt(context, details.globalPosition, _collectionActions(index)),
+        child: Row(
+          children: [
+            Flexible(
+              child: Text(
+                collection.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
             ),
-          ),
-          if (collection.link case final link?) ...[
-            const SizedBox(width: 6),
-            _FolderMark(
-              path: link.path,
-              problem: store.folderProblems[link.path],
-            ),
+            if (collection.link case final link?) ...[
+              const SizedBox(width: 6),
+              _FolderMark(
+                path: link.path,
+                problem: store.folderProblems[link.path],
+              ),
+            ],
           ],
-        ],
+        ),
       ),
       trailing: PopupMenuButton<VoidCallback>(
         tooltip: 'Collection actions',
         iconSize: 18,
         icon: const Icon(Icons.more_horiz),
         onSelected: (action) => action(),
-        itemBuilder: (_) => [
-          PopupMenuItem(
-            key: const Key('run-collection'),
-            value: () => showRunner(
-              context,
-              store: store,
-              name: collection.name,
-              steps: runSteps(collection.items, index),
-            ),
-            child: const Text('Run…'),
-          ),
-          PopupMenuItem(
-            key: const Key('rename-collection'),
-            value: () => renameCollection(context, store, index),
-            child: const Text('Rename…'),
-          ),
-          const PopupMenuDivider(),
-          if (collection.link == null)
-            PopupMenuItem(
-              key: const Key('link-collection'),
-              value: () => keepInFolder(context, store, index),
-              child: const Text('Keep in a folder…'),
-            )
-          else ...[
-            PopupMenuItem(
-              key: const Key('reload-collection'),
-              value: () => reloadFromFolder(context, store, index),
-              child: const Text('Reload from folder'),
-            ),
-            if (store.folderConflicts.contains(collection.link?.path))
-              PopupMenuItem(
-                key: const Key('keep-mine'),
-                value: () => keepMineInFolder(context, store, index),
-                child: const Text('Keep mine, over the folder'),
-              ),
-            PopupMenuItem(
-              key: const Key('unlink-collection'),
-              value: () => store.unlinkCollection(index),
-              child: const Text('Stop keeping in folder'),
-            ),
-          ],
-          const PopupMenuDivider(),
-          for (final (label, format) in const [
-            ('Export as curl…', ExportFormat.curl),
-            ('Export as Bruno…', ExportFormat.bruno),
-            ('Export as Postman…', ExportFormat.postman),
-            ('Export as reqorb JSON…', ExportFormat.reqorb),
-          ])
-            PopupMenuItem(
-              value: () => exportCollectionFile(context, collection, format),
-              child: Text(label),
-            ),
-          const PopupMenuDivider(),
-          PopupMenuItem(
-            key: const Key('delete-collection'),
-            value: () => _removeCollection(index),
-            child: const Text('Delete collection'),
-          ),
-        ],
+        itemBuilder: (_) => _collectionActions(index),
       ),
       children: collection.items.isEmpty
           ? [
@@ -525,6 +485,71 @@ class _SidebarState extends State<Sidebar> {
             ]
           : _items(index, collection.items, const [], 1),
     );
+  }
+
+  /// What can be done with a collection, for the button at the end of its
+  /// row and for a right click on its name.
+  List<PopupMenuEntry<VoidCallback>> _collectionActions(int index) {
+    final collection = store.collections[index];
+    return [
+      PopupMenuItem(
+        key: const Key('run-collection'),
+        value: () => showRunner(
+          context,
+          store: store,
+          name: collection.name,
+          steps: runSteps(collection.items, index),
+        ),
+        child: const Text('Run…'),
+      ),
+      PopupMenuItem(
+        key: const Key('rename-collection'),
+        value: () => renameCollection(context, store, index),
+        child: const Text('Rename…'),
+      ),
+      const PopupMenuDivider(),
+      if (collection.link == null)
+        PopupMenuItem(
+          key: const Key('link-collection'),
+          value: () => keepInFolder(context, store, index),
+          child: const Text('Keep in a folder…'),
+        )
+      else ...[
+        PopupMenuItem(
+          key: const Key('reload-collection'),
+          value: () => reloadFromFolder(context, store, index),
+          child: const Text('Reload from folder'),
+        ),
+        if (store.folderConflicts.contains(collection.link?.path))
+          PopupMenuItem(
+            key: const Key('keep-mine'),
+            value: () => keepMineInFolder(context, store, index),
+            child: const Text('Keep mine, over the folder'),
+          ),
+        PopupMenuItem(
+          key: const Key('unlink-collection'),
+          value: () => store.unlinkCollection(index),
+          child: const Text('Stop keeping in folder'),
+        ),
+      ],
+      const PopupMenuDivider(),
+      for (final (label, format) in const [
+        ('Export as curl…', ExportFormat.curl),
+        ('Export as Bruno…', ExportFormat.bruno),
+        ('Export as Postman…', ExportFormat.postman),
+        ('Export as reqorb JSON…', ExportFormat.reqorb),
+      ])
+        PopupMenuItem(
+          value: () => exportCollectionFile(context, collection, format),
+          child: Text(label),
+        ),
+      const PopupMenuDivider(),
+      PopupMenuItem(
+        key: const Key('delete-collection'),
+        value: () => _removeCollection(index),
+        child: const Text('Delete collection'),
+      ),
+    ];
   }
 
   List<Widget> _items(
@@ -587,6 +612,7 @@ class _RequestTile extends StatefulWidget {
     required this.selected,
     required this.onTap,
     required this.onRename,
+    required this.onCopyAddress,
     required this.onDuplicate,
     required this.onDelete,
   });
@@ -600,6 +626,7 @@ class _RequestTile extends StatefulWidget {
   final bool selected;
   final VoidCallback onTap;
   final VoidCallback onRename;
+  final VoidCallback onCopyAddress;
   final VoidCallback onDuplicate;
   final VoidCallback onDelete;
 
@@ -609,6 +636,37 @@ class _RequestTile extends StatefulWidget {
 
 class _RequestTileState extends State<_RequestTile> {
   bool _hovered = false;
+
+  /// What can be done with the request, for the button at the end of its
+  /// row and for a right click anywhere on it.
+  List<PopupMenuEntry<VoidCallback>> _actions() => [
+    PopupMenuItem(
+      key: const Key('open-request'),
+      value: widget.onTap,
+      child: const Text('Open'),
+    ),
+    PopupMenuItem(
+      key: const Key('rename-request'),
+      value: widget.onRename,
+      child: const Text('Rename…'),
+    ),
+    PopupMenuItem(
+      key: const Key('duplicate-request'),
+      value: widget.onDuplicate,
+      child: const Text('Duplicate'),
+    ),
+    PopupMenuItem(
+      key: const Key('copy-request-address'),
+      value: widget.onCopyAddress,
+      child: const Text('Copy address'),
+    ),
+    const PopupMenuDivider(),
+    PopupMenuItem(
+      key: const Key('delete-request'),
+      value: widget.onDelete,
+      child: const Text('Delete'),
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -630,6 +688,8 @@ class _RequestTileState extends State<_RequestTile> {
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: widget.onTap,
+            onSecondaryTapUp: (details) =>
+                _menuAt(context, details.globalPosition, _actions()),
             child: ConstrainedBox(
               constraints: BoxConstraints(minHeight: isDesktop ? 32 : 44),
               child: Padding(
@@ -687,24 +747,7 @@ class _RequestTileState extends State<_RequestTile> {
                         padding: EdgeInsets.zero,
                         icon: const Icon(Icons.more_horiz),
                         onSelected: (action) => action(),
-                        itemBuilder: (_) => [
-                          PopupMenuItem(
-                            key: const Key('rename-request'),
-                            value: widget.onRename,
-                            child: const Text('Rename…'),
-                          ),
-                          PopupMenuItem(
-                            key: const Key('duplicate-request'),
-                            value: widget.onDuplicate,
-                            child: const Text('Duplicate'),
-                          ),
-                          const PopupMenuDivider(),
-                          PopupMenuItem(
-                            key: const Key('delete-request'),
-                            value: widget.onDelete,
-                            child: const Text('Delete'),
-                          ),
-                        ],
+                        itemBuilder: (_) => _actions(),
                       ),
                     ),
                   ],
@@ -739,6 +782,83 @@ class _FolderMark extends StatelessWidget {
         key: Key(problem == null ? 'folder-mark' : 'folder-problem'),
         size: 15,
         color: problem == null ? scheme.onSurfaceVariant : scheme.error,
+      ),
+    );
+  }
+}
+
+/// Shows [items] as a menu at a place in the window, and does what is
+/// chosen from it.
+void _menuAt(
+  BuildContext context,
+  Offset at,
+  List<PopupMenuEntry<VoidCallback>> items,
+) {
+  final overlay = Overlay.of(context).context.findRenderObject()! as RenderBox;
+  showMenu<VoidCallback>(
+    context: context,
+    position: RelativeRect.fromRect(at & Size.zero, Offset.zero & overlay.size),
+    items: items,
+  ).then((action) => action?.call());
+}
+
+/// One of the places of the app at the foot of the sidebar: an icon with
+/// its name beneath, and how many things it holds when that is worth
+/// saying.
+class _Place extends StatelessWidget {
+  const _Place({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    required this.onTap,
+    this.count = 0,
+  });
+
+  final IconData icon;
+  final String label;
+  final String tooltip;
+  final VoidCallback onTap;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Expanded(
+      child: Tooltip(
+        message: tooltip,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onTap,
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: isDesktop ? 6 : 10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Badge(
+                  isLabelVisible: count > 0,
+                  // Clear of the icon, which it would otherwise cover.
+                  offset: const Offset(12, -4),
+                  label: Text(count > 99 ? '99+' : '$count'),
+                  backgroundColor: scheme.secondaryContainer,
+                  textColor: scheme.onSecondaryContainer,
+                  child: Icon(icon, size: 20, color: scheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.fade,
+                  softWrap: false,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

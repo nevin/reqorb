@@ -211,7 +211,13 @@ void main() {
       expect(find.text('History'), findsOneWidget);
       await send(tester, '{{base}}/users?page=2');
       await send(tester, 'https://api.test/missing');
-      expect(find.text('History · 2'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('history')),
+          matching: find.text('2'),
+        ),
+        findsOneWidget,
+      );
 
       await showHistoryPage(tester);
       expect(find.text('Today'), findsOneWidget);

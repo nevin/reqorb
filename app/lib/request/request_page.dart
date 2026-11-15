@@ -42,6 +42,7 @@ import 'package:reqorb/runner/runner_dialog.dart';
 import 'package:reqorb/spec/spec_page.dart';
 import 'package:reqorb/settings/settings_dialog.dart';
 import 'package:reqorb/shared/messages.dart';
+import 'package:reqorb/shared/shortcuts_dialog.dart';
 import 'package:reqorb/shared/split_view.dart';
 import 'package:reqorb/shared/theme.dart';
 import 'package:reqorb/sidebar/sidebar.dart';
@@ -157,10 +158,26 @@ class _RequestPageState extends State<RequestPage> {
 
   void _sessionChanged() => setState(() {});
 
+  /// The requests of tabs that were closed, the latest last, to open again.
+  final _closed = <({Request request, RequestRef? origin, String? name})>[];
+
+  /// Carries what is chosen in the menu bar, where the platform has one.
+  static const _menu = MethodChannel('reqorb/menu');
+
+  /// Whether the sidebar is beside the editor rather than in a drawer.
+  bool _docked = true;
+
   @override
   void initState() {
     super.initState();
     _graphql.addListener(_sessionChanged);
+    _menu.setMethodCallHandler((call) async {
+      // The menu bar stays live over a dialog or another page, but what
+      // it does belongs to this one.
+      if (call.method != 'run' || !mounted) return;
+      if (ModalRoute.of(context)?.isCurrent != true) return;
+      _commands[call.arguments]?.call();
+    });
     _lifecycle = AppLifecycleListener(onResume: _store.checkFolders);
   }
 
@@ -170,6 +187,7 @@ class _RequestPageState extends State<RequestPage> {
 
   @override
   void dispose() {
+    _menu.setMethodCallHandler(null);
     _lifecycle.dispose();
     for (final tab in _tabs) {
       tab.sessions.removeListener(_sessionChanged);
@@ -222,7 +240,8 @@ class _RequestPageState extends State<RequestPage> {
 
   /// Closes a tab, after making sure unsaved edits to a saved request are
   /// not lost without being asked. The last tab makes way for a new one.
-  Future<void> _closeTab(int index) async {
+  /// Returns whether it was closed, rather than kept after all.
+  Future<bool> _closeTab(int index) async {
     final tab = _tabs[index];
     final origin = tab.origin;
     if (tab.dirty && origin != null && _store.settings.confirmDiscard) {
@@ -253,12 +272,20 @@ class _RequestPageState extends State<RequestPage> {
           ],
         ),
       );
-      if (save == null || !mounted) return;
+      if (save == null || !mounted) return false;
       if (save) _store.updateRequest(origin, tab.draft.toRequest());
     }
     // The dialog took a moment; the tab may have moved meanwhile.
     final at = _tabs.indexOf(tab);
-    if (at < 0) return;
+    if (at < 0) return false;
+    if (!tab.blank) {
+      _closed.add((
+        request: tab.draft.toRequest(),
+        origin: tab.origin,
+        name: tab.origin == null ? tab.draftName : tab.savedName,
+      ));
+      if (_closed.length > 20) _closed.removeAt(0);
+    }
     setState(() {
       _tabs.removeAt(at);
       if (_tabs.isEmpty) _tabs.add(_newTab());
@@ -271,7 +298,141 @@ class _RequestPageState extends State<RequestPage> {
     tab.ws.reset();
     // Let go of the tab once the widgets showing it have gone.
     WidgetsBinding.instance.addPostFrameCallback((_) => tab.dispose());
+    return true;
   }
+
+  /// Closes [tabs] one after another, stopping at one that is kept.
+  Future<void> _closeTabs(List<RequestTab> tabs) async {
+    for (final tab in tabs) {
+      final at = _tabs.indexOf(tab);
+      if (at >= 0 && !await _closeTab(at)) return;
+    }
+  }
+
+  /// Opens the tab closed last again: a saved request as it is saved now,
+  /// and one that was never saved as it was left.
+  void _reopenTab() {
+    if (_closed.isEmpty) return;
+    final closed = _closed.removeLast();
+    final origin = closed.origin;
+    final item = origin == null ? null : _store.itemAt(origin);
+    if (origin != null && item?.request != null && item?.name == closed.name) {
+      _open(origin);
+    } else {
+      _openUnsaved(closed.name, closed.request);
+    }
+  }
+
+  /// Opens a copy of the tab at [index], as a request not saved anywhere.
+  void _duplicateTab(int index) => _openUnsaved(
+    '${_tabLabels()[index].name} copy',
+    _tabs[index].draft.toRequest(),
+  );
+
+  /// Shows [request] in a tab of its own, as one that is not saved yet.
+  void _openUnsaved(String? name, Request request) {
+    setState(() {
+      _useFreshTab();
+      _wsReset();
+      _grpcReset();
+      _draft.load(request);
+      _draft.saved = null;
+      _origin = null;
+      _http.reset();
+      _graphql.reset();
+      _draftName = name;
+    });
+  }
+
+  /// Fills the request in from a curl command pasted where its address
+  /// goes, as copied from a browser's network tab or from documentation.
+  Future<void> _pasteCurl(String text) async {
+    final tab = _tab;
+    // The field is one line, so the line breaks of a command written over
+    // several have gone, leaving the backslashes that continued them.
+    final command = text.replaceAll(RegExp(r'''\\\s+(?=[-'"]|https?:)'''), ' ');
+    Request? firstOf(List<Item> items) {
+      for (final item in items) {
+        if (item.request ?? firstOf(item.items) case final request?) {
+          return request;
+        }
+      }
+      return null;
+    }
+
+    Request? request;
+    try {
+      final result = await _store.engine.importText(
+        text: command,
+        nameHint: 'Pasted',
+      );
+      request = result.collections
+          .map((collection) => firstOf(collection.items))
+          .nonNulls
+          .firstOrNull;
+    } catch (_) {
+      // Left as it was pasted, to be put right by hand.
+    }
+    if (!mounted || _tab != tab) return;
+    if (request == null) {
+      showMessage(context, 'That curl command could not be read.');
+      return;
+    }
+    final filled = request;
+    setState(() {
+      // A saved request stays the one it was, now with edits to save.
+      final saved = _draft.saved;
+      _wsReset();
+      _grpcReset();
+      _draft.load(filled);
+      _draft.saved = saved;
+      _http.reset();
+      _graphql.reset();
+    });
+    showMessage(context, 'Filled in from the curl command.');
+  }
+
+  /// Makes code larger or smaller by [step] points; back to the usual
+  /// size with none.
+  void _zoom(int step) => _store.updateSettings(
+    _store.settings.copyWith(
+      fontSize: step == 0 ? 13 : (_store.settings.fontSize + step).clamp(9, 28),
+    ),
+  );
+
+  /// What the menu bar and the shortcuts can ask for, by name.
+  Map<String, VoidCallback> get _commands => {
+    'newRequest': _newRequest,
+    'newCollection': () => newCollection(context, _store),
+    'openFile': () => openFile(context),
+    'openFolder': () => openCollectionFolder(context, _store),
+    'importFile': () => importFromFile(context, _store),
+    'importUrl': () => importFromUrl(context, _store),
+    'importPaste': () => importFromPaste(context, _store),
+    'save': _save,
+    'duplicateTab': () => _duplicateTab(_active),
+    'closeTab': () => _closeTab(_active),
+    'reopenTab': _reopenTab,
+    'nextTab': () => _stepTab(1),
+    'previousTab': () => _stepTab(-1),
+    'send': _primary,
+    'stop': _stopRunning,
+    'code': () {
+      if (!_isWs && !_isGrpc) _showCode();
+    },
+    'focusUrl': _urlFocus.requestFocus,
+    'sidebar': () => _toggleSidebar(docked: _docked),
+    'palette': () => _openPalette(() => _toggleSidebar(docked: _docked)),
+    'zoomIn': () => _zoom(1),
+    'zoomOut': () => _zoom(-1),
+    'zoomReset': () => _zoom(0),
+    'history': _openHistory,
+    'specs': _openSpecs,
+    'har': () => analyzeHarFile(context, _store),
+    'environments': _manageEnvironments,
+    'settings': () => SettingsDialog.show(context, _store),
+    'shortcuts': () => showShortcuts(context),
+  };
 
   /// After saved requests were removed or put back, positions may have
   /// moved. A tab follows its request to where it is now; one whose
@@ -681,6 +842,16 @@ class _RequestPageState extends State<RequestPage> {
         () => _closeTab(_active),
         shortcut: 'W',
       ),
+      action('Duplicate this tab', Icons.copy_all_outlined, () {
+        _duplicateTab(_active);
+      }),
+      if (_closed.isNotEmpty)
+        action(
+          'Reopen the closed tab',
+          Icons.restore_page_outlined,
+          _reopenTab,
+          shortcut: '⇧T',
+        ),
       action(
         'Go to the address',
         Icons.link,
@@ -700,6 +871,19 @@ class _RequestPageState extends State<RequestPage> {
         () => SettingsDialog.show(context, _store),
       ),
       action('Manage environments', Icons.tune, _manageEnvironments),
+      action(
+        'Keyboard shortcuts',
+        Icons.keyboard_outlined,
+        () => showShortcuts(context),
+        shortcut: '/',
+      ),
+      action('Make code larger', Icons.zoom_in, () => _zoom(1), shortcut: '+'),
+      action(
+        'Make code smaller',
+        Icons.zoom_out,
+        () => _zoom(-1),
+        shortcut: '-',
+      ),
       action(
         'New collection',
         Icons.create_new_folder_outlined,
@@ -781,19 +965,8 @@ class _RequestPageState extends State<RequestPage> {
 
   /// Opens an operation from a spec in a new, unsaved tab, behind the spec
   /// page, which stays open for more.
-  void _tryOperation(String name, Request request) {
-    setState(() {
-      _useFreshTab();
-      _wsReset();
-      _grpcReset();
-      _draft.load(request);
-      _draft.saved = null;
-      _origin = null;
-      _http.reset();
-      _graphql.reset();
-      _draftName = name;
-    });
-  }
+  void _tryOperation(String name, Request request) =>
+      _openUnsaved(name, request);
 
   // -------------------------------------------------------------- history
 
@@ -965,6 +1138,7 @@ class _RequestPageState extends State<RequestPage> {
         builder: (context, constraints) {
           // The sidebar is docked when there is room, otherwise a drawer.
           final docked = constraints.maxWidth >= 720;
+          _docked = docked;
           final collapsed = docked && _sidebarCollapsed;
           void toggle() => _toggleSidebar(docked: docked);
           final sidebar = Sidebar(
@@ -992,6 +1166,11 @@ class _RequestPageState extends State<RequestPage> {
                 (LogicalKeyboardKey.keyK, () => _openPalette(toggle)),
                 (LogicalKeyboardKey.keyP, () => _openPalette(toggle)),
                 (LogicalKeyboardKey.period, _stopRunning),
+                (LogicalKeyboardKey.slash, () => showShortcuts(context)),
+                (LogicalKeyboardKey.equal, () => _zoom(1)),
+                (LogicalKeyboardKey.add, () => _zoom(1)),
+                (LogicalKeyboardKey.minus, () => _zoom(-1)),
+                (LogicalKeyboardKey.digit0, () => _zoom(0)),
                 // Reached only outside text fields, which undo typing.
                 (LogicalKeyboardKey.keyZ, undoLast),
                 // The ninth is the last, however many there are.
@@ -1001,6 +1180,16 @@ class _RequestPageState extends State<RequestPage> {
                 SingleActivator(key, meta: true): action,
                 SingleActivator(key, control: true): action,
               },
+              const SingleActivator(
+                LogicalKeyboardKey.keyT,
+                meta: true,
+                shift: true,
+              ): _reopenTab,
+              const SingleActivator(
+                LogicalKeyboardKey.keyT,
+                control: true,
+                shift: true,
+              ): _reopenTab,
               // The next and previous tab, as browsers have them.
               const SingleActivator(
                 LogicalKeyboardKey.tab,
@@ -1289,6 +1478,7 @@ class _RequestPageState extends State<RequestPage> {
                     controller: _url,
                     focusNode: _urlFocus,
                     onSubmitted: () => _isWs ? _wsConnect() : _primary(),
+                    onCurl: _pasteCurl,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1406,6 +1596,13 @@ class _RequestPageState extends State<RequestPage> {
             onSelect: _selectTab,
             onClose: _closeTab,
             onNew: _newRequest,
+            onCloseOthers: (index) => _closeTabs([
+              for (final (i, tab) in _tabs.indexed)
+                if (i != index) tab,
+            ]),
+            onCloseAfter: (index) => _closeTabs(_tabs.sublist(index + 1)),
+            onDuplicate: _duplicateTab,
+            onReopen: _closed.isEmpty ? null : _reopenTab,
           ),
         ),
         const Divider(height: 1),

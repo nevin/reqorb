@@ -459,6 +459,18 @@ class FakeEngine extends Engine {
     required List<int> entries,
   }) async => importResult ?? (throw 'not a HAR archive');
 
+  /// Every text given to be imported.
+  final importedTexts = <String>[];
+
+  @override
+  Future<ImportResult> importText({
+    required String text,
+    required String nameHint,
+  }) async {
+    importedTexts.add(text);
+    return importResult ?? (throw 'nothing to import');
+  }
+
   // ------------------------------------------- not needed by the tests yet
 
   @override
