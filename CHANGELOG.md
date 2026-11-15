@@ -18,6 +18,14 @@ the new version when it is tagged.
 - The Mac window opens larger the first time, and after that where it was left.
 - History, API specs, Open file, the HAR analyser and Settings sit side by side at the
   foot of the sidebar, leaving the height to the list of requests.
+- Tabs are dragged into another order with the mouse.
+- A saved request is dragged to another place, collection or folder in the sidebar, or
+  sent there with **Move to…**; a tab open on it follows it.
+- The sidebar's edge is dragged to change its width, which is kept.
+- With nothing saved yet, the sidebar offers buttons to import a file, paste curl or
+  JSON, open a collection folder or start a collection.
+- On Windows, Linux and iPad, a `⋮` button holds the menus the Mac has in its menu bar.
+- A request's sections sit closer together, so more of them fit beside the response.
 
 ## 1.0.0 – 2026-10-18
 

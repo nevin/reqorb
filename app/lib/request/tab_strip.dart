@@ -18,6 +18,7 @@ class TabStrip extends StatelessWidget {
     required this.onCloseAfter,
     required this.onDuplicate,
     required this.onReopen,
+    required this.onMove,
   });
 
   final List<OpenTab> tabs;
@@ -37,6 +38,9 @@ class TabStrip extends StatelessWidget {
 
   /// Opens the tab closed last again; null when none has been closed.
   final VoidCallback? onReopen;
+
+  /// Puts the first tab where the second is, when one is dragged there.
+  final void Function(int from, int to) onMove;
 
   /// What can be done with the tab at [index], offered where it was
   /// right-clicked or held.
@@ -103,6 +107,7 @@ class TabStrip extends StatelessWidget {
                       onSelect: () => onSelect(index),
                       onClose: () => onClose(index),
                       onMenu: (at) => _menu(context, index, at),
+                      onDropped: (from) => onMove(from, index),
                     ),
                 ],
               ),
@@ -131,6 +136,7 @@ class _Tab extends StatelessWidget {
     required this.onSelect,
     required this.onClose,
     required this.onMenu,
+    required this.onDropped,
   });
 
   final int index;
@@ -142,8 +148,47 @@ class _Tab extends StatelessWidget {
   /// Shows the tab's menu at a place in the window.
   final ValueChanged<Offset> onMenu;
 
+  /// Called with the place of a tab dropped on this one.
+  final ValueChanged<int> onDropped;
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    // With a pointer a tab is dragged to another's place. A finger holds a
+    // tab for its menu instead.
+    if (!isDesktop) return _label(context);
+    return DragTarget<int>(
+      onWillAcceptWithDetails: (details) => details.data != index,
+      onAcceptWithDetails: (details) => onDropped(details.data),
+      builder: (context, over, _) => DecoratedBox(
+        position: DecorationPosition.foreground,
+        decoration: BoxDecoration(
+          border: Border(
+            left: BorderSide(
+              width: 2,
+              color: over.isEmpty ? Colors.transparent : scheme.primary,
+            ),
+          ),
+        ),
+        child: Draggable<int>(
+          data: index,
+          axis: Axis.horizontal,
+          feedback: Material(
+            elevation: 4,
+            color: scheme.surfaceContainerHigh,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              child: Text('${tab.method}  ${tab.name}'),
+            ),
+          ),
+          child: _label(context),
+        ),
+      ),
+    );
+  }
+
+  Widget _label(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Semantics(

@@ -493,11 +493,19 @@ or a call that is under way. Deleting a request, folder, collection or environme
 clearing the session, offers **Undo** until the next message replaces it; `⌘Z` outside a
 text field does the same.
 
+A tab is dragged to another's place with the mouse. In the sidebar a saved request is
+dragged onto another to go before it, or onto a collection, a folder or the
+**Requests** heading to go to its end (hold it first on a touch screen); **Move to…**
+in its menu does the same from a list. A request that is open stays open on its tab
+wherever it goes. The sidebar's right edge is dragged to make it wider or narrower,
+and a double click puts it back.
+
 A right click on a saved request or a collection in the sidebar offers what the `⋯`
 at the end of its row does. On a Mac the menu bar has everything too: **File** (new,
 open, import, save, tabs), **View** (sidebar, the size of code, tabs), **Request**
 (send, stop, code, environments), **Tools** (history, specs, the HAR analyser) and
-**Help › Keyboard Shortcuts**, which `⌘/` shows anywhere. `⌘+` and `⌘-` make code
+**Help › Keyboard Shortcuts**, which `⌘/` shows anywhere. Elsewhere the same menus
+are behind the `⋮` button beside the environment. `⌘+` and `⌘-` make code
 larger and smaller, and `⌘0` puts it back. The window opens where, and as large as, it
 was left.
 

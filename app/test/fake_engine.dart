@@ -349,6 +349,7 @@ class FakeEngine extends Engine {
     protectSecrets: true,
     historyLimit: 500,
     splitPercent: 40,
+    sidebarWidth: 280,
   );
 
   @override

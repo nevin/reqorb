@@ -868,6 +868,86 @@ class WorkspaceStore extends ChangeNotifier {
     _set(collections: all);
   }
 
+  /// Where [item] is now, told by which object it is rather than by what
+  /// it holds; null when it is no longer saved anywhere.
+  RequestRef? refOf(Item item) {
+    RequestRef? within(int collection, List<Item> items, List<int> parent) {
+      for (final (i, candidate) in items.indexed) {
+        final path = [...parent, i];
+        if (identical(candidate, item)) return RequestRef(collection, path);
+        if (within(collection, candidate.items, path) case final found?) {
+          return found;
+        }
+      }
+      return null;
+    }
+
+    for (final (i, collection) in collections.indexed) {
+      if (within(i, collection.items, const []) case final found?) return found;
+    }
+    return within(RequestRef.noCollection, requests, const []);
+  }
+
+  /// Moves the item at [from] to [to]: into the collection and folder
+  /// [to] names, before the item now at its last place, or at the end
+  /// when that place is past the last. Returns whether anything moved.
+  bool moveItem(RequestRef from, RequestRef to) {
+    final item = itemAt(from);
+    if (item == null || to.path.isEmpty) return false;
+    final standaloneTo = to.collection == RequestRef.noCollection;
+    if (!standaloneTo &&
+        (to.collection < 0 || to.collection >= collections.length)) {
+      return false;
+    }
+    final folder = to.path.sublist(0, to.path.length - 1);
+    if (folder.isNotEmpty) {
+      final into = itemAt(RequestRef(to.collection, folder));
+      if (into == null || into.request != null) return false;
+    }
+    // Taking the item out moves what follows it up by one, which the
+    // place it is going to has to allow for.
+    final path = [...to.path];
+    final depth = from.path.length - 1;
+    if (to.collection == from.collection && path.length > depth) {
+      var together = true;
+      for (var i = 0; i < depth; i++) {
+        together &= path[i] == from.path[i];
+      }
+      if (together) {
+        // Into itself, or to where it already is.
+        if (path[depth] == from.path[depth]) return false;
+        if (path[depth] > from.path[depth]) path[depth]--;
+      }
+    }
+    var standalone = requests;
+    final all = [...collections];
+    List<Item> itemsOf(int collection) => collection == RequestRef.noCollection
+        ? standalone
+        : all[collection].items;
+    void put(int collection, List<Item> items) {
+      if (collection == RequestRef.noCollection) {
+        standalone = items;
+        return;
+      }
+      final target = all[collection];
+      all[collection] = Collection(
+        name: target.name,
+        variables: target.variables,
+        link: target.link,
+        unreviewed: target.unreviewed,
+        items: items,
+      );
+    }
+
+    put(
+      from.collection,
+      _replace(itemsOf(from.collection), from.path, (_) => null),
+    );
+    put(to.collection, _insert(itemsOf(to.collection), path, item));
+    _set(collections: all, requests: standalone);
+    return true;
+  }
+
   /// Copies a request to the end of the folder it is in, so that no other
   /// request changes position.
   void duplicateItem(RequestRef ref) {
@@ -1050,6 +1130,7 @@ extension SettingsCopy on Settings {
     bool? protectSecrets,
     int? historyLimit,
     int? splitPercent,
+    int? sidebarWidth,
   }) => Settings(
     theme: theme ?? this.theme,
     httpMode: httpMode ?? this.httpMode,
@@ -1071,5 +1152,6 @@ extension SettingsCopy on Settings {
     protectSecrets: protectSecrets ?? this.protectSecrets,
     historyLimit: historyLimit ?? this.historyLimit,
     splitPercent: splitPercent ?? this.splitPercent,
+    sidebarWidth: sidebarWidth ?? this.sidebarWidth,
   );
 }

@@ -213,13 +213,21 @@ class _KeyValueEditorState extends State<KeyValueEditor> {
                         style: label,
                       ),
                     ),
-                    TextButton(
-                      key: Key('${widget.name}-bulk-toggle'),
-                      style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
+                    // Gives way rather than spilling over when the
+                    // request is squeezed very narrow.
+                    Flexible(
+                      child: TextButton(
+                        key: Key('${widget.name}-bulk-toggle'),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onPressed: () => widget.onBulkChanged(!widget.bulk),
+                        child: Text(
+                          widget.bulk ? 'Key-Value Edit' : 'Bulk Edit',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                      onPressed: () => widget.onBulkChanged(!widget.bulk),
-                      child: Text(widget.bulk ? 'Key-Value Edit' : 'Bulk Edit'),
                     ),
                   ],
                 ),

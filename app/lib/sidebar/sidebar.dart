@@ -23,6 +23,7 @@ class Sidebar extends StatefulWidget {
     required this.onOpen,
     required this.onNewRequest,
     required this.onRemoved,
+    required this.onMove,
     required this.onHistory,
     required this.onSpecs,
     this.onCollapse,
@@ -38,6 +39,10 @@ class Sidebar extends StatefulWidget {
   /// Called after anything is deleted or put back, since saved positions
   /// may have moved.
   final VoidCallback onRemoved;
+
+  /// Moves a saved request to another place: before the item there, or
+  /// to the end of the collection or folder when the place is past it.
+  final void Function(RequestRef from, RequestRef to) onMove;
 
   /// Shows the requests sent before.
   final VoidCallback onHistory;
@@ -314,40 +319,87 @@ class _SidebarState extends State<Sidebar> {
 
   Widget _tree(ThemeData theme) {
     return _scrolling(_treeScroll, [
-      if (store.collections.isEmpty)
+      if (store.collections.isEmpty) ...[
         _hint(
           theme,
-          'Import a swagger.json, a Postman collection, a HAR file or '
-          'a curl command, or save a request into a new collection.',
+          'Nothing is saved yet. Bring requests in, or start a '
+          'collection to save your own into.',
         ),
+        for (final (key, icon, label, action) in [
+          (
+            'start-import',
+            Icons.file_download_outlined,
+            'Import a file…',
+            () => importFromFile(context, store),
+          ),
+          (
+            'start-paste',
+            Icons.content_paste,
+            'Paste curl or JSON…',
+            () => importFromPaste(context, store),
+          ),
+          (
+            'start-folder',
+            Icons.folder_open_outlined,
+            'Open a collection folder…',
+            () => openCollectionFolder(context, store),
+          ),
+          (
+            'start-collection',
+            Icons.create_new_folder_outlined,
+            'New collection',
+            () => newCollection(context, store),
+          ),
+        ])
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: TextButton.icon(
+                key: Key(key),
+                onPressed: action,
+                icon: Icon(icon, size: 18),
+                label: Text(label),
+              ),
+            ),
+          ),
+        _hint(
+          theme,
+          'Postman, OpenAPI or Swagger, HAR and .env files '
+          'can all be imported.',
+        ),
+      ],
       for (var i = 0; i < store.collections.length; i++) _collection(i),
       const Divider(height: 24),
-      Padding(
-        padding: const EdgeInsets.only(left: 16, right: 4),
-        child: Row(
-          children: [
-            Expanded(child: Text('Requests', style: _heading(theme))),
-            if (store.requests.length > 1)
-              IconButton(
-                key: const Key('run-requests'),
-                tooltip: 'Run these requests',
-                iconSize: 20,
-                icon: const Icon(Icons.play_arrow_outlined),
-                onPressed: () => showRunner(
-                  context,
-                  store: store,
-                  name: 'requests',
-                  steps: runSteps(store.requests, null),
+      _dropInto(
+        const RequestRef(RequestRef.noCollection, [_atEnd]),
+        child: Padding(
+          padding: const EdgeInsets.only(left: 16, right: 4),
+          child: Row(
+            children: [
+              Expanded(child: Text('Requests', style: _heading(theme))),
+              if (store.requests.length > 1)
+                IconButton(
+                  key: const Key('run-requests'),
+                  tooltip: 'Run these requests',
+                  iconSize: 20,
+                  icon: const Icon(Icons.play_arrow_outlined),
+                  onPressed: () => showRunner(
+                    context,
+                    store: store,
+                    name: 'requests',
+                    steps: runSteps(store.requests, null),
+                  ),
                 ),
+              IconButton(
+                key: const Key('new-request'),
+                tooltip: 'New request (${shortcutModifier}N)',
+                iconSize: 20,
+                icon: const Icon(Icons.add),
+                onPressed: widget.onNewRequest,
               ),
-            IconButton(
-              key: const Key('new-request'),
-              tooltip: 'New request (${shortcutModifier}N)',
-              iconSize: 20,
-              icon: const Icon(Icons.add),
-              onPressed: widget.onNewRequest,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
       if (store.requests.isEmpty)
@@ -413,6 +465,10 @@ class _SidebarState extends State<Sidebar> {
       method: request.method,
       indent: indent,
       selected: widget.selected == ref,
+      // Only where the tree is shown as it is kept can it be rearranged.
+      place: where.isEmpty ? ref : null,
+      onDropped: (from) => widget.onMove(from, ref),
+      onMoveTo: () => _moveTo(ref),
       onTap: () => widget.onOpen(ref),
       onRename: () => _rename(ref),
       onCopyAddress: () {
@@ -422,6 +478,71 @@ class _SidebarState extends State<Sidebar> {
       onDuplicate: () => store.duplicateItem(ref),
       onDelete: () => _remove(ref),
     );
+  }
+
+  /// Makes [child] somewhere a dragged request can be dropped, to go to
+  /// [to]; it is tinted while one is held over it.
+  Widget _dropInto(RequestRef to, {required Widget child}) =>
+      DragTarget<RequestRef>(
+        onAcceptWithDetails: (details) => widget.onMove(details.data, to),
+        builder: (context, held, _) => DecoratedBox(
+          decoration: BoxDecoration(
+            color: held.isEmpty
+                ? null
+                : Theme.of(context).colorScheme.primaryContainer,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: child,
+        ),
+      );
+
+  /// Asks which collection or folder a request should go to, and moves
+  /// it to the end of the one chosen.
+  Future<void> _moveTo(RequestRef ref) async {
+    final item = store.itemAt(ref);
+    if (item == null) return;
+    final places = <(String, RequestRef)>[];
+    void folders(
+      int collection,
+      List<Item> items,
+      List<int> parent,
+      String where,
+    ) {
+      for (final (i, child) in items.indexed) {
+        if (child.request != null) continue;
+        final path = [...parent, i];
+        final name = '$where / ${child.name}';
+        places.add((name, RequestRef(collection, [...path, _atEnd])));
+        folders(collection, child.items, path, name);
+      }
+    }
+
+    for (final (i, collection) in store.collections.indexed) {
+      places.add((collection.name, RequestRef(i, const [_atEnd])));
+      folders(i, collection.items, const [], collection.name);
+    }
+    places.add((
+      'Requests, outside any collection',
+      const RequestRef(RequestRef.noCollection, [_atEnd]),
+    ));
+    final to = await showDialog<RequestRef>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        key: const Key('move-to'),
+        title: Text('Move "${item.name}" to'),
+        children: [
+          for (final (name, place) in places)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, place),
+              child: Text(name),
+            ),
+        ],
+      ),
+    );
+    // Only if the request is still where it was.
+    if (to != null && identical(store.itemAt(ref), item)) {
+      widget.onMove(ref, to);
+    }
   }
 
   Widget _hint(ThemeData theme, String text) => Padding(
@@ -449,24 +570,27 @@ class _SidebarState extends State<Sidebar> {
         behavior: HitTestBehavior.opaque,
         onSecondaryTapUp: (details) =>
             _menuAt(context, details.globalPosition, _collectionActions(index)),
-        child: Row(
-          children: [
-            Flexible(
-              child: Text(
-                collection.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w600),
+        child: _dropInto(
+          RequestRef(index, const [_atEnd]),
+          child: Row(
+            children: [
+              Flexible(
+                child: Text(
+                  collection.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
               ),
-            ),
-            if (collection.link case final link?) ...[
-              const SizedBox(width: 6),
-              _FolderMark(
-                path: link.path,
-                problem: store.folderProblems[link.path],
-              ),
+              if (collection.link case final link?) ...[
+                const SizedBox(width: 6),
+                _FolderMark(
+                  path: link.path,
+                  problem: store.folderProblems[link.path],
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
       trailing: PopupMenuButton<VoidCallback>(
@@ -576,10 +700,16 @@ class _SidebarState extends State<Sidebar> {
             controlAffinity: ListTileControlAffinity.leading,
             shape: const Border(),
             tilePadding: EdgeInsets.only(left: indent - 8, right: 8),
-            title: Text(
-              items[i].name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            title: _dropInto(
+              RequestRef(collection, [...parent, i, _atEnd]),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  items[i].name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ),
             trailing: IconButton(
               key: Key('run-folder-${[...parent, i].join('-')}'),
@@ -610,6 +740,9 @@ class _RequestTile extends StatefulWidget {
     required this.method,
     required this.indent,
     required this.selected,
+    required this.place,
+    required this.onDropped,
+    required this.onMoveTo,
     required this.onTap,
     required this.onRename,
     required this.onCopyAddress,
@@ -624,6 +757,16 @@ class _RequestTile extends StatefulWidget {
   final String method;
   final double indent;
   final bool selected;
+
+  /// Where the request is kept, when its row can be dragged elsewhere
+  /// and have others dropped on it.
+  final RequestRef? place;
+
+  /// Called with a request dropped on this one, to go before it.
+  final ValueChanged<RequestRef> onDropped;
+
+  /// Asks where to move the request.
+  final VoidCallback onMoveTo;
   final VoidCallback onTap;
   final VoidCallback onRename;
   final VoidCallback onCopyAddress;
@@ -655,6 +798,12 @@ class _RequestTileState extends State<_RequestTile> {
       value: widget.onDuplicate,
       child: const Text('Duplicate'),
     ),
+    if (widget.place != null)
+      PopupMenuItem(
+        key: const Key('move-request'),
+        value: widget.onMoveTo,
+        child: const Text('Move to…'),
+      ),
     PopupMenuItem(
       key: const Key('copy-request-address'),
       value: widget.onCopyAddress,
@@ -675,6 +824,57 @@ class _RequestTileState extends State<_RequestTile> {
     // With a pointer the actions appear on hover, which keeps a long list
     // quiet; on touch there is no hover, so they are always shown.
     final showActions = !isDesktop || _hovered || widget.selected;
+    final place = widget.place;
+    if (place == null) return _row(theme, showActions);
+    // What follows the pointer while the request is dragged.
+    final held = Material(
+      elevation: 4,
+      borderRadius: BorderRadius.circular(6),
+      color: scheme.surfaceContainerHigh,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Text(
+          '${widget.method.toUpperCase()}  ${widget.name}',
+          style: theme.textTheme.bodyMedium,
+        ),
+      ),
+    );
+    final row = _row(theme, showActions);
+    return DragTarget<RequestRef>(
+      onWillAcceptWithDetails: (details) => details.data != place,
+      onAcceptWithDetails: (details) => widget.onDropped(details.data),
+      // A line above the row shows where the one held would go.
+      builder: (context, over, _) => DecoratedBox(
+        position: DecorationPosition.foreground,
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(
+              width: 2,
+              color: over.isEmpty ? Colors.transparent : scheme.primary,
+            ),
+          ),
+        ),
+        // A pointer drags at once; a finger holds first, so that the
+        // list can still be scrolled.
+        child: isDesktop
+            ? Draggable<RequestRef>(
+                data: place,
+                feedback: held,
+                dragAnchorStrategy: pointerDragAnchorStrategy,
+                child: row,
+              )
+            : LongPressDraggable<RequestRef>(
+                data: place,
+                feedback: held,
+                dragAnchorStrategy: pointerDragAnchorStrategy,
+                child: row,
+              ),
+      ),
+    );
+  }
+
+  Widget _row(ThemeData theme, bool showActions) {
+    final scheme = theme.colorScheme;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -786,6 +986,9 @@ class _FolderMark extends StatelessWidget {
     );
   }
 }
+
+/// A place past the last in any list, for moving something to its end.
+const _atEnd = 1 << 30;
 
 /// Shows [items] as a menu at a place in the window, and does what is
 /// chosen from it.

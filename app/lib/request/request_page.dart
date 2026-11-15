@@ -3,6 +3,7 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide FormField;
 import 'package:flutter/services.dart';
 import 'package:reqorb/editor/code_controller.dart';
@@ -41,6 +42,7 @@ import 'package:reqorb/runner/collection_run.dart';
 import 'package:reqorb/runner/runner_dialog.dart';
 import 'package:reqorb/spec/spec_page.dart';
 import 'package:reqorb/settings/settings_dialog.dart';
+import 'package:reqorb/shared/app_menu.dart';
 import 'package:reqorb/shared/messages.dart';
 import 'package:reqorb/shared/shortcuts_dialog.dart';
 import 'package:reqorb/shared/split_view.dart';
@@ -52,7 +54,8 @@ import 'package:reqorb/transfer/import_actions.dart';
 import 'package:reqorb/workspace/collection_actions.dart';
 import 'package:reqorb/workspace/workspace_store.dart';
 
-const _sidebarWidth = 280.0;
+/// How narrow and how wide the sidebar can be dragged.
+const _sidebarNarrowest = 200, _sidebarWidest = 520;
 
 class RequestPage extends StatefulWidget {
   const RequestPage({super.key, required this.store});
@@ -111,6 +114,16 @@ class _RequestPageState extends State<RequestPage> {
 
   /// Whether the docked sidebar is hidden to give the editor more room.
   bool _sidebarCollapsed = false;
+
+  /// How wide the sidebar is while its edge is being dragged; otherwise
+  /// as wide as the settings say it was left.
+  double? _sidebarDrag;
+
+  double get _sidebarWidth =>
+      _sidebarDrag ??
+      _store.settings.sidebarWidth
+          .clamp(_sidebarNarrowest, _sidebarWidest)
+          .toDouble();
 
   /// Share of the space the request editor takes; the response has the rest.
   /// Where the divider is while it is being dragged; otherwise where the
@@ -301,6 +314,33 @@ class _RequestPageState extends State<RequestPage> {
     return true;
   }
 
+  /// Puts the tab at [from] where the one at [to] is, the rest making
+  /// room; the tab showing stays the one showing.
+  void _moveTab(int from, int to) {
+    if (from == to || from >= _tabs.length || to >= _tabs.length) return;
+    setState(() {
+      final showing = _tab;
+      _tabs.insert(to, _tabs.removeAt(from));
+      _active = _tabs.indexOf(showing);
+    });
+  }
+
+  /// Moves a saved request elsewhere in the sidebar. The tabs open on
+  /// saved requests follow them to where they are afterwards.
+  void _moveItem(RequestRef from, RequestRef to) {
+    final open = {
+      for (final tab in _tabs)
+        if (tab.origin case final origin?) tab: _store.itemAt(origin),
+    };
+    if (!_store.moveItem(from, to)) return;
+    setState(() {
+      for (final MapEntry(key: tab, value: item) in open.entries) {
+        if (item == null) continue;
+        if (_store.refOf(item) case final now?) tab.origin = now;
+      }
+    });
+  }
+
   /// Closes [tabs] one after another, stopping at one that is kept.
   Future<void> _closeTabs(List<RequestTab> tabs) async {
     for (final tab in tabs) {
@@ -390,6 +430,12 @@ class _RequestPageState extends State<RequestPage> {
       _graphql.reset();
     });
     showMessage(context, 'Filled in from the curl command.');
+  }
+
+  /// Keeps the sidebar [width] wide, for this launch and the next.
+  void _keepSidebarWidth(int width) {
+    setState(() => _sidebarDrag = null);
+    _store.updateSettings(_store.settings.copyWith(sidebarWidth: width));
   }
 
   /// Makes code larger or smaller by [step] points; back to the usual
@@ -1147,11 +1193,12 @@ class _RequestPageState extends State<RequestPage> {
             onOpen: _open,
             onNewRequest: _newRequest,
             onRemoved: _reconcileTabs,
+            onMove: _moveItem,
             onHistory: _openHistory,
             onSpecs: _openSpecs,
             onCollapse: docked ? toggle : null,
           );
-          const width = _sidebarWidth + 1;
+          final width = _sidebarWidth + 1;
           return CallbackShortcuts(
             bindings: {
               // Each shortcut works with Command on macOS and Control elsewhere.
@@ -1223,43 +1270,77 @@ class _RequestPageState extends State<RequestPage> {
                 key: _scaffold,
                 drawer: docked ? null : Drawer(child: SafeArea(child: sidebar)),
                 body: SafeArea(
-                  child: Row(
+                  child: Stack(
+                    fit: StackFit.expand,
                     children: [
-                      if (docked)
-                        // The sidebar keeps its width and slides out of view,
-                        // so its contents never reflow while animating.
-                        ClipRect(
-                          child: AnimatedContainer(
-                            key: const Key('sidebar'),
-                            duration: const Duration(milliseconds: 180),
-                            curve: Curves.easeOut,
-                            width: collapsed ? 0 : width,
-                            child: OverflowBox(
-                              alignment: Alignment.centerRight,
-                              minWidth: width,
-                              maxWidth: width,
-                              child: ExcludeFocus(
-                                excluding: collapsed,
-                                child: Row(
-                                  children: [
-                                    SizedBox(
-                                      width: _sidebarWidth,
-                                      child: sidebar,
+                      Row(
+                        children: [
+                          if (docked)
+                            // The sidebar keeps its width and slides out of view,
+                            // so its contents never reflow while animating.
+                            ClipRect(
+                              child: AnimatedContainer(
+                                key: const Key('sidebar'),
+                                // Follows the pointer exactly while dragged.
+                                duration: _sidebarDrag != null
+                                    ? Duration.zero
+                                    : const Duration(milliseconds: 180),
+                                curve: Curves.easeOut,
+                                width: collapsed ? 0 : width,
+                                child: OverflowBox(
+                                  alignment: Alignment.centerRight,
+                                  minWidth: width,
+                                  maxWidth: width,
+                                  child: ExcludeFocus(
+                                    excluding: collapsed,
+                                    child: Row(
+                                      children: [
+                                        SizedBox(
+                                          width: _sidebarWidth,
+                                          child: sidebar,
+                                        ),
+                                        const VerticalDivider(width: 1),
+                                      ],
                                     ),
-                                    const VerticalDivider(width: 1),
-                                  ],
+                                  ),
                                 ),
                               ),
                             ),
+                          Expanded(
+                            child: _main(
+                              context,
+                              showMenu: !docked || collapsed,
+                              onMenu: toggle,
+                            ),
+                          ),
+                        ],
+                      ),
+                      // The sidebar's edge, to drag it wider or narrower;
+                      // a double click puts it back.
+                      if (docked && !collapsed)
+                        Positioned(
+                          left: _sidebarWidth - 2,
+                          top: 0,
+                          bottom: 0,
+                          width: 6,
+                          child: MouseRegion(
+                            cursor: SystemMouseCursors.resizeColumn,
+                            child: GestureDetector(
+                              key: const Key('sidebar-edge'),
+                              behavior: HitTestBehavior.opaque,
+                              onHorizontalDragUpdate: (details) => setState(
+                                () => _sidebarDrag =
+                                    (_sidebarWidth + details.delta.dx).clamp(
+                                      _sidebarNarrowest.toDouble(),
+                                      _sidebarWidest.toDouble(),
+                                    ),
+                              ),
+                              onHorizontalDragEnd: (_) =>
+                                  _keepSidebarWidth(_sidebarWidth.round()),
+                              onDoubleTap: () => _keepSidebarWidth(280),
+                            ),
                           ),
                         ),
-                      Expanded(
-                        child: _main(
-                          context,
-                          showMenu: !docked || collapsed,
-                          onMenu: toggle,
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -1461,6 +1542,9 @@ class _RequestPageState extends State<RequestPage> {
               ),
               const SizedBox(width: 4),
               EnvironmentPicker(store: _store, onManage: _manageEnvironments),
+              // A Mac has these in its menu bar.
+              if (defaultTargetPlatform != TargetPlatform.macOS)
+                AppMenuButton(commands: _commands),
             ],
           ),
         ),
@@ -1602,6 +1686,7 @@ class _RequestPageState extends State<RequestPage> {
             ]),
             onCloseAfter: (index) => _closeTabs(_tabs.sublist(index + 1)),
             onDuplicate: _duplicateTab,
+            onMove: _moveTab,
             onReopen: _closed.isEmpty ? null : _reopenTab,
           ),
         ),
