@@ -1,7 +1,7 @@
 /// The tabs under the URL bar that hold the parts of a request.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:reqorb/shared/overflow_tab_bar.dart';
 import 'package:reqorb/editor/code_controller.dart';
 import 'package:reqorb/request/key_value_editor.dart';

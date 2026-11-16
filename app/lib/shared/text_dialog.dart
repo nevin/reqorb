@@ -1,7 +1,7 @@
 /// A dialog that asks for one piece of text.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:reqorb/shared/theme.dart';
 
 class TextDialog extends StatefulWidget {

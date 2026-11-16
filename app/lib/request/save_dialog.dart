@@ -1,7 +1,7 @@
 /// Asks what to call a new request and where to keep it.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Where the save dialog says a new request should go.
 class SaveTarget {

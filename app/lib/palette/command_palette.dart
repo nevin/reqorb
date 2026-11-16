@@ -2,7 +2,7 @@
 /// an environment or an action by a few letters of its name.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:reqorb/shared/theme.dart';
 

@@ -2,7 +2,7 @@
 /// their own. They hold what the Mac's menu bar holds.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:reqorb/shared/theme.dart';
 
 /// One entry: what it says, the command it asks for, and the keys that do

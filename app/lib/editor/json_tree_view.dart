@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:reqorb/document/text_document.dart';
 import 'package:reqorb/editor/syntax.dart';
 import 'package:reqorb/response/response_view.dart' show formatSize;

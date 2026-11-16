@@ -3,7 +3,7 @@ library;
 
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:reqorb/shared/folders.dart';
 import 'package:reqorb/shared/messages.dart';
 import 'package:reqorb/shared/text_dialog.dart';

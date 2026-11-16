@@ -1,7 +1,7 @@
 /// A request written out as code, to copy into a program or a terminal.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:reqorb/bridge/engine.dart';
 import 'package:reqorb/editor/code_editor.dart';

@@ -4,7 +4,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart' hide FormField;
+import 'package:material_ui/material_ui.dart' hide FormField;
 import 'package:flutter/services.dart';
 import 'package:reqorb/editor/code_controller.dart';
 import 'package:reqorb/graphql/graphql_editor.dart';

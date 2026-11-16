@@ -5,7 +5,7 @@
 | Tool | Version | Needed for |
 |---|---|---|
 | Rust | 1.99 or later (stable) | Everything |
-| Flutter | 3.47 (stable); CI and releases build with 3.47.7 | The app |
+| Flutter | 3.50 (stable); CI and releases build with 3.50.0 | The app |
 | Xcode | 26 or later | The macOS and iPad builds. Older versions build, but without the dark and tinted app icons |
 | `flutter_rust_bridge_codegen` | 2.13.0, matching `app/pubspec.yaml` | Only when you change `app/rust/src/api` |
 | `cargo-llvm-cov` | any | Only for `scripts/coverage.sh` |

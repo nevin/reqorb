@@ -62,7 +62,7 @@ app has not been built on either yet.
 ## Requirements
 
 - Rust 1.99 or later
-- Flutter 3.47 or later, for the app
+- Flutter 3.50 or later, for the app
 - Xcode, for the macOS and iPad builds
 - `cargo install flutter_rust_bridge_codegen`, only if you change the bridge in
   `app/rust/src/api`
