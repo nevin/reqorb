@@ -110,6 +110,7 @@ pub struct _Settings {
     pub protect_secrets: bool,
     pub history_limit: u32,
     pub split_percent: u32,
+    pub sidebar_width: u32,
 }
 
 #[frb(mirror(DirAccess))]
