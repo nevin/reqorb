@@ -2,9 +2,9 @@
 //! arrive. A [`crate::Response`] with a `body_file` keeps only the start of
 //! its body as text; the whole of it is in the file.
 //!
-//! The files are kept in a folder of their own in the system's temporary
-//! folder. Only the most recent few are kept, and [`clean_spilled`]
-//! removes all of them, as the app does when it starts.
+//! The files are kept in a folder of their own, readable by this user
+//! alone (see [`private_dir`]). Only the most recent few are kept, and
+//! [`clean_spilled`] removes all of them, as the app does when it starts.
 
 use std::borrow::Cow;
 use std::fs::{self, File};
@@ -54,13 +54,22 @@ const KEPT: usize = 8;
 
 /// Where the bodies go.
 pub fn spill_dir() -> PathBuf {
-    std::env::temp_dir().join("reqorb-bodies")
+    private_dir("reqorb-bodies")
+}
+
+/// Where a copy of a file being written over is kept, while a document
+/// still reads it.
+pub(crate) fn originals_dir() -> PathBuf {
+    private_dir("reqorb-originals")
 }
 
 /// Deletes every body written to a file, as nothing refers to them once
-/// the app that wrote them has quit.
+/// the app that wrote them has quit, and any copy of an original left by
+/// an app that stopped without deleting it. A copy still open elsewhere
+/// is read through its open file, which deleting it leaves readable.
 pub fn clean_spilled() {
     let _ = fs::remove_dir_all(spill_dir());
+    let _ = fs::remove_dir_all(originals_dir());
 }
 
 /// A new file in [`spill_dir`], for a body or for a document written out
@@ -68,15 +77,16 @@ pub fn clean_spilled() {
 pub fn new_spill_file() -> io::Result<(File, PathBuf)> {
     static NEXT: AtomicU64 = AtomicU64::new(0);
     let dir = spill_dir();
-    fs::create_dir_all(&dir)?;
-    let mut old: Vec<_> = fs::read_dir(&dir)?
-        .filter_map(Result::ok)
-        .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
-        .collect();
-    if old.len() >= KEPT {
-        old.sort();
-        for (_, path) in &old[..=old.len() - KEPT] {
-            let _ = fs::remove_file(path);
+    if let Ok(entries) = fs::read_dir(&dir) {
+        let mut old: Vec<_> = entries
+            .filter_map(Result::ok)
+            .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
+            .collect();
+        if old.len() >= KEPT {
+            old.sort();
+            for (_, path) in &old[..=old.len() - KEPT] {
+                let _ = fs::remove_file(path);
+            }
         }
     }
     let path = dir.join(format!(
@@ -84,7 +94,103 @@ pub fn new_spill_file() -> io::Result<(File, PathBuf)> {
         std::process::id(),
         NEXT.fetch_add(1, Ordering::Relaxed)
     ));
-    Ok((File::create(&path)?, path))
+    Ok((new_private_file(&path)?, path))
+}
+
+/// A folder of reqorb's own, `name`, for files no other user may read.
+///
+/// macOS, iOS and Windows give each user a temporary folder of their own,
+/// so it is made there. Elsewhere the temporary folder is shared by every
+/// user, any of whom could make the folder first or leave a link in it,
+/// so it is made in this user's cache folder instead.
+pub(crate) fn private_dir(name: &str) -> PathBuf {
+    #[cfg(any(not(unix), target_vendor = "apple"))]
+    let base = std::env::temp_dir();
+    #[cfg(all(unix, not(target_vendor = "apple")))]
+    let base = cache_dir(|key| std::env::var_os(key)).unwrap_or_else(std::env::temp_dir);
+    base.join(name)
+}
+
+/// This user's cache folder, as the XDG convention has it, from the
+/// environment variables `var` reads; none when neither is set.
+#[cfg(all(unix, any(test, not(target_vendor = "apple"))))]
+fn cache_dir(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> Option<PathBuf> {
+    let absolute = |key: &str| var(key).map(PathBuf::from).filter(|p| p.is_absolute());
+    absolute("XDG_CACHE_HOME").or_else(|| absolute("HOME").map(|home| home.join(".cache")))
+}
+
+/// Makes a new file at `path`, which only this user can read or write, in
+/// a folder of theirs that only they can use, made if need be. Fails when
+/// anything is already at `path`, so a link put there is never written
+/// through, and when the folder is a link or belongs to someone else.
+pub(crate) fn new_private_file(path: &Path) -> io::Result<File> {
+    let dir = path
+        .parent()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "the path names no folder"))?;
+    let mut options = fs::OpenOptions::new();
+    options.read(true).write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+        fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(dir)?;
+        options.mode(0o600);
+    }
+    #[cfg(not(unix))]
+    fs::create_dir_all(dir)?;
+    let file = options.open(path)?;
+    #[cfg(unix)]
+    if let Err(e) = keep_to_owner(dir, &file) {
+        drop(file);
+        let _ = fs::remove_file(path);
+        return Err(e);
+    }
+    Ok(file)
+}
+
+/// Checks that `dir`, which holds `file`, is a folder and not a link, and
+/// is the same user's as the file just made in it, and closes it to
+/// everyone else if it was open to them.
+#[cfg(unix)]
+fn keep_to_owner(dir: &Path, file: &File) -> io::Result<()> {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    let me = file.metadata()?.uid();
+    let folder = fs::symlink_metadata(dir)?;
+    if !folder.is_dir() || folder.uid() != me {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!(
+                "{} is not a folder of this user's own, so reqorb keeps no files there",
+                dir.display()
+            ),
+        ));
+    }
+    if folder.mode() & 0o077 != 0 {
+        fs::set_permissions(dir, fs::Permissions::from_mode(0o700))?;
+    }
+    Ok(())
+}
+
+/// Copies the file at `from` to a new file at `to`, made as
+/// [`new_private_file`] makes one.
+pub(crate) fn private_copy(from: &Path, to: &Path) -> io::Result<()> {
+    #[cfg(target_vendor = "apple")]
+    {
+        // Made first to make and check the folder, which is in this
+        // user's own temporary folder, then left to `fs::copy`, which on
+        // APFS clones the file, taking no time or space, and makes it
+        // only when nothing is there.
+        new_private_file(to)?;
+        fs::remove_file(to)?;
+        fs::copy(from, to).map(drop)
+    }
+    #[cfg(not(target_vendor = "apple"))]
+    {
+        let mut copy = new_private_file(to)?;
+        io::copy(&mut File::open(from)?, &mut copy).map(drop)
+    }
 }
 
 /// Takes in a body as it arrives: in memory until it passes
@@ -234,5 +340,90 @@ mod tests {
         assert_eq!(preview(&bytes[..2]), "a");
         assert_eq!(preview(bytes), "aé");
         assert_eq!(preview(&[b'a', 0xff, b'b']), "a\u{fffd}b");
+    }
+
+    // Only Unix keeps a cache folder this way; elsewhere `/c` is not even
+    // an absolute path.
+    #[cfg(unix)]
+    #[test]
+    fn the_cache_folder_follows_xdg_then_home() {
+        let env = |pairs: &'static [(&'static str, &'static str)]| {
+            move |key: &str| {
+                pairs
+                    .iter()
+                    .find(|(k, _)| *k == key)
+                    .map(|(_, v)| std::ffi::OsString::from(v))
+            }
+        };
+        assert_eq!(
+            cache_dir(env(&[("XDG_CACHE_HOME", "/c"), ("HOME", "/h")])),
+            Some(PathBuf::from("/c"))
+        );
+        assert_eq!(
+            cache_dir(env(&[("HOME", "/h")])),
+            Some(PathBuf::from("/h/.cache"))
+        );
+        // A relative path is ignored, as the convention says.
+        assert_eq!(
+            cache_dir(env(&[("XDG_CACHE_HOME", "c"), ("HOME", "/h")])),
+            Some(PathBuf::from("/h/.cache"))
+        );
+        assert_eq!(cache_dir(env(&[])), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_private_file_is_this_users_alone() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join("bodies");
+        let path = dir.join("body");
+        new_private_file(&path).unwrap();
+        let mode = |p: &Path| fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(&dir), 0o700);
+        assert_eq!(mode(&path), 0o600);
+
+        // A folder left open to others is closed to them.
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o777)).unwrap();
+        new_private_file(&dir.join("second")).unwrap();
+        assert_eq!(mode(&dir), 0o700);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_link_is_never_written_through() {
+        let root = tempfile::tempdir().unwrap();
+        let target = root.path().join("target");
+        fs::write(&target, "kept").unwrap();
+
+        // A link where the file is to go.
+        let dir = root.path().join("bodies");
+        fs::create_dir(&dir).unwrap();
+        let path = dir.join("body");
+        std::os::unix::fs::symlink(&target, &path).unwrap();
+        let e = new_private_file(&path).unwrap_err();
+        assert_eq!(e.kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(fs::read_to_string(&target).unwrap(), "kept");
+
+        // A link where the folder is to be.
+        let elsewhere = root.path().join("elsewhere");
+        fs::create_dir(&elsewhere).unwrap();
+        let linked = root.path().join("linked");
+        std::os::unix::fs::symlink(&elsewhere, &linked).unwrap();
+        let e = new_private_file(&linked.join("body")).unwrap_err();
+        assert_eq!(e.kind(), io::ErrorKind::PermissionDenied);
+        assert_eq!(fs::read_dir(&elsewhere).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn a_private_copy_has_all_of_the_file() {
+        let root = tempfile::tempdir().unwrap();
+        let from = root.path().join("from");
+        fs::write(&from, "the original").unwrap();
+        let to = root.path().join("copies").join("copy");
+        private_copy(&from, &to).unwrap();
+        assert_eq!(fs::read_to_string(&to).unwrap(), "the original");
+        // Never over something already there.
+        assert!(private_copy(&from, &to).is_err());
     }
 }

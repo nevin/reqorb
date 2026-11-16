@@ -15,6 +15,7 @@ export 'package:reqorb/src/rust/api/document.dart'
         DocJsonPage,
         DocPosition,
         DocQuery,
+        DocQuoting,
         DocRow,
         DocSearchUpdate,
         DocSpan;
@@ -55,6 +56,17 @@ abstract class TextDocument {
 
   /// Bytes [start] to [end] as text.
   String text(int start, int end);
+
+  /// The bracket just before byte [at], or at it, and its partner, the
+  /// opening one first, when neither is in a string or a comment of a
+  /// language quoted as [quoting] says, and both are within 64 KB of [at].
+  /// Only brackets of its own kind are counted.
+  DocSpan? bracketPair(int at, DocQuoting quoting);
+
+  /// What, put before the text from byte [at], has it coloured as it
+  /// would be with all that comes before: the opening of the string or
+  /// comment [at] is inside, as far as 64 KB back tells. Empty in code.
+  String openerAt(int at, DocQuoting quoting);
 
   /// Bytes [start] to [end] as they are, for showing in hexadecimal.
   Uint8List bytes(int start, int end);

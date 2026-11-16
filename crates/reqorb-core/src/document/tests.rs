@@ -857,3 +857,33 @@ fn tells_which_rows_of_a_long_line_begin_in_a_string() {
         assert_eq!(shown, expected, "step {step}");
     }
 }
+
+#[test]
+fn brackets_pair_within_reach_and_not_beyond() {
+    let filler = format!("{}\n", "x".repeat(99)).repeat(1000);
+    let text = format!("{{\n{filler}}}");
+    let doc = Document::from_text(&text);
+    // 100 KB apart: too far for either to see the other.
+    assert_eq!(doc.bracket_pair(1, Quoting::Json), None);
+    let near = "f(a, \"(\", [1])";
+    let doc = Document::from_text(&format!("{filler}{near}"));
+    let start = filler.len() as u64;
+    assert_eq!(
+        doc.bracket_pair(start + 2, Quoting::JavaScript),
+        Some((start + 1, start + near.len() as u64 - 1))
+    );
+}
+
+#[test]
+fn the_opener_is_what_a_place_is_inside() {
+    let doc = Document::from_text("a\n/* one\ntwo\n*/ three\n`x\ny");
+    let at = |s: &str| doc.text(0, doc.len()).find(s).unwrap() as u64;
+    assert_eq!(doc.opener_at(at("two"), Quoting::JavaScript), "/*");
+    assert_eq!(doc.opener_at(at("three"), Quoting::JavaScript), "");
+    assert_eq!(doc.opener_at(at("y"), Quoting::JavaScript), "`");
+    assert_eq!(doc.opener_at(0, Quoting::JavaScript), "");
+    // Past what is looked back at, nothing is known.
+    let long = format!("/*{}\n", "x".repeat(70 * 1024));
+    let doc = Document::from_text(&format!("{long}end"));
+    assert_eq!(doc.opener_at(doc.len(), Quoting::JavaScript), "");
+}

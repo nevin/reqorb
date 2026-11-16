@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, LazyLock, Mutex, MutexGuard, PoisonError};
 
 use flutter_rust_bridge::frb;
-use reqorb_core::Document;
+use reqorb_core::{Document, Quoting};
 
 use crate::frb_generated::StreamSink;
 
@@ -207,6 +207,46 @@ pub fn doc_bytes(id: u32, start: u64, end: u64) -> Vec<u8> {
 #[frb(sync)]
 pub fn doc_text(id: u32, start: u64, end: u64) -> String {
     with(id, String::new(), |doc| doc.text(start, end))
+}
+
+/// How a language quotes text and writes comments, for pairing brackets
+/// and colouring part of a document.
+#[derive(Debug, Clone, Copy)]
+pub enum DocQuoting {
+    Json,
+    JavaScript,
+    Source,
+    Script,
+    Graphql,
+    Xml,
+}
+
+impl From<DocQuoting> for Quoting {
+    fn from(q: DocQuoting) -> Self {
+        match q {
+            DocQuoting::Json => Quoting::Json,
+            DocQuoting::JavaScript => Quoting::JavaScript,
+            DocQuoting::Source => Quoting::Source,
+            DocQuoting::Script => Quoting::Script,
+            DocQuoting::Graphql => Quoting::Graphql,
+            DocQuoting::Xml => Quoting::Xml,
+        }
+    }
+}
+
+/// The bracket just before `at`, or at it, and its partner, when neither
+/// is quoted and they are near enough.
+#[frb(sync)]
+pub fn doc_bracket_pair(id: u32, at: u64, quoting: DocQuoting) -> Option<DocSpan> {
+    with(id, None, |doc| doc.bracket_pair(at, quoting.into()))
+        .map(|(start, end)| DocSpan { start, end })
+}
+
+/// What, put before the text from `at`, has it coloured as it would be
+/// with all that comes before it.
+#[frb(sync)]
+pub fn doc_opener_at(id: u32, at: u64, quoting: DocQuoting) -> String {
+    with(id, "", |doc| doc.opener_at(at, quoting.into())).to_string()
 }
 
 /// Puts `text` in place of bytes `start..end`. With `typing`, text that

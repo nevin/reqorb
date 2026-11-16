@@ -320,6 +320,67 @@ void documentConformance(MakeDocument make, OpenDocument open) {
     );
   });
 
+  test('pairs brackets outside strings and comments', () async {
+    Future<(int, int)?> pair(String text, int at, DocQuoting q) async {
+      final span = (await doc(text)).bracketPair(at, q);
+      return span == null ? null : (span.start, span.end);
+    }
+
+    const json = '{\n  "a": [1, {"b": "}"}],\n  "c": 3\n}';
+    expect(await pair(json, 1, DocQuoting.json), (0, json.length - 1));
+    expect(await pair(json, json.length - 1, DocQuoting.json), (
+      0,
+      json.length - 1,
+    ));
+    // Next to no bracket, or next to one in a string.
+    expect(await pair(json, 4, DocQuoting.json), isNull);
+    expect(await pair(json, json.indexOf('}"'), DocQuoting.json), isNull);
+    // The one just typed, before the caret, comes first.
+    expect(await pair('f(x)()', 5, DocQuoting.javaScript), (4, 5));
+    // Only brackets of its own kind are counted.
+    expect(await pair('{[}', 1, DocQuoting.json), (0, 2));
+    expect(await pair('{[}', 2, DocQuoting.json), isNull);
+
+    const js = "f(/* ) */ ')', `\n)`, // )\n x)";
+    expect(await pair(js, 1, DocQuoting.javaScript), (1, js.length - 1));
+    const script = "f( '\n)' \\' # )\n)";
+    expect(await pair(script, 1, DocQuoting.script), (1, script.length - 1));
+    const graphql = 'q( """\n)""" "(" # (\n)';
+    expect(await pair(graphql, 1, DocQuoting.graphql), (1, graphql.length - 1));
+    const xml = '<a b=")"> ( <!-- ) --> <![CDATA[ ) ]]> )';
+    final open = xml.indexOf('( ');
+    expect(await pair(xml, open, DocQuoting.xml), (open, xml.length - 1));
+
+    // Further apart than 64 KB, the two are not paired.
+    final filler = '${'x' * 99}\n' * 1000;
+    expect(await pair('{\n$filler}', 1, DocQuoting.json), isNull);
+    final near = await pair('$filler(a)', filler.length + 1, DocQuoting.json);
+    expect(near, (filler.length, filler.length + 2));
+  });
+
+  test('tells what a place is inside, for colouring from it', () async {
+    Future<String> opener(String text, String at, DocQuoting q) async {
+      final offset = utf8.encode(text.substring(0, text.indexOf(at))).length;
+      return (await doc(text)).openerAt(offset, q);
+    }
+
+    const js = 'a\n/* one\ntwo\n*/ three\n`x é\ny';
+    expect(await opener(js, 'two', DocQuoting.javaScript), '/*');
+    expect(await opener(js, 'three', DocQuoting.javaScript), '');
+    expect(await opener(js, 'y', DocQuoting.javaScript), '`');
+    expect(await opener(js, 'a', DocQuoting.javaScript), '');
+    expect(await opener("x 'a\nb", 'b', DocQuoting.script), "'");
+    expect(await opener('"""a\nb', 'b', DocQuoting.graphql), '"""');
+    expect(await opener('<a\n  b="1\n2', '2', DocQuoting.xml), '<a b="');
+    expect(await opener('<a\n  b=1', 'b=', DocQuoting.xml), '<a ');
+    expect(await opener('<!-- a\nb', 'b', DocQuoting.xml), '<!--');
+    // A string on one line ends with it.
+    expect(await opener('"a\nb', 'b', DocQuoting.json), '');
+    // Further back than 64 KB, nothing is known.
+    final long = '/*${'x' * (70 * 1024)}\nend';
+    expect(await opener(long, 'end', DocQuoting.javaScript), '');
+  });
+
   test('edits at random keep rows and text in step', () async {
     var model = '{\n  "name": "reqorb",\r\n  "tags": ["a", "b"]\n}\nlast é 日本';
     final d = await doc(model);
