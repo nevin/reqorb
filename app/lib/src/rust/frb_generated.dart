@@ -4041,8 +4041,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Settings dco_decode_settings(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 19)
-      throw Exception('unexpected arr length: expect 19 but see ${arr.length}');
+    if (arr.length != 20)
+      throw Exception('unexpected arr length: expect 20 but see ${arr.length}');
     return Settings(
       theme: dco_decode_app_theme(arr[0]),
       httpMode: dco_decode_http_mode(arr[1]),
@@ -4063,6 +4063,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       protectSecrets: dco_decode_bool(arr[16]),
       historyLimit: dco_decode_u_32(arr[17]),
       splitPercent: dco_decode_u_32(arr[18]),
+      sidebarWidth: dco_decode_u_32(arr[19]),
     );
   }
 
@@ -5782,6 +5783,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_protectSecrets = sse_decode_bool(deserializer);
     var var_historyLimit = sse_decode_u_32(deserializer);
     var var_splitPercent = sse_decode_u_32(deserializer);
+    var var_sidebarWidth = sse_decode_u_32(deserializer);
     return Settings(
       theme: var_theme,
       httpMode: var_httpMode,
@@ -5802,6 +5804,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       protectSecrets: var_protectSecrets,
       historyLimit: var_historyLimit,
       splitPercent: var_splitPercent,
+      sidebarWidth: var_sidebarWidth,
     );
   }
 
@@ -7308,6 +7311,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self.protectSecrets, serializer);
     sse_encode_u_32(self.historyLimit, serializer);
     sse_encode_u_32(self.splitPercent, serializer);
+    sse_encode_u_32(self.sidebarWidth, serializer);
   }
 
   @protected

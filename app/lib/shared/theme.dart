@@ -89,7 +89,9 @@ ThemeData buildTheme(Brightness brightness) {
       ),
     ),
     tabBarTheme: TabBarThemeData(
-      labelPadding: const EdgeInsets.symmetric(horizontal: 12),
+      // Close enough together for a request's sections to fit beside
+      // its response in a window of the usual size.
+      labelPadding: const EdgeInsets.symmetric(horizontal: 9),
       dividerColor: scheme.outlineVariant,
       labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
       unselectedLabelStyle: const TextStyle(fontSize: 13),

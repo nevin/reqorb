@@ -507,6 +507,8 @@ pub struct Settings {
     /// How much of the space the request takes, in percent, beside or
     /// above the response, as the divider between them was left.
     pub split_percent: u32,
+    /// How wide the sidebar is, in logical pixels, as its edge was left.
+    pub sidebar_width: u32,
 }
 
 impl Default for Settings {
@@ -531,6 +533,7 @@ impl Default for Settings {
             protect_secrets: true,
             history_limit: 500,
             split_percent: 40,
+            sidebar_width: 280,
         }
     }
 }

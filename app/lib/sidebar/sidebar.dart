@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:reqorb/files/file_page.dart';
 
 import 'package:reqorb/runner/collection_run.dart';
@@ -22,6 +23,7 @@ class Sidebar extends StatefulWidget {
     required this.onOpen,
     required this.onNewRequest,
     required this.onRemoved,
+    required this.onMove,
     required this.onHistory,
     required this.onSpecs,
     this.onCollapse,
@@ -37,6 +39,10 @@ class Sidebar extends StatefulWidget {
   /// Called after anything is deleted or put back, since saved positions
   /// may have moved.
   final VoidCallback onRemoved;
+
+  /// Moves a saved request to another place: before the item there, or
+  /// to the end of the collection or folder when the place is past it.
+  final void Function(RequestRef from, RequestRef to) onMove;
 
   /// Shows the requests sent before.
   final VoidCallback onHistory;
@@ -238,44 +244,52 @@ class _SidebarState extends State<Sidebar> {
                   ],
                 ),
               ),
-            ListTile(
-              key: const Key('history'),
-              dense: true,
-              leading: const Icon(Icons.history, size: 20),
-              title: Text(
-                store.history.isEmpty
-                    ? 'History'
-                    : 'History · ${store.history.length}',
+            // The places of the app, side by side so that the list above
+            // keeps the height.
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              child: Row(
+                children: [
+                  _Place(
+                    key: const Key('history'),
+                    icon: Icons.history,
+                    label: 'History',
+                    tooltip: store.history.isEmpty
+                        ? 'Requests sent before'
+                        : 'History · ${store.history.length}',
+                    count: store.history.length,
+                    onTap: widget.onHistory,
+                  ),
+                  _Place(
+                    key: const Key('api-specs'),
+                    icon: Icons.description_outlined,
+                    label: 'Specs',
+                    tooltip: 'API specs: OpenAPI and Swagger',
+                    onTap: widget.onSpecs,
+                  ),
+                  _Place(
+                    key: const Key('open-file'),
+                    icon: Icons.file_open_outlined,
+                    label: 'File',
+                    tooltip: 'Open file… (${shortcutModifier}O)',
+                    onTap: () => openFile(context),
+                  ),
+                  _Place(
+                    key: const Key('har-analyser'),
+                    icon: Icons.insights,
+                    label: 'HAR',
+                    tooltip: 'HAR analyser',
+                    onTap: () => analyzeHarFile(context, store),
+                  ),
+                  _Place(
+                    key: const Key('settings'),
+                    icon: Icons.settings_outlined,
+                    label: 'Settings',
+                    tooltip: 'Settings',
+                    onTap: () => SettingsDialog.show(context, store),
+                  ),
+                ],
               ),
-              onTap: widget.onHistory,
-            ),
-            ListTile(
-              key: const Key('api-specs'),
-              dense: true,
-              leading: const Icon(Icons.description_outlined, size: 20),
-              title: const Text('API specs'),
-              onTap: widget.onSpecs,
-            ),
-            ListTile(
-              key: const Key('open-file'),
-              dense: true,
-              leading: const Icon(Icons.file_open_outlined, size: 20),
-              title: const Text('Open file…'),
-              onTap: () => openFile(context),
-            ),
-            ListTile(
-              key: const Key('har-analyser'),
-              dense: true,
-              leading: const Icon(Icons.insights, size: 20),
-              title: const Text('HAR analyser'),
-              onTap: () => analyzeHarFile(context, store),
-            ),
-            ListTile(
-              key: const Key('settings'),
-              dense: true,
-              leading: const Icon(Icons.settings_outlined, size: 20),
-              title: const Text('Settings'),
-              onTap: () => SettingsDialog.show(context, store),
             ),
           ],
         ),
@@ -305,40 +319,87 @@ class _SidebarState extends State<Sidebar> {
 
   Widget _tree(ThemeData theme) {
     return _scrolling(_treeScroll, [
-      if (store.collections.isEmpty)
+      if (store.collections.isEmpty) ...[
         _hint(
           theme,
-          'Import a swagger.json, a Postman collection, a HAR file or '
-          'a curl command, or save a request into a new collection.',
+          'Nothing is saved yet. Bring requests in, or start a '
+          'collection to save your own into.',
         ),
+        for (final (key, icon, label, action) in [
+          (
+            'start-import',
+            Icons.file_download_outlined,
+            'Import a file…',
+            () => importFromFile(context, store),
+          ),
+          (
+            'start-paste',
+            Icons.content_paste,
+            'Paste curl or JSON…',
+            () => importFromPaste(context, store),
+          ),
+          (
+            'start-folder',
+            Icons.folder_open_outlined,
+            'Open a collection folder…',
+            () => openCollectionFolder(context, store),
+          ),
+          (
+            'start-collection',
+            Icons.create_new_folder_outlined,
+            'New collection',
+            () => newCollection(context, store),
+          ),
+        ])
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: TextButton.icon(
+                key: Key(key),
+                onPressed: action,
+                icon: Icon(icon, size: 18),
+                label: Text(label),
+              ),
+            ),
+          ),
+        _hint(
+          theme,
+          'Postman, OpenAPI or Swagger, HAR and .env files '
+          'can all be imported.',
+        ),
+      ],
       for (var i = 0; i < store.collections.length; i++) _collection(i),
       const Divider(height: 24),
-      Padding(
-        padding: const EdgeInsets.only(left: 16, right: 4),
-        child: Row(
-          children: [
-            Expanded(child: Text('Requests', style: _heading(theme))),
-            if (store.requests.length > 1)
-              IconButton(
-                key: const Key('run-requests'),
-                tooltip: 'Run these requests',
-                iconSize: 20,
-                icon: const Icon(Icons.play_arrow_outlined),
-                onPressed: () => showRunner(
-                  context,
-                  store: store,
-                  name: 'requests',
-                  steps: runSteps(store.requests, null),
+      _dropInto(
+        const RequestRef(RequestRef.noCollection, [_atEnd]),
+        child: Padding(
+          padding: const EdgeInsets.only(left: 16, right: 4),
+          child: Row(
+            children: [
+              Expanded(child: Text('Requests', style: _heading(theme))),
+              if (store.requests.length > 1)
+                IconButton(
+                  key: const Key('run-requests'),
+                  tooltip: 'Run these requests',
+                  iconSize: 20,
+                  icon: const Icon(Icons.play_arrow_outlined),
+                  onPressed: () => showRunner(
+                    context,
+                    store: store,
+                    name: 'requests',
+                    steps: runSteps(store.requests, null),
+                  ),
                 ),
+              IconButton(
+                key: const Key('new-request'),
+                tooltip: 'New request (${shortcutModifier}N)',
+                iconSize: 20,
+                icon: const Icon(Icons.add),
+                onPressed: widget.onNewRequest,
               ),
-            IconButton(
-              key: const Key('new-request'),
-              tooltip: 'New request (${shortcutModifier}N)',
-              iconSize: 20,
-              icon: const Icon(Icons.add),
-              onPressed: widget.onNewRequest,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
       if (store.requests.isEmpty)
@@ -404,11 +465,84 @@ class _SidebarState extends State<Sidebar> {
       method: request.method,
       indent: indent,
       selected: widget.selected == ref,
+      // Only where the tree is shown as it is kept can it be rearranged.
+      place: where.isEmpty ? ref : null,
+      onDropped: (from) => widget.onMove(from, ref),
+      onMoveTo: () => _moveTo(ref),
       onTap: () => widget.onOpen(ref),
       onRename: () => _rename(ref),
+      onCopyAddress: () {
+        Clipboard.setData(ClipboardData(text: request.url));
+        showMessage(context, 'Copied the address');
+      },
       onDuplicate: () => store.duplicateItem(ref),
       onDelete: () => _remove(ref),
     );
+  }
+
+  /// Makes [child] somewhere a dragged request can be dropped, to go to
+  /// [to]; it is tinted while one is held over it.
+  Widget _dropInto(RequestRef to, {required Widget child}) =>
+      DragTarget<RequestRef>(
+        onAcceptWithDetails: (details) => widget.onMove(details.data, to),
+        builder: (context, held, _) => DecoratedBox(
+          decoration: BoxDecoration(
+            color: held.isEmpty
+                ? null
+                : Theme.of(context).colorScheme.primaryContainer,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: child,
+        ),
+      );
+
+  /// Asks which collection or folder a request should go to, and moves
+  /// it to the end of the one chosen.
+  Future<void> _moveTo(RequestRef ref) async {
+    final item = store.itemAt(ref);
+    if (item == null) return;
+    final places = <(String, RequestRef)>[];
+    void folders(
+      int collection,
+      List<Item> items,
+      List<int> parent,
+      String where,
+    ) {
+      for (final (i, child) in items.indexed) {
+        if (child.request != null) continue;
+        final path = [...parent, i];
+        final name = '$where / ${child.name}';
+        places.add((name, RequestRef(collection, [...path, _atEnd])));
+        folders(collection, child.items, path, name);
+      }
+    }
+
+    for (final (i, collection) in store.collections.indexed) {
+      places.add((collection.name, RequestRef(i, const [_atEnd])));
+      folders(i, collection.items, const [], collection.name);
+    }
+    places.add((
+      'Requests, outside any collection',
+      const RequestRef(RequestRef.noCollection, [_atEnd]),
+    ));
+    final to = await showDialog<RequestRef>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        key: const Key('move-to'),
+        title: Text('Move "${item.name}" to'),
+        children: [
+          for (final (name, place) in places)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, place),
+              child: Text(name),
+            ),
+        ],
+      ),
+    );
+    // Only if the request is still where it was.
+    if (to != null && identical(store.itemAt(ref), item)) {
+      widget.onMove(ref, to);
+    }
   }
 
   Widget _hint(ThemeData theme, String text) => Padding(
@@ -432,89 +566,39 @@ class _SidebarState extends State<Sidebar> {
       controlAffinity: ListTileControlAffinity.leading,
       shape: const Border(),
       tilePadding: const EdgeInsets.only(left: 8, right: 4),
-      title: Row(
-        children: [
-          Flexible(
-            child: Text(
-              collection.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
+      title: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onSecondaryTapUp: (details) =>
+            _menuAt(context, details.globalPosition, _collectionActions(index)),
+        child: _dropInto(
+          RequestRef(index, const [_atEnd]),
+          child: Row(
+            children: [
+              Flexible(
+                child: Text(
+                  collection.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+              if (collection.link case final link?) ...[
+                const SizedBox(width: 6),
+                _FolderMark(
+                  path: link.path,
+                  problem: store.folderProblems[link.path],
+                ),
+              ],
+            ],
           ),
-          if (collection.link case final link?) ...[
-            const SizedBox(width: 6),
-            _FolderMark(
-              path: link.path,
-              problem: store.folderProblems[link.path],
-            ),
-          ],
-        ],
+        ),
       ),
       trailing: PopupMenuButton<VoidCallback>(
         tooltip: 'Collection actions',
         iconSize: 18,
         icon: const Icon(Icons.more_horiz),
         onSelected: (action) => action(),
-        itemBuilder: (_) => [
-          PopupMenuItem(
-            key: const Key('run-collection'),
-            value: () => showRunner(
-              context,
-              store: store,
-              name: collection.name,
-              steps: runSteps(collection.items, index),
-            ),
-            child: const Text('Run…'),
-          ),
-          PopupMenuItem(
-            key: const Key('rename-collection'),
-            value: () => renameCollection(context, store, index),
-            child: const Text('Rename…'),
-          ),
-          const PopupMenuDivider(),
-          if (collection.link == null)
-            PopupMenuItem(
-              key: const Key('link-collection'),
-              value: () => keepInFolder(context, store, index),
-              child: const Text('Keep in a folder…'),
-            )
-          else ...[
-            PopupMenuItem(
-              key: const Key('reload-collection'),
-              value: () => reloadFromFolder(context, store, index),
-              child: const Text('Reload from folder'),
-            ),
-            if (store.folderConflicts.contains(collection.link?.path))
-              PopupMenuItem(
-                key: const Key('keep-mine'),
-                value: () => keepMineInFolder(context, store, index),
-                child: const Text('Keep mine, over the folder'),
-              ),
-            PopupMenuItem(
-              key: const Key('unlink-collection'),
-              value: () => store.unlinkCollection(index),
-              child: const Text('Stop keeping in folder'),
-            ),
-          ],
-          const PopupMenuDivider(),
-          for (final (label, format) in const [
-            ('Export as curl…', ExportFormat.curl),
-            ('Export as Bruno…', ExportFormat.bruno),
-            ('Export as Postman…', ExportFormat.postman),
-            ('Export as reqorb JSON…', ExportFormat.reqorb),
-          ])
-            PopupMenuItem(
-              value: () => exportCollectionFile(context, collection, format),
-              child: Text(label),
-            ),
-          const PopupMenuDivider(),
-          PopupMenuItem(
-            key: const Key('delete-collection'),
-            value: () => _removeCollection(index),
-            child: const Text('Delete collection'),
-          ),
-        ],
+        itemBuilder: (_) => _collectionActions(index),
       ),
       children: collection.items.isEmpty
           ? [
@@ -525,6 +609,71 @@ class _SidebarState extends State<Sidebar> {
             ]
           : _items(index, collection.items, const [], 1),
     );
+  }
+
+  /// What can be done with a collection, for the button at the end of its
+  /// row and for a right click on its name.
+  List<PopupMenuEntry<VoidCallback>> _collectionActions(int index) {
+    final collection = store.collections[index];
+    return [
+      PopupMenuItem(
+        key: const Key('run-collection'),
+        value: () => showRunner(
+          context,
+          store: store,
+          name: collection.name,
+          steps: runSteps(collection.items, index),
+        ),
+        child: const Text('Run…'),
+      ),
+      PopupMenuItem(
+        key: const Key('rename-collection'),
+        value: () => renameCollection(context, store, index),
+        child: const Text('Rename…'),
+      ),
+      const PopupMenuDivider(),
+      if (collection.link == null)
+        PopupMenuItem(
+          key: const Key('link-collection'),
+          value: () => keepInFolder(context, store, index),
+          child: const Text('Keep in a folder…'),
+        )
+      else ...[
+        PopupMenuItem(
+          key: const Key('reload-collection'),
+          value: () => reloadFromFolder(context, store, index),
+          child: const Text('Reload from folder'),
+        ),
+        if (store.folderConflicts.contains(collection.link?.path))
+          PopupMenuItem(
+            key: const Key('keep-mine'),
+            value: () => keepMineInFolder(context, store, index),
+            child: const Text('Keep mine, over the folder'),
+          ),
+        PopupMenuItem(
+          key: const Key('unlink-collection'),
+          value: () => store.unlinkCollection(index),
+          child: const Text('Stop keeping in folder'),
+        ),
+      ],
+      const PopupMenuDivider(),
+      for (final (label, format) in const [
+        ('Export as curl…', ExportFormat.curl),
+        ('Export as Bruno…', ExportFormat.bruno),
+        ('Export as Postman…', ExportFormat.postman),
+        ('Export as reqorb JSON…', ExportFormat.reqorb),
+      ])
+        PopupMenuItem(
+          value: () => exportCollectionFile(context, collection, format),
+          child: Text(label),
+        ),
+      const PopupMenuDivider(),
+      PopupMenuItem(
+        key: const Key('delete-collection'),
+        value: () => _removeCollection(index),
+        child: const Text('Delete collection'),
+      ),
+    ];
   }
 
   List<Widget> _items(
@@ -551,10 +700,16 @@ class _SidebarState extends State<Sidebar> {
             controlAffinity: ListTileControlAffinity.leading,
             shape: const Border(),
             tilePadding: EdgeInsets.only(left: indent - 8, right: 8),
-            title: Text(
-              items[i].name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            title: _dropInto(
+              RequestRef(collection, [...parent, i, _atEnd]),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  items[i].name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ),
             trailing: IconButton(
               key: Key('run-folder-${[...parent, i].join('-')}'),
@@ -585,8 +740,12 @@ class _RequestTile extends StatefulWidget {
     required this.method,
     required this.indent,
     required this.selected,
+    required this.place,
+    required this.onDropped,
+    required this.onMoveTo,
     required this.onTap,
     required this.onRename,
+    required this.onCopyAddress,
     required this.onDuplicate,
     required this.onDelete,
   });
@@ -598,8 +757,19 @@ class _RequestTile extends StatefulWidget {
   final String method;
   final double indent;
   final bool selected;
+
+  /// Where the request is kept, when its row can be dragged elsewhere
+  /// and have others dropped on it.
+  final RequestRef? place;
+
+  /// Called with a request dropped on this one, to go before it.
+  final ValueChanged<RequestRef> onDropped;
+
+  /// Asks where to move the request.
+  final VoidCallback onMoveTo;
   final VoidCallback onTap;
   final VoidCallback onRename;
+  final VoidCallback onCopyAddress;
   final VoidCallback onDuplicate;
   final VoidCallback onDelete;
 
@@ -610,6 +780,43 @@ class _RequestTile extends StatefulWidget {
 class _RequestTileState extends State<_RequestTile> {
   bool _hovered = false;
 
+  /// What can be done with the request, for the button at the end of its
+  /// row and for a right click anywhere on it.
+  List<PopupMenuEntry<VoidCallback>> _actions() => [
+    PopupMenuItem(
+      key: const Key('open-request'),
+      value: widget.onTap,
+      child: const Text('Open'),
+    ),
+    PopupMenuItem(
+      key: const Key('rename-request'),
+      value: widget.onRename,
+      child: const Text('Rename…'),
+    ),
+    PopupMenuItem(
+      key: const Key('duplicate-request'),
+      value: widget.onDuplicate,
+      child: const Text('Duplicate'),
+    ),
+    if (widget.place != null)
+      PopupMenuItem(
+        key: const Key('move-request'),
+        value: widget.onMoveTo,
+        child: const Text('Move to…'),
+      ),
+    PopupMenuItem(
+      key: const Key('copy-request-address'),
+      value: widget.onCopyAddress,
+      child: const Text('Copy address'),
+    ),
+    const PopupMenuDivider(),
+    PopupMenuItem(
+      key: const Key('delete-request'),
+      value: widget.onDelete,
+      child: const Text('Delete'),
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -617,6 +824,57 @@ class _RequestTileState extends State<_RequestTile> {
     // With a pointer the actions appear on hover, which keeps a long list
     // quiet; on touch there is no hover, so they are always shown.
     final showActions = !isDesktop || _hovered || widget.selected;
+    final place = widget.place;
+    if (place == null) return _row(theme, showActions);
+    // What follows the pointer while the request is dragged.
+    final held = Material(
+      elevation: 4,
+      borderRadius: BorderRadius.circular(6),
+      color: scheme.surfaceContainerHigh,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Text(
+          '${widget.method.toUpperCase()}  ${widget.name}',
+          style: theme.textTheme.bodyMedium,
+        ),
+      ),
+    );
+    final row = _row(theme, showActions);
+    return DragTarget<RequestRef>(
+      onWillAcceptWithDetails: (details) => details.data != place,
+      onAcceptWithDetails: (details) => widget.onDropped(details.data),
+      // A line above the row shows where the one held would go.
+      builder: (context, over, _) => DecoratedBox(
+        position: DecorationPosition.foreground,
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(
+              width: 2,
+              color: over.isEmpty ? Colors.transparent : scheme.primary,
+            ),
+          ),
+        ),
+        // A pointer drags at once; a finger holds first, so that the
+        // list can still be scrolled.
+        child: isDesktop
+            ? Draggable<RequestRef>(
+                data: place,
+                feedback: held,
+                dragAnchorStrategy: pointerDragAnchorStrategy,
+                child: row,
+              )
+            : LongPressDraggable<RequestRef>(
+                data: place,
+                feedback: held,
+                dragAnchorStrategy: pointerDragAnchorStrategy,
+                child: row,
+              ),
+      ),
+    );
+  }
+
+  Widget _row(ThemeData theme, bool showActions) {
+    final scheme = theme.colorScheme;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -630,6 +888,8 @@ class _RequestTileState extends State<_RequestTile> {
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: widget.onTap,
+            onSecondaryTapUp: (details) =>
+                _menuAt(context, details.globalPosition, _actions()),
             child: ConstrainedBox(
               constraints: BoxConstraints(minHeight: isDesktop ? 32 : 44),
               child: Padding(
@@ -687,24 +947,7 @@ class _RequestTileState extends State<_RequestTile> {
                         padding: EdgeInsets.zero,
                         icon: const Icon(Icons.more_horiz),
                         onSelected: (action) => action(),
-                        itemBuilder: (_) => [
-                          PopupMenuItem(
-                            key: const Key('rename-request'),
-                            value: widget.onRename,
-                            child: const Text('Rename…'),
-                          ),
-                          PopupMenuItem(
-                            key: const Key('duplicate-request'),
-                            value: widget.onDuplicate,
-                            child: const Text('Duplicate'),
-                          ),
-                          const PopupMenuDivider(),
-                          PopupMenuItem(
-                            key: const Key('delete-request'),
-                            value: widget.onDelete,
-                            child: const Text('Delete'),
-                          ),
-                        ],
+                        itemBuilder: (_) => _actions(),
                       ),
                     ),
                   ],
@@ -739,6 +982,86 @@ class _FolderMark extends StatelessWidget {
         key: Key(problem == null ? 'folder-mark' : 'folder-problem'),
         size: 15,
         color: problem == null ? scheme.onSurfaceVariant : scheme.error,
+      ),
+    );
+  }
+}
+
+/// A place past the last in any list, for moving something to its end.
+const _atEnd = 1 << 30;
+
+/// Shows [items] as a menu at a place in the window, and does what is
+/// chosen from it.
+void _menuAt(
+  BuildContext context,
+  Offset at,
+  List<PopupMenuEntry<VoidCallback>> items,
+) {
+  final overlay = Overlay.of(context).context.findRenderObject()! as RenderBox;
+  showMenu<VoidCallback>(
+    context: context,
+    position: RelativeRect.fromRect(at & Size.zero, Offset.zero & overlay.size),
+    items: items,
+  ).then((action) => action?.call());
+}
+
+/// One of the places of the app at the foot of the sidebar: an icon with
+/// its name beneath, and how many things it holds when that is worth
+/// saying.
+class _Place extends StatelessWidget {
+  const _Place({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    required this.onTap,
+    this.count = 0,
+  });
+
+  final IconData icon;
+  final String label;
+  final String tooltip;
+  final VoidCallback onTap;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Expanded(
+      child: Tooltip(
+        message: tooltip,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onTap,
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: isDesktop ? 6 : 10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Badge(
+                  isLabelVisible: count > 0,
+                  // Clear of the icon, which it would otherwise cover.
+                  offset: const Offset(12, -4),
+                  label: Text(count > 99 ? '99+' : '$count'),
+                  backgroundColor: scheme.secondaryContainer,
+                  textColor: scheme.onSecondaryContainer,
+                  child: Icon(icon, size: 20, color: scheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.fade,
+                  softWrap: false,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

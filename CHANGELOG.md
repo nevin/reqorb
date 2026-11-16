@@ -19,6 +19,26 @@ the new version when it is tagged.
   and copy `workspace.json` from
   `~/Library/Containers/dev.reqorb.reqorb/Data/Library/Application Support/dev.reqorb.reqorb/`
   to the same place under `com.codersworld.reqorb`.
+- On a Mac the menu bar now has the app's commands: **File**, **View**, **Request** and
+  **Tools** menus, **Settings…** (`⌘,`) and **Help › Keyboard Shortcuts**.
+- `⌘/` lists every keyboard shortcut, on any platform.
+- A right click on a tab closes the others or those to its right, or duplicates it;
+  the middle button closes it, and `⇧⌘T` opens the tab closed last again.
+- A right click on a saved request or a collection in the sidebar shows its actions,
+  which now include **Open** and **Copy address** for a request.
+- A curl command pasted where the address goes fills in the whole request.
+- `⌘+`, `⌘-` and `⌘0` change the size of code.
+- The Mac window opens larger the first time, and after that where it was left.
+- History, API specs, Open file, the HAR analyser and Settings sit side by side at the
+  foot of the sidebar, leaving the height to the list of requests.
+- Tabs are dragged into another order with the mouse.
+- A saved request is dragged to another place, collection or folder in the sidebar, or
+  sent there with **Move to…**; a tab open on it follows it.
+- The sidebar's edge is dragged to change its width, which is kept.
+- With nothing saved yet, the sidebar offers buttons to import a file, paste curl or
+  JSON, open a collection folder or start a collection.
+- On Windows, Linux and iPad, a `⋮` button holds the menus the Mac has in its menu bar.
+- A request's sections sit closer together, so more of them fit beside the response.
 
 ## 1.0.0 – 2026-10-18
 

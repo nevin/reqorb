@@ -18,6 +18,8 @@ view. One Rust core does the networking and powers all three front ends.
 - **Tabs:** several requests open at once, each keeping its own edits and response.
 - **Find anything:** `⌘K` finds a saved request, an open tab, an environment or an
   action by a few letters of its name.
+- **Menus and shortcuts:** a full menu bar on the Mac, right-click menus on tabs,
+  requests and collections, and every shortcut listed under `⌘/`.
 - **Large files:** **Open file…** opens a file of any size, up to a gigabyte or so, at
   once, to read, search, edit and save; responses and specs over a megabyte open the
   same way.
@@ -165,7 +167,7 @@ environment, then the collection's own variables.
 
 ## Settings
 
-The app's Settings (bottom of the sidebar) apply to every request and are saved with the
+The app's Settings (bottom of the sidebar, or `⌘,` on a Mac) apply to every request and are saved with the
 workspace.
 
 | Setting | What it does |
@@ -481,12 +483,34 @@ Each request opens in a tab of its own, with its own response, so one can be com
 with another or left half-written while a second is sent. A request that is already
 open is brought forward rather than opened twice, and a tab nothing has been done in
 is reused. A dot marks a tab with unsaved changes to a saved request; closing it asks
-whether to save them. `⌘N` opens a tab and `⌘W` closes one (`Ctrl` elsewhere).
+whether to save them. `⌘N` opens a tab and `⌘W` closes one (`Ctrl` elsewhere), as does
+the middle mouse button; `⇧⌘T` opens the tab closed last again. A right click on a tab
+(or a long press) closes the others or those to its right, or duplicates it as a
+request not yet saved.
 `⌘1` to `⌘8` go to a tab by its place and `⌘9` to the last; `Ctrl-Tab` and
 `Ctrl-Shift-Tab` (or `⌘⇧]` and `⌘⇧[`) go to the next and previous. `⌘.` stops a send
 or a call that is under way. Deleting a request, folder, collection or environment, or
 clearing the session, offers **Undo** until the next message replaces it; `⌘Z` outside a
 text field does the same.
+
+A tab is dragged to another's place with the mouse. In the sidebar a saved request is
+dragged onto another to go before it, or onto a collection, a folder or the
+**Requests** heading to go to its end (hold it first on a touch screen); **Move to…**
+in its menu does the same from a list. A request that is open stays open on its tab
+wherever it goes. The sidebar's right edge is dragged to make it wider or narrower,
+and a double click puts it back.
+
+A right click on a saved request or a collection in the sidebar offers what the `⋯`
+at the end of its row does. On a Mac the menu bar has everything too: **File** (new,
+open, import, save, tabs), **View** (sidebar, the size of code, tabs), **Request**
+(send, stop, code, environments), **Tools** (history, specs, the HAR analyser) and
+**Help › Keyboard Shortcuts**, which `⌘/` shows anywhere. Elsewhere the same menus
+are behind the `⋮` button beside the environment. `⌘+` and `⌘-` make code
+larger and smaller, and `⌘0` puts it back. The window opens where, and as large as, it
+was left.
+
+A curl command pasted where the address goes, such as one copied from a browser's
+network tab, fills in the method, address, headers and body.
 
 `⌘K` (or the magnifier beside the environment) opens a box that finds things by a few
 letters of their name, in order: `crord` finds "Create order". It lists open tabs,

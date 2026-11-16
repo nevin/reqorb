@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -208,5 +209,121 @@ void main() {
     await tester.enterText(find.byKey(const Key('url')), 'https://changed');
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('tab-dirty-1')), findsOneWidget);
+  });
+
+  /// Opens the menu of the tab at [index], as a right click does.
+  Future<void> menu(WidgetTester tester, int index) async {
+    await tester.tap(find.byKey(Key('tab-$index')), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('a right click on a tab closes the others, or those after it', (
+    tester,
+  ) async {
+    await open(tester);
+    await tap(tester, find.text('Ping'));
+    await tap(tester, find.text('Pong'));
+    await tap(tester, find.byKey(const Key('tab-new')));
+    await tester.enterText(find.byKey(const Key('url')), 'https://third');
+    await tester.pumpAndSettle();
+    expect(tabs(tester), ['Ping', 'Pong', 'third']);
+
+    await menu(tester, 1);
+    await tap(tester, find.byKey(const Key('tab-menu-close-after')));
+    expect(tabs(tester), ['Ping', 'Pong']);
+
+    await menu(tester, 1);
+    await tap(tester, find.byKey(const Key('tab-menu-close-others')));
+    expect(tabs(tester), ['Pong']);
+    expect(url(tester), 'https://api.test/pong');
+  });
+
+  testWidgets('closing others stops at a tab that is kept after all', (
+    tester,
+  ) async {
+    await open(tester);
+    await tap(tester, find.text('Ping'));
+    await tester.enterText(find.byKey(const Key('url')), 'https://changed');
+    await tap(tester, find.text('Pong'));
+    await tap(tester, find.byKey(const Key('tab-new')));
+    await tester.enterText(find.byKey(const Key('url')), 'https://third');
+    await tester.pumpAndSettle();
+
+    await menu(tester, 2);
+    await tap(tester, find.byKey(const Key('tab-menu-close-others')));
+    // Ping has edits, so it is asked about; cancelled, all three stay.
+    await tap(tester, find.text('Cancel'));
+    expect(tabs(tester), ['Ping', 'Pong', 'third']);
+  });
+
+  testWidgets('a tab is duplicated as a request not yet saved', (tester) async {
+    await open(tester);
+    await tap(tester, find.text('Ping'));
+    await menu(tester, 0);
+    await tap(tester, find.byKey(const Key('tab-menu-duplicate')));
+    expect(tabs(tester), ['Ping', 'Ping copy']);
+    expect(url(tester), 'https://api.test/ping');
+    // The copy is its own: changing it leaves Ping as it was.
+    await tester.enterText(find.byKey(const Key('url')), 'https://copy');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('tab-dirty-0')), findsNothing);
+    expect(find.byKey(const Key('tab-dirty-1')), findsNothing);
+  });
+
+  testWidgets('a closed tab is opened again, the last closed first', (
+    tester,
+  ) async {
+    await open(tester);
+    await tap(tester, find.text('Ping'));
+    await tap(tester, find.byKey(const Key('tab-new')));
+    await tester.enterText(find.byKey(const Key('url')), 'https://unsaved');
+    await tester.pumpAndSettle();
+
+    // Nothing has been closed yet, so there is nothing to offer.
+    await menu(tester, 0);
+    expect(
+      tester
+          .widget<PopupMenuItem<VoidCallback>>(
+            find.byKey(const Key('tab-menu-reopen')),
+          )
+          .enabled,
+      isFalse,
+    );
+    await tester.tapAt(Offset.zero);
+    await tester.pumpAndSettle();
+
+    await tap(tester, find.byKey(const Key('tab-close-1')));
+    await tap(tester, find.byKey(const Key('tab-close-0')));
+    expect(tabs(tester), ['Untitled']);
+
+    Future<void> reopen() async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyT);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+      await tester.pumpAndSettle();
+    }
+
+    await reopen();
+    expect(tabs(tester), ['Ping']);
+    await reopen();
+    expect(tabs(tester), ['Ping', 'unsaved']);
+    expect(url(tester), 'https://unsaved');
+    // With nothing left to open again, the keys do nothing.
+    await reopen();
+    expect(tabs(tester), ['Ping', 'unsaved']);
+  });
+
+  testWidgets('the middle button closes a tab', (tester) async {
+    await open(tester);
+    await tap(tester, find.text('Ping'));
+    await tap(tester, find.text('Pong'));
+    await tester.tap(
+      find.byKey(const Key('tab-0')),
+      buttons: kMiddleMouseButton,
+    );
+    await tester.pumpAndSettle();
+    expect(tabs(tester), ['Pong']);
   });
 }
