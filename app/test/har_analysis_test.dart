@@ -13,6 +13,7 @@ HarEntry _entry(
   int timeMs = 100,
   int sizeBytes = 10,
   String kind = 'json',
+  HarSocket? socket,
 }) => HarEntry(
   offsetMs: 0,
   method: method,
@@ -33,6 +34,54 @@ HarEntry _entry(
     HarPhase(name: 'dns', ms: 20),
     HarPhase(name: 'wait', ms: 80),
   ],
+  httpVersion: 'h2',
+  serverIp: '10.0.0.7',
+  socket: socket,
+);
+
+HarMessage _message(String text, {bool sent = false, bool binary = false}) =>
+    HarMessage(
+      sent: sent,
+      offsetMs: 500,
+      binary: binary,
+      sizeBytes: binary ? 2048 : text.length,
+      text: text,
+      cut: false,
+    );
+
+/// An archive of one ordinary request and one WebSocket connection.
+final _withSocket = HarReport(
+  creator: '',
+  entries: [
+    _entry('GET', 'https://api.test/items', 200),
+    _entry(
+      'WS',
+      'wss://chat.test/live',
+      101,
+      kind: 'socket',
+      socket: HarSocket(
+        sent: 1,
+        received: 3,
+        sentBytes: 11,
+        receivedBytes: 4000,
+        messages: [
+          _message('{"op":"hi"}', sent: true),
+          _message('welcome aboard'),
+          _message('', binary: true),
+        ],
+        leftOut: 1,
+        ended: 'Closed: closed by you (code 1000)',
+      ),
+    ),
+  ],
+  failed: 0,
+  totalBytes: 4021,
+  totalTimeMs: 200,
+  spanMs: 200,
+  hosts: const [],
+  statuses: const [],
+  kinds: const [],
+  findings: const [],
 );
 
 final _entries = [
@@ -70,7 +119,11 @@ final _report = HarReport(
 void main() {
   late List<int>? imported;
 
-  Future<void> open(WidgetTester tester, {Size size = const Size(1200, 1400)}) {
+  Future<void> open(
+    WidgetTester tester, {
+    Size size = const Size(1200, 1400),
+    HarReport? report,
+  }) {
     imported = null;
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -80,7 +133,7 @@ void main() {
         theme: buildTheme(Brightness.light),
         home: HarAnalysisPage(
           name: 'session.har',
-          report: _report,
+          report: report ?? _report,
           onImport: (_, entries) async => imported = entries,
         ),
       ),
@@ -115,6 +168,70 @@ void main() {
     await tester.enterText(find.byKey(const Key('har-search')), 'api 200');
     await tester.pumpAndSettle();
     expect([shows(0), shows(1), shows(2)], [true, false, false]);
+  });
+
+  testWidgets('narrows the table by a line of a breakdown', (tester) async {
+    await open(tester);
+    await tester.tap(find.byKey(const Key('har-group-Hosts-cdn.test')));
+    await tester.pumpAndSettle();
+    expect([shows(0), shows(1), shows(2)], [false, false, true]);
+    expect(find.text('Hosts: cdn.test'), findsOneWidget);
+
+    // Another line takes its place; the same line again shows everything.
+    await tester.tap(find.byKey(const Key('har-group-Status-4xx')));
+    await tester.pumpAndSettle();
+    expect([shows(0), shows(1), shows(2)], [false, true, false]);
+    await tester.tap(find.byKey(const Key('har-group-Status-4xx')));
+    await tester.pumpAndSettle();
+    expect([shows(0), shows(1), shows(2)], [true, true, true]);
+    expect(find.byKey(const Key('har-group-filter')), findsNothing);
+  });
+
+  testWidgets('shows the messages of a WebSocket', (tester) async {
+    await open(tester, report: _withSocket);
+    expect(find.text('WebSocket messages'), findsOneWidget);
+    expect(find.text('4'), findsOneWidget);
+    expect(find.textContaining('↑1 ↓3'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('har-entry-1')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('h2 · 10.0.0.7'), findsOneWidget);
+    expect(
+      find.text(
+        '1 sent (11 B) · 3 received (3.9 KB) · '
+        'Closed: closed by you (code 1000)',
+      ),
+      findsOneWidget,
+    );
+    bool lists(int i) =>
+        find.byKey(Key('har-message-$i')).evaluate().isNotEmpty;
+    expect([lists(0), lists(1), lists(2)], [true, true, true]);
+    expect(find.text('[2.0 KB of binary data]'), findsOneWidget);
+    expect(find.textContaining('and 1 later messages'), findsOneWidget);
+
+    // Opened, a JSON message is indented.
+    await tester.tap(find.byKey(const Key('har-message-0')));
+    await tester.pumpAndSettle();
+    expect(find.text('{\n  "op": "hi"\n}'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('har-messages-search')),
+      'ABOARD',
+    );
+    await tester.pumpAndSettle();
+    expect([lists(0), lists(1), lists(2)], [false, true, false]);
+    await tester.enterText(find.byKey(const Key('har-messages-search')), '');
+    await tester.tap(find.byKey(const Key('har-messages-direction')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sent').last);
+    await tester.pumpAndSettle();
+    expect([lists(0), lists(1), lists(2)], [true, false, false]);
+
+    // The request and the response are still a tab away.
+    await tester.tap(find.byKey(const Key('har-detail-request')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('accept'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('sorts by time', (tester) async {

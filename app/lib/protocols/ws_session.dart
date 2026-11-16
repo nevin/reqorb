@@ -19,6 +19,10 @@ class WsSession extends ChangeNotifier {
   StreamSubscription<WsEvent>? _events;
   bool _disposed = false;
 
+  /// What the connection was opened with, for writing the log out.
+  Request? _request;
+  List<Variable> _variables = const [];
+
   bool open = false;
   bool connecting = false;
 
@@ -34,22 +38,21 @@ class WsSession extends ChangeNotifier {
     final id = _next++;
     _id = id;
     connecting = true;
+    final handshake = Request(
+      method: 'GET',
+      url: url,
+      headers: request.headers,
+      form: const [],
+      auth: request.auth,
+      settings: request.settings,
+      tests: const [],
+      captures: const [],
+    );
+    _request = handshake;
+    _variables = variables;
     _notify();
     _events = _engine
-        .wsOpen(
-          id: id,
-          request: Request(
-            method: 'GET',
-            url: url,
-            headers: request.headers,
-            form: const [],
-            auth: request.auth,
-            settings: request.settings,
-            tests: const [],
-            captures: const [],
-          ),
-          variables: variables,
-        )
+        .wsOpen(id: id, request: handshake, variables: variables)
         .listen(
           (event) {
             if (id != _id) return;
@@ -94,6 +97,19 @@ class WsSession extends ChangeNotifier {
       log.add(WsEntry.sent(text));
       _notify();
     }
+  }
+
+  /// The log as a HAR archive, or null before anything was connected to.
+  /// With [redact], credentials are masked.
+  String? har({required bool redact}) {
+    final request = _request;
+    if (request == null || log.isEmpty) return null;
+    return _engine.wsLogHar(
+      request: request,
+      variables: _variables,
+      lines: [for (final entry in log) entry.line],
+      redact: redact,
+    );
   }
 
   void clearLog() {

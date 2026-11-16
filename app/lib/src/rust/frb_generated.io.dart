@@ -111,6 +111,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   GrpcReply dco_decode_box_autoadd_grpc_reply(dynamic raw);
 
   @protected
+  HarSocket dco_decode_box_autoadd_har_socket(dynamic raw);
+
+  @protected
   HttpMode dco_decode_box_autoadd_http_mode(dynamic raw);
 
   @protected
@@ -234,6 +237,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   HarFinding dco_decode_har_finding(dynamic raw);
 
   @protected
+  HarMessage dco_decode_har_message(dynamic raw);
+
+  @protected
   HarPhase dco_decode_har_phase(dynamic raw);
 
   @protected
@@ -241,6 +247,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   HarSeverity dco_decode_har_severity(dynamic raw);
+
+  @protected
+  HarSocket dco_decode_har_socket(dynamic raw);
 
   @protected
   Header dco_decode_header(dynamic raw);
@@ -330,6 +339,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<HarFinding> dco_decode_list_har_finding(dynamic raw);
 
   @protected
+  List<HarMessage> dco_decode_list_har_message(dynamic raw);
+
+  @protected
   List<HarPhase> dco_decode_list_har_phase(dynamic raw);
 
   @protected
@@ -361,6 +373,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<Variable> dco_decode_list_variable(dynamic raw);
+
+  @protected
+  List<WsLine> dco_decode_list_ws_line(dynamic raw);
 
   @protected
   LoadedHistory dco_decode_loaded_history(dynamic raw);
@@ -397,6 +412,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   GrpcReply? dco_decode_opt_box_autoadd_grpc_reply(dynamic raw);
+
+  @protected
+  HarSocket? dco_decode_opt_box_autoadd_har_socket(dynamic raw);
 
   @protected
   HttpMode? dco_decode_opt_box_autoadd_http_mode(dynamic raw);
@@ -466,6 +484,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   WsEventKind dco_decode_ws_event_kind(dynamic raw);
+
+  @protected
+  WsLine dco_decode_ws_line(dynamic raw);
 
   @protected
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
@@ -564,6 +585,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   GrpcReply sse_decode_box_autoadd_grpc_reply(SseDeserializer deserializer);
+
+  @protected
+  HarSocket sse_decode_box_autoadd_har_socket(SseDeserializer deserializer);
 
   @protected
   HttpMode sse_decode_box_autoadd_http_mode(SseDeserializer deserializer);
@@ -691,6 +715,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   HarFinding sse_decode_har_finding(SseDeserializer deserializer);
 
   @protected
+  HarMessage sse_decode_har_message(SseDeserializer deserializer);
+
+  @protected
   HarPhase sse_decode_har_phase(SseDeserializer deserializer);
 
   @protected
@@ -698,6 +725,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   HarSeverity sse_decode_har_severity(SseDeserializer deserializer);
+
+  @protected
+  HarSocket sse_decode_har_socket(SseDeserializer deserializer);
 
   @protected
   Header sse_decode_header(SseDeserializer deserializer);
@@ -789,6 +819,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<HarFinding> sse_decode_list_har_finding(SseDeserializer deserializer);
 
   @protected
+  List<HarMessage> sse_decode_list_har_message(SseDeserializer deserializer);
+
+  @protected
   List<HarPhase> sse_decode_list_har_phase(SseDeserializer deserializer);
 
   @protected
@@ -824,6 +857,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<Variable> sse_decode_list_variable(SseDeserializer deserializer);
+
+  @protected
+  List<WsLine> sse_decode_list_ws_line(SseDeserializer deserializer);
 
   @protected
   LoadedHistory sse_decode_loaded_history(SseDeserializer deserializer);
@@ -866,6 +902,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   GrpcReply? sse_decode_opt_box_autoadd_grpc_reply(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  HarSocket? sse_decode_opt_box_autoadd_har_socket(
     SseDeserializer deserializer,
   );
 
@@ -939,6 +980,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   WsEventKind sse_decode_ws_event_kind(SseDeserializer deserializer);
+
+  @protected
+  WsLine sse_decode_ws_line(SseDeserializer deserializer);
 
   @protected
   void sse_encode_AnyhowException(
@@ -1066,6 +1110,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_grpc_reply(
     GrpcReply self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_har_socket(
+    HarSocket self,
     SseSerializer serializer,
   );
 
@@ -1208,6 +1258,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_har_finding(HarFinding self, SseSerializer serializer);
 
   @protected
+  void sse_encode_har_message(HarMessage self, SseSerializer serializer);
+
+  @protected
   void sse_encode_har_phase(HarPhase self, SseSerializer serializer);
 
   @protected
@@ -1215,6 +1268,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_har_severity(HarSeverity self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_har_socket(HarSocket self, SseSerializer serializer);
 
   @protected
   void sse_encode_header(Header self, SseSerializer serializer);
@@ -1343,6 +1399,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_har_message(
+    List<HarMessage> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_har_phase(List<HarPhase> self, SseSerializer serializer);
 
   @protected
@@ -1392,6 +1454,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_list_variable(List<Variable> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_ws_line(List<WsLine> self, SseSerializer serializer);
 
   @protected
   void sse_encode_loaded_history(LoadedHistory self, SseSerializer serializer);
@@ -1447,6 +1512,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_grpc_reply(
     GrpcReply? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_har_socket(
+    HarSocket? self,
     SseSerializer serializer,
   );
 
@@ -1536,6 +1607,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_ws_event_kind(WsEventKind self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ws_line(WsLine self, SseSerializer serializer);
 }
 
 // Section: wire_class

@@ -67,6 +67,15 @@ abstract class Engine {
   /// Asks the connection to close; false when it is not open.
   bool wsClose({required int id});
 
+  /// A WebSocket conversation as a HAR archive, which the analyser reads.
+  /// [request] is what was connected to; [redact] masks credentials.
+  String wsLogHar({
+    required Request request,
+    required List<Variable> variables,
+    required List<WsLine> lines,
+    required bool redact,
+  });
+
   Future<GrpcSchema> grpcReflect({
     required String url,
     required List<Header> metadata,
@@ -326,6 +335,19 @@ class RustEngine extends Engine {
 
   @override
   bool wsClose({required int id}) => rust.wsClose(id: id);
+
+  @override
+  String wsLogHar({
+    required Request request,
+    required List<Variable> variables,
+    required List<WsLine> lines,
+    required bool redact,
+  }) => rust.wsLogHar(
+    request: request,
+    variables: variables,
+    lines: lines,
+    redact: redact,
+  );
 
   @override
   Future<GrpcSchema> grpcReflect({

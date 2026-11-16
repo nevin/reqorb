@@ -13,10 +13,10 @@ pub use reqorb_core::{
     AppTheme, Auth, AuthField, AuthKind, AuthParam, BodyMode, CodeTarget, Collection, Cookie,
     DirAccess, DisabledTls, Environment, Exchange, ExportFormat, FolderLink, FormField, GraphQlArg,
     GraphQlDraft, GraphQlField, GraphQlQuery, GraphQlSchema, GraphQlType, GrpcCall, GrpcMethod,
-    GrpcReply, GrpcSchema, HarCount, HarEntry, HarFinding, HarPhase, HarReport, HarSeverity,
-    Header, HistoryEntry, HttpMode, ImportResult, Indent, Item, Layout, ProxyMode, Request,
-    RequestSettings, Response, Sent, Settings, TestResult, Variable, Workspace, WsEvent,
-    WsEventKind,
+    GrpcReply, GrpcSchema, HarCount, HarEntry, HarFinding, HarMessage, HarPhase, HarReport,
+    HarSeverity, HarSocket, Header, HistoryEntry, HttpMode, ImportResult, Indent, Item, Layout,
+    ProxyMode, Request, RequestSettings, Response, Sent, Settings, TestResult, Variable, Workspace,
+    WsEvent, WsEventKind, WsLine,
 };
 
 #[frb(mirror(AppTheme))]
@@ -645,6 +645,24 @@ pub fn ws_close(id: u32) -> bool {
         .is_some_and(|socket| socket.close())
 }
 
+#[frb(mirror(WsLine))]
+pub struct _WsLine {
+    pub sent: bool,
+    pub event: WsEvent,
+}
+
+/// A WebSocket conversation as a HAR document, which the analyser reads.
+/// `request` is what was connected to; `redact` masks credentials.
+#[frb(sync)]
+pub fn ws_log_har(
+    request: Request,
+    variables: Vec<Variable>,
+    lines: Vec<WsLine>,
+    redact: bool,
+) -> String {
+    reqorb_core::ws_to_har(&request, &variables, &lines, redact)
+}
+
 #[frb(mirror(GrpcMethod))]
 pub struct _GrpcMethod {
     pub path: String,
@@ -1012,6 +1030,30 @@ pub struct _HarEntry {
     pub response_body: Option<String>,
     pub body_note: Option<String>,
     pub phases: Vec<HarPhase>,
+    pub http_version: String,
+    pub server_ip: String,
+    pub socket: Option<HarSocket>,
+}
+
+#[frb(mirror(HarSocket))]
+pub struct _HarSocket {
+    pub sent: u32,
+    pub received: u32,
+    pub sent_bytes: u64,
+    pub received_bytes: u64,
+    pub messages: Vec<HarMessage>,
+    pub left_out: u32,
+    pub ended: Option<String>,
+}
+
+#[frb(mirror(HarMessage))]
+pub struct _HarMessage {
+    pub sent: bool,
+    pub offset_ms: u64,
+    pub binary: bool,
+    pub size_bytes: u64,
+    pub text: String,
+    pub cut: bool,
 }
 
 #[frb(mirror(HarPhase))]

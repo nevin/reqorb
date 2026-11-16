@@ -350,6 +350,13 @@ class _RequestPageState extends State<RequestPage> {
 
   void _wsReset() => _ws.reset();
 
+  /// Opens the conversation so far in the HAR analyser.
+  void _wsAnalyse() {
+    final har = _ws.har(redact: false);
+    if (har == null) return;
+    showHarAnalysis(context, _store, name: 'WebSocket log', text: har);
+  }
+
   // ----------------------------------------------------------------- grpc
 
   bool get _isGrpc => _method == 'GRPC';
@@ -1221,6 +1228,9 @@ class _RequestPageState extends State<RequestPage> {
             connected: _wsOpen,
             connecting: _wsConnecting,
             onClear: _ws.clearLog,
+            onSave: () =>
+                exportWsLog(context, (redact) => _ws.har(redact: redact) ?? ''),
+            onAnalyse: _wsAnalyse,
           )
         : ResponseView(
             sent: _sent,

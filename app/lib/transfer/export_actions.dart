@@ -122,6 +122,19 @@ Future<void> exportSessionHar(BuildContext context, WorkspaceStore store) {
   );
 }
 
+/// Saves a WebSocket conversation as an HTTP Archive, which the analyser
+/// and browser tools can read. [render] writes it, redacted when asked.
+Future<void> exportWsLog(
+  BuildContext context,
+  String Function(bool redact) render,
+) => _saveExport(
+  context,
+  'websocket.har',
+  what: 'WebSocket log as HAR',
+  covers: 'headers, the URL and JSON messages',
+  (redact) async => render(redact),
+);
+
 /// Saves [bytes] as they are to a file the user chooses.
 Future<void> saveBytesFile(
   BuildContext context,

@@ -72,6 +72,49 @@ pub(crate) fn analyze(args: AnalyzeArgs) -> Result<ExitCode> {
         }
     }
 
+    let sockets: Vec<_> = report
+        .entries
+        .iter()
+        .filter_map(|e| Some((e, e.socket.as_ref()?)))
+        .collect();
+    if !sockets.is_empty() {
+        println!("\nWebSockets");
+    }
+    for (entry, socket) in sockets {
+        println!(
+            "  {:>9}  {} sent ({}), {} received ({})  {}",
+            human_ms(entry.time_ms),
+            socket.sent,
+            human_bytes(socket.sent_bytes),
+            socket.received,
+            human_bytes(socket.received_bytes),
+            entry.url,
+        );
+        if let Some(ended) = &socket.ended {
+            println!("             {ended}");
+        }
+        if !args.messages {
+            continue;
+        }
+        for message in &socket.messages {
+            let text = if message.binary {
+                format!("[{} of binary data]", human_bytes(message.size_bytes))
+            } else if message.cut {
+                format!("{}…", message.text)
+            } else {
+                message.text.clone()
+            };
+            println!(
+                "    {:>9}  {}  {text}",
+                format!("+{}", human_ms(message.offset_ms)),
+                if message.sent { "↑" } else { "↓" },
+            );
+        }
+        if socket.left_out > 0 {
+            println!("    and {} more message(s)", socket.left_out);
+        }
+    }
+
     if report.findings.is_empty() {
         println!("\nNothing stands out.");
     } else {
