@@ -799,9 +799,20 @@ void main() {
     final code = CodeController(text: '{"a": 1}');
     addTearDown(code.dispose);
     final changes = <String>[];
+    // What the controller holds when a button beside the text is pressed.
+    String? sent;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
+          appBar: AppBar(
+            actions: [
+              TextButton(
+                key: const Key('send'),
+                onPressed: () => sent = code.text,
+                child: const Text('Send'),
+              ),
+            ],
+          ),
           body: CodeEditor(
             name: 'body',
             controller: code,
@@ -821,27 +832,39 @@ void main() {
     expect(find.byKey(const Key('body-document')), findsOneWidget);
     expect(changes.last, long);
 
-    // Typing is written back to the controller.
+    // Typing is written back to the controller once it pauses, and not
+    // on every key, as that copies all of the text.
     await tester.tapAt(
       tester.getTopLeft(find.byKey(const Key('body-document'))) +
           const Offset(60, 14),
     );
     await tester.pump();
     await input(tester, 'x');
+    expect(code.text.length, long.length);
+    await tester.pump(const Duration(milliseconds: 300));
     expect(code.text.length, long.length + 1);
     expect(changes.last, code.text);
 
     // Brackets come in pairs, and an empty pair goes together. At the
-    // very end, where nothing follows to run into.
+    // very end, where nothing follows to run into. A shortcut, as one
+    // that sends, finds the text written back at once.
     await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
     await tester.sendKeyEvent(LogicalKeyboardKey.end);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
     await tester.pump();
     await input(tester, '[');
+    expect(code.text, endsWith('0\n]'));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
     expect(code.text, endsWith('0\n][]'));
+
+    // So does a click anywhere else, before a button clicked acts.
     await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
     await tester.pump();
-    expect(code.text.length, long.length + 1);
+    expect(code.text, endsWith('0\n][]'));
+    await tester.tap(find.byKey(const Key('send')));
+    expect(sent!.length, long.length + 1);
 
     // Text set from elsewhere replaces it, and a short one goes back to
     // a text field.

@@ -6,6 +6,14 @@ the new version when it is tagged.
 
 ## Unreleased
 
+- A change made just before quitting, or before the iPad app goes to the background, is
+  saved; it could be lost before.
+- Two saves of the workspace never overlap, so an older one can no longer be left on disk
+  after a newer one.
+- On Linux, large responses and copies of files being saved are kept in your own cache
+  folder (`~/.cache`), readable by you alone, instead of the shared `/tmp`, where another
+  user of the machine could read or replace them. On every system the files are made
+  readable by their owner alone, and a link left in their place is never followed.
 - **WebSocket logs in the HAR analyser.** A connection recorded by Chrome, Firefox or
   reqorb is listed with its message counts and opens on a **Messages** tab, where the
   messages can be filtered by text and direction and opened to read JSON indented.
