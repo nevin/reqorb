@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// How code is shown, as chosen in Settings. Set once per build of the app,
 /// before anything that shows code is built.

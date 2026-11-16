@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:reqorb/bridge/engine.dart';
 import 'package:reqorb/har/har_actions.dart';
 import 'package:reqorb/response/response_view.dart';

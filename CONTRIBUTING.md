@@ -17,7 +17,7 @@ fresh clone to a change that is ready to push. The guides in [docs/](docs/) go d
 
 ## Set up
 
-You need Rust 1.99 or later, Flutter 3.47 or later, and Xcode for the macOS and iPad
+You need Rust 1.99 or later, Flutter 3.50 or later, and Xcode for the macOS and iPad
 builds. Then:
 
 ```bash

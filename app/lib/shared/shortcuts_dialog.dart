@@ -1,7 +1,7 @@
 /// The keyboard shortcuts, listed in one place.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:reqorb/shared/theme.dart';
 
 /// Each group of shortcuts: what the keys are and what they do. `⌘` stands

@@ -2,7 +2,7 @@
 /// button that lists every tab.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// One tab: its key, and what it shows.
 typedef TabEntry = ({Key key, Widget label});
