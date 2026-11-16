@@ -14,6 +14,11 @@ the new version when it is tagged.
   folder (`~/.cache`), readable by you alone, instead of the shared `/tmp`, where another
   user of the machine could read or replace them. On every system the files are made
   readable by their owner alone, and a link left in their place is never followed.
+- The app's identifier is now `com.codersworld.reqorb`, for signing and the App Store.
+  On macOS this gives it a new data folder: to keep a workspace from 1.0, quit reqorb
+  and copy `workspace.json` from
+  `~/Library/Containers/dev.reqorb.reqorb/Data/Library/Application Support/dev.reqorb.reqorb/`
+  to the same place under `com.codersworld.reqorb`.
 - On a Mac the menu bar now has the app's commands: **File**, **View**, **Request** and
   **Tools** menus, **Settings…** (`⌘,`) and **Help › Keyboard Shortcuts**.
 - `⌘/` lists every keyboard shortcut, on any platform.

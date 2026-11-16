@@ -5,7 +5,7 @@
 | Tool | Version | Needed for |
 |---|---|---|
 | Rust | 1.99 or later (stable) | Everything |
-| Flutter | 3.47 or later (stable) | The app |
+| Flutter | 3.47 (stable); CI and releases build with 3.47.7 | The app |
 | Xcode | 26 or later | The macOS and iPad builds. Older versions build, but without the dark and tinted app icons |
 | `flutter_rust_bridge_codegen` | 2.13.0, matching `app/pubspec.yaml` | Only when you change `app/rust/src/api` |
 | `cargo-llvm-cov` | any | Only for `scripts/coverage.sh` |
@@ -37,7 +37,7 @@ Hot reload works for Dart. **Changes to Rust need a full restart** (`R` in `flut
 or stop and run again): the native library is built and loaded once.
 
 The macOS app is sandboxed, so its files are inside its container:
-`~/Library/Containers/dev.reqorb.reqorb/Data/Library/Application Support/dev.reqorb.reqorb/`.
+`~/Library/Containers/com.codersworld.reqorb/Data/Library/Application Support/com.codersworld.reqorb/`.
 Delete `workspace.json` there to start from an empty workspace. Credentials in it are
 encrypted with a key kept in the login keychain (service `reqorb`, account
 `workspace-key`).
