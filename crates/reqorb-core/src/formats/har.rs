@@ -7,7 +7,10 @@ use serde_json::{Value, json};
 use super::ImportResult;
 use super::util::str_field;
 use crate::graphql;
-use crate::{BodyMode, Collection, Error, Exchange, FormField, Header, Item, REDACTED, Request};
+use crate::{
+    BodyMode, Collection, Error, Exchange, FormField, Header, Item, REDACTED, Request, Response,
+    Variable, WsEvent, WsEventKind,
+};
 
 /// Renders `exchanges`, oldest first, as a HAR 1.2 document that browser
 /// developer tools and HAR viewers can open.
@@ -18,6 +21,99 @@ pub fn to_har(exchanges: &[Exchange]) -> String {
             "version": "1.2",
             "creator": { "name": "reqorb", "version": env!("CARGO_PKG_VERSION") },
             "entries": entries,
+        }
+    });
+    serde_json::to_string_pretty(&har).expect("HAR serialises")
+}
+
+/// One line of a WebSocket conversation: something the connection
+/// reported, or a text message sent on it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WsLine {
+    /// Whether this is a message the client sent; `event` is then a `Text`
+    /// event that says what and when.
+    pub sent: bool,
+    pub event: WsEvent,
+}
+
+/// Renders a WebSocket conversation as a HAR document of one entry, with
+/// the messages under `_webSocketMessages` as browsers write them, so the
+/// analyser and other HAR tools can read it. `request` is what was
+/// connected to; `redact` masks credentials in it and in JSON messages.
+pub fn ws_to_har(
+    request: &Request,
+    variables: &[Variable],
+    lines: &[WsLine],
+    redact: bool,
+) -> String {
+    let mut request = crate::resolve(request, variables).request;
+    request.method = "GET".into();
+    for (plain, socket) in [("http://", "ws://"), ("https://", "wss://")] {
+        if let Some(rest) = request.url.strip_prefix(plain) {
+            request.url = format!("{socket}{rest}");
+        }
+    }
+    let started_ms = lines.iter().map(|l| l.event.at_ms).min().unwrap_or(0);
+    let ended_ms = lines.iter().map(|l| l.event.at_ms).max().unwrap_or(0);
+    let of = |kind: WsEventKind| lines.iter().find(|l| !l.sent && l.event.kind == kind);
+    let open = of(WsEventKind::Open).map(|l| &l.event);
+    let mut exchange = Exchange {
+        started_ms,
+        request,
+        response: Response {
+            status: open.map_or(0, |e| e.code),
+            status_text: open.map_or_else(String::new, |e| e.text.clone()),
+            http_version: "HTTP/1.1".into(),
+            headers: open.map_or_else(Vec::new, |e| e.headers.clone()),
+            elapsed_ms: ended_ms - started_ms,
+            ..Response::default()
+        },
+    };
+    if redact {
+        exchange = crate::redact_exchanges(&[exchange]).remove(0);
+    }
+
+    let messages: Vec<Value> = lines
+        .iter()
+        .filter_map(|line| {
+            let event = &line.event;
+            let (opcode, data) = match event.kind {
+                WsEventKind::Text if redact => (1, crate::redact_text(&event.text)),
+                WsEventKind::Text => (1, event.text.clone()),
+                WsEventKind::Binary => (
+                    2,
+                    base64::engine::general_purpose::STANDARD.encode(&event.data),
+                ),
+                _ => return None,
+            };
+            Some(json!({
+                "type": if line.sent { "send" } else { "receive" },
+                // Seconds, as browsers write them.
+                "time": event.at_ms as f64 / 1000.0,
+                "opcode": opcode,
+                "data": data,
+            }))
+        })
+        .collect();
+    let mut entry = entry(&exchange);
+    entry["_resourceType"] = json!("websocket");
+    entry["_webSocketMessages"] = json!(messages);
+    // The time was spent talking, not waiting for a first byte.
+    entry["timings"] = json!({ "send": 0, "wait": 0, "receive": exchange.response.elapsed_ms });
+    if let Some(closed) = of(WsEventKind::Closed) {
+        entry["_webSocketClosed"] = json!({
+            "code": closed.event.code,
+            "reason": closed.event.text,
+        });
+    }
+    if let Some(failed) = of(WsEventKind::Error) {
+        entry["_webSocketError"] = json!(failed.event.text);
+    }
+    let har = json!({
+        "log": {
+            "version": "1.2",
+            "creator": { "name": "reqorb", "version": env!("CARGO_PKG_VERSION") },
+            "entries": [entry],
         }
     });
     serde_json::to_string_pretty(&har).expect("HAR serialises")
@@ -348,6 +444,108 @@ fn iso_time(unix_ms: u64) -> String {
 mod tests {
     use super::*;
     use crate::{Request, Response};
+
+    #[test]
+    fn writes_a_websocket_log_the_analyser_reads_back() {
+        let event = |kind, at_ms: u64, text: &str| WsEvent {
+            kind,
+            text: text.into(),
+            data: Vec::new(),
+            code: 0,
+            headers: Vec::new(),
+            at_ms,
+        };
+        let line = |sent, event| WsLine { sent, event };
+        let mut request = Request::new("WS", "https://{{host}}/live?token=abc");
+        request.add_header("Authorization", "Bearer abc");
+        let variables = [Variable::new("host", "api.test")];
+        let lines = [
+            line(
+                false,
+                WsEvent {
+                    code: 101,
+                    headers: vec![Header {
+                        name: "upgrade".into(),
+                        value: "websocket".into(),
+                    }],
+                    ..event(WsEventKind::Open, 1_000, "Switching Protocols")
+                },
+            ),
+            line(true, event(WsEventKind::Text, 1_250, r#"{"password":"p"}"#)),
+            line(false, event(WsEventKind::Text, 1_300, "welcome")),
+            line(
+                false,
+                WsEvent {
+                    data: vec![1, 2, 3, 4, 5],
+                    ..event(WsEventKind::Binary, 1_400, "")
+                },
+            ),
+            line(false, event(WsEventKind::Pong, 1_450, "")),
+            line(
+                false,
+                WsEvent {
+                    code: 1000,
+                    ..event(WsEventKind::Closed, 3_000, "closed by you")
+                },
+            ),
+        ];
+
+        let har = ws_to_har(&request, &variables, &lines, false);
+        let value: Value = serde_json::from_str(&har).unwrap();
+        let entry = &value["log"]["entries"][0];
+        assert_eq!(entry["request"]["url"], "wss://api.test/live?token=abc");
+        assert_eq!(entry["response"]["status"], 101);
+        assert_eq!(entry["_webSocketMessages"][0]["type"], "send");
+        assert_eq!(entry["_webSocketMessages"][2]["data"], "AQIDBAU=");
+
+        let report = crate::analyze_har(&har).unwrap();
+        let entry = &report.entries[0];
+        assert_eq!(
+            (entry.method.as_str(), entry.kind.as_str()),
+            ("WS", "socket")
+        );
+        assert_eq!(entry.time_ms, 2_000);
+        let socket = entry.socket.as_ref().unwrap();
+        assert_eq!((socket.sent, socket.received), (1, 2));
+        assert_eq!((socket.sent_bytes, socket.received_bytes), (16, 12));
+        assert_eq!(entry.size_bytes, 28);
+        let seen: Vec<(bool, u64, bool, &str)> = socket
+            .messages
+            .iter()
+            .map(|m| (m.sent, m.offset_ms, m.binary, m.text.as_str()))
+            .collect();
+        assert_eq!(
+            seen,
+            [
+                (true, 250, false, r#"{"password":"p"}"#),
+                (false, 300, false, "welcome"),
+                (false, 400, true, ""),
+            ]
+        );
+        assert_eq!(
+            socket.ended.as_deref(),
+            Some("Closed: closed by you (code 1000)")
+        );
+        // A two-second connection is not a slow request.
+        let titles: Vec<&str> = report.findings.iter().map(|f| f.title.as_str()).collect();
+        assert_eq!(titles, ["1 request has a credential in the URL"]);
+
+        // Importing it gives the WebSocket request back.
+        let imported = import_har(&har, "log", &[0]).unwrap();
+        let again = imported.collections[0].items[0].request.as_ref().unwrap();
+        assert_eq!(again.method, "WS");
+
+        let redacted = ws_to_har(&request, &variables, &lines, true);
+        assert!(!redacted.contains("abc") && !redacted.contains("\"p\""));
+        assert!(redacted.contains(REDACTED) && redacted.contains("welcome"));
+
+        // A connection that never opened still makes an archive.
+        let failed = [line(false, event(WsEventKind::Error, 5, "refused"))];
+        let report = crate::analyze_har(&ws_to_har(&request, &[], &failed, false)).unwrap();
+        let socket = report.entries[0].socket.as_ref().unwrap();
+        assert_eq!(socket.ended.as_deref(), Some("Failed: refused"));
+        assert_eq!(report.entries[0].status, 0);
+    }
 
     #[test]
     fn formats_timestamps() {

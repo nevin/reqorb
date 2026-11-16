@@ -2,8 +2,10 @@
 
 use std::process::ExitCode;
 
-use anyhow::Result;
-use reqorb_core::Request;
+use std::sync::{Arc, Mutex, PoisonError};
+
+use anyhow::{Context, Result};
+use reqorb_core::{Request, WsEvent, WsLine};
 
 use crate::cli::WsArgs;
 use crate::input::{load_variables, parse_header};
@@ -29,16 +31,33 @@ pub(crate) async fn ws(args: WsArgs) -> Result<ExitCode> {
     }
     let variables = load_variables(&args.vars).await?;
     let (handle, mut events) = reqorb_core::ws_connect(&request, &variables).await?;
+    // The conversation, kept only when it is going to be saved.
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let keep = args.har.is_some();
+    let record = move |log: &Mutex<Vec<WsLine>>, sent: bool, event: WsEvent| {
+        if keep {
+            log.lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .push(WsLine { sent, event });
+        }
+    };
+    let send = move |handle: &reqorb_core::WsHandle, log: &Mutex<Vec<WsLine>>, text: String| {
+        let sent = handle.send_text(text.clone());
+        if sent {
+            record(log, true, WsEvent::sent(text));
+        }
+        sent
+    };
     for message in &args.messages {
-        handle.send_text(message.clone());
+        send(&handle, &log, message.clone());
     }
 
     // Lines typed, or piped in, are sent as they arrive.
-    let typed = handle.clone();
+    let (typed, typed_log) = (handle.clone(), log.clone());
     tokio::spawn(async move {
         let mut lines = tokio::io::BufReader::new(tokio::io::stdin()).lines();
         while let Ok(Some(line)) = lines.next_line().await {
-            if !typed.send_text(line) {
+            if !send(&typed, &typed_log, line) {
                 break;
             }
         }
@@ -64,6 +83,7 @@ pub(crate) async fn ws(args: WsArgs) -> Result<ExitCode> {
             }
         };
         let Some(event) = event else { break };
+        record(&log, false, event.clone());
         match event.kind {
             WsEventKind::Open => eprintln!("connected ({} {})", event.code, event.text),
             WsEventKind::Text => {
@@ -88,6 +108,13 @@ pub(crate) async fn ws(args: WsArgs) -> Result<ExitCode> {
         if args.exit_after.is_some_and(|n| received >= n) {
             handle.close();
         }
+    }
+    if let Some(path) = &args.har {
+        let mut lines = log.lock().unwrap_or_else(PoisonError::into_inner).clone();
+        // Messages typed while others arrived were noted out of turn.
+        lines.sort_by_key(|line| line.event.at_ms);
+        let har = reqorb_core::ws_to_har(&request, &variables, &lines, args.redact);
+        std::fs::write(path, har).with_context(|| format!("writing {}", path.display()))?;
     }
     Ok(if failed {
         ExitCode::from(1)

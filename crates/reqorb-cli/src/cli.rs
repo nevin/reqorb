@@ -49,6 +49,10 @@ pub(crate) struct AnalyzeArgs {
     /// How many of the slowest requests to list
     #[arg(short = 'n', long, value_name = "N", default_value_t = 5)]
     pub(crate) top: usize,
+
+    /// Also print the messages of each WebSocket connection
+    #[arg(short, long)]
+    pub(crate) messages: bool,
 }
 
 #[derive(Args)]
@@ -108,6 +112,14 @@ pub(crate) struct WsArgs {
     /// Accept a server certificate that cannot be verified
     #[arg(short = 'k', long)]
     pub(crate) insecure: bool,
+
+    /// Save the conversation to this file as HAR, which `analyze` reads
+    #[arg(long, value_name = "FILE")]
+    pub(crate) har: Option<PathBuf>,
+
+    /// Replace tokens, passwords, cookies and keys in the HAR file
+    #[arg(long, requires = "har")]
+    pub(crate) redact: bool,
 
     #[command(flatten)]
     pub(crate) vars: VarArgs,

@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1570196396;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 334565286;
 
 // Section: executor
 
@@ -2745,6 +2745,44 @@ fn wire__crate__api__core__ws_close_impl(
         },
     )
 }
+fn wire__crate__api__core__ws_log_har_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "ws_log_har",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_request = <crate::api::core::Request>::sse_decode(&mut deserializer);
+            let api_variables = <Vec<crate::api::core::Variable>>::sse_decode(&mut deserializer);
+            let api_lines = <Vec<crate::api::core::WsLine>>::sse_decode(&mut deserializer);
+            let api_redact = <bool>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Ok::<_, ()>(crate::api::core::ws_log_har(
+                    api_request,
+                    api_variables,
+                    api_lines,
+                    api_redact,
+                ))?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
 fn wire__crate__api__core__ws_open_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -2994,6 +3032,9 @@ const _: fn() = || {
         let _: Option<String> = HarEntry.response_body;
         let _: Option<String> = HarEntry.body_note;
         let _: Vec<crate::api::core::HarPhase> = HarEntry.phases;
+        let _: String = HarEntry.http_version;
+        let _: String = HarEntry.server_ip;
+        let _: Option<crate::api::core::HarSocket> = HarEntry.socket;
     }
     {
         let HarFinding = None::<crate::api::core::HarFinding>.unwrap();
@@ -3001,6 +3042,15 @@ const _: fn() = || {
         let _: String = HarFinding.title;
         let _: String = HarFinding.detail;
         let _: Vec<u32> = HarFinding.entries;
+    }
+    {
+        let HarMessage = None::<crate::api::core::HarMessage>.unwrap();
+        let _: bool = HarMessage.sent;
+        let _: u64 = HarMessage.offset_ms;
+        let _: bool = HarMessage.binary;
+        let _: u64 = HarMessage.size_bytes;
+        let _: String = HarMessage.text;
+        let _: bool = HarMessage.cut;
     }
     {
         let HarPhase = None::<crate::api::core::HarPhase>.unwrap();
@@ -3019,6 +3069,16 @@ const _: fn() = || {
         let _: Vec<crate::api::core::HarCount> = HarReport.statuses;
         let _: Vec<crate::api::core::HarCount> = HarReport.kinds;
         let _: Vec<crate::api::core::HarFinding> = HarReport.findings;
+    }
+    {
+        let HarSocket = None::<crate::api::core::HarSocket>.unwrap();
+        let _: u32 = HarSocket.sent;
+        let _: u32 = HarSocket.received;
+        let _: u64 = HarSocket.sent_bytes;
+        let _: u64 = HarSocket.received_bytes;
+        let _: Vec<crate::api::core::HarMessage> = HarSocket.messages;
+        let _: u32 = HarSocket.left_out;
+        let _: Option<String> = HarSocket.ended;
     }
     {
         let Header = None::<crate::api::core::Header>.unwrap();
@@ -3155,6 +3215,11 @@ const _: fn() = || {
         let _: u16 = WsEvent.code;
         let _: Vec<crate::api::core::Header> = WsEvent.headers;
         let _: u64 = WsEvent.at_ms;
+    }
+    {
+        let WsLine = None::<crate::api::core::WsLine>.unwrap();
+        let _: bool = WsLine.sent;
+        let _: crate::api::core::WsEvent = WsLine.event;
     }
 };
 
@@ -3932,6 +3997,9 @@ impl SseDecode for crate::api::core::HarEntry {
         let mut var_responseBody = <Option<String>>::sse_decode(deserializer);
         let mut var_bodyNote = <Option<String>>::sse_decode(deserializer);
         let mut var_phases = <Vec<crate::api::core::HarPhase>>::sse_decode(deserializer);
+        let mut var_httpVersion = <String>::sse_decode(deserializer);
+        let mut var_serverIp = <String>::sse_decode(deserializer);
+        let mut var_socket = <Option<crate::api::core::HarSocket>>::sse_decode(deserializer);
         return crate::api::core::HarEntry {
             offset_ms: var_offsetMs,
             method: var_method,
@@ -3950,6 +4018,9 @@ impl SseDecode for crate::api::core::HarEntry {
             response_body: var_responseBody,
             body_note: var_bodyNote,
             phases: var_phases,
+            http_version: var_httpVersion,
+            server_ip: var_serverIp,
+            socket: var_socket,
         };
     }
 }
@@ -3966,6 +4037,26 @@ impl SseDecode for crate::api::core::HarFinding {
             title: var_title,
             detail: var_detail,
             entries: var_entries,
+        };
+    }
+}
+
+impl SseDecode for crate::api::core::HarMessage {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_sent = <bool>::sse_decode(deserializer);
+        let mut var_offsetMs = <u64>::sse_decode(deserializer);
+        let mut var_binary = <bool>::sse_decode(deserializer);
+        let mut var_sizeBytes = <u64>::sse_decode(deserializer);
+        let mut var_text = <String>::sse_decode(deserializer);
+        let mut var_cut = <bool>::sse_decode(deserializer);
+        return crate::api::core::HarMessage {
+            sent: var_sent,
+            offset_ms: var_offsetMs,
+            binary: var_binary,
+            size_bytes: var_sizeBytes,
+            text: var_text,
+            cut: var_cut,
         };
     }
 }
@@ -4019,6 +4110,28 @@ impl SseDecode for crate::api::core::HarSeverity {
             1 => crate::api::core::HarSeverity::Warning,
             2 => crate::api::core::HarSeverity::Info,
             _ => unreachable!("Invalid variant for HarSeverity: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::core::HarSocket {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_sent = <u32>::sse_decode(deserializer);
+        let mut var_received = <u32>::sse_decode(deserializer);
+        let mut var_sentBytes = <u64>::sse_decode(deserializer);
+        let mut var_receivedBytes = <u64>::sse_decode(deserializer);
+        let mut var_messages = <Vec<crate::api::core::HarMessage>>::sse_decode(deserializer);
+        let mut var_leftOut = <u32>::sse_decode(deserializer);
+        let mut var_ended = <Option<String>>::sse_decode(deserializer);
+        return crate::api::core::HarSocket {
+            sent: var_sent,
+            received: var_received,
+            sent_bytes: var_sentBytes,
+            received_bytes: var_receivedBytes,
+            messages: var_messages,
+            left_out: var_leftOut,
+            ended: var_ended,
         };
     }
 }
@@ -4376,6 +4489,18 @@ impl SseDecode for Vec<crate::api::core::HarFinding> {
     }
 }
 
+impl SseDecode for Vec<crate::api::core::HarMessage> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::core::HarMessage>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<crate::api::core::HarPhase> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -4479,6 +4604,18 @@ impl SseDecode for Vec<crate::api::core::Variable> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<crate::api::core::Variable>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::core::WsLine> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::core::WsLine>::sse_decode(deserializer));
         }
         return ans_;
     }
@@ -4614,6 +4751,17 @@ impl SseDecode for Option<crate::api::core::GrpcReply> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<crate::api::core::GrpcReply>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::api::core::HarSocket> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::core::HarSocket>::sse_decode(deserializer));
         } else {
             return None;
         }
@@ -5019,6 +5167,18 @@ impl SseDecode for crate::api::core::WsEventKind {
     }
 }
 
+impl SseDecode for crate::api::core::WsLine {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_sent = <bool>::sse_decode(deserializer);
+        let mut var_event = <crate::api::core::WsEvent>::sse_decode(deserializer);
+        return crate::api::core::WsLine {
+            sent: var_sent,
+            event: var_event,
+        };
+    }
+}
+
 fn pde_ffi_dispatcher_primary_impl(
     func_id: i32,
     port: flutter_rust_bridge::for_generated::MessagePort,
@@ -5077,7 +5237,7 @@ fn pde_ffi_dispatcher_primary_impl(
         79 => {
             wire__crate__api__core__write_environments_dir_impl(port, ptr, rust_vec_len, data_len)
         }
-        81 => wire__crate__api__core__ws_open_impl(port, ptr, rust_vec_len, data_len),
+        82 => wire__crate__api__core__ws_open_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -5133,7 +5293,8 @@ fn pde_ffi_dispatcher_sync_impl(
         73 => wire__crate__api__core__redact_text_impl(ptr, rust_vec_len, data_len),
         77 => wire__crate__api__core__set_spill_bytes_impl(ptr, rust_vec_len, data_len),
         80 => wire__crate__api__core__ws_close_impl(ptr, rust_vec_len, data_len),
-        82 => wire__crate__api__core__ws_send_impl(ptr, rust_vec_len, data_len),
+        81 => wire__crate__api__core__ws_log_har_impl(ptr, rust_vec_len, data_len),
+        83 => wire__crate__api__core__ws_send_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -6115,6 +6276,9 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::HarEntry> {
             self.0.response_body.into_into_dart().into_dart(),
             self.0.body_note.into_into_dart().into_dart(),
             self.0.phases.into_into_dart().into_dart(),
+            self.0.http_version.into_into_dart().into_dart(),
+            self.0.server_ip.into_into_dart().into_dart(),
+            self.0.socket.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -6150,6 +6314,31 @@ impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::core::HarFinding>>
     for crate::api::core::HarFinding
 {
     fn into_into_dart(self) -> FrbWrapper<crate::api::core::HarFinding> {
+        self.into()
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::HarMessage> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.0.sent.into_into_dart().into_dart(),
+            self.0.offset_ms.into_into_dart().into_dart(),
+            self.0.binary.into_into_dart().into_dart(),
+            self.0.size_bytes.into_into_dart().into_dart(),
+            self.0.text.into_into_dart().into_dart(),
+            self.0.cut.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for FrbWrapper<crate::api::core::HarMessage>
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::core::HarMessage>>
+    for crate::api::core::HarMessage
+{
+    fn into_into_dart(self) -> FrbWrapper<crate::api::core::HarMessage> {
         self.into()
     }
 }
@@ -6222,6 +6411,32 @@ impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::core::HarSeverity>
     for crate::api::core::HarSeverity
 {
     fn into_into_dart(self) -> FrbWrapper<crate::api::core::HarSeverity> {
+        self.into()
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::HarSocket> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.0.sent.into_into_dart().into_dart(),
+            self.0.received.into_into_dart().into_dart(),
+            self.0.sent_bytes.into_into_dart().into_dart(),
+            self.0.received_bytes.into_into_dart().into_dart(),
+            self.0.messages.into_into_dart().into_dart(),
+            self.0.left_out.into_into_dart().into_dart(),
+            self.0.ended.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for FrbWrapper<crate::api::core::HarSocket>
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::core::HarSocket>>
+    for crate::api::core::HarSocket
+{
+    fn into_into_dart(self) -> FrbWrapper<crate::api::core::HarSocket> {
         self.into()
     }
 }
@@ -6773,6 +6988,27 @@ impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::core::WsEventKind>
     for crate::api::core::WsEventKind
 {
     fn into_into_dart(self) -> FrbWrapper<crate::api::core::WsEventKind> {
+        self.into()
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<crate::api::core::WsLine> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.0.sent.into_into_dart().into_dart(),
+            self.0.event.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for FrbWrapper<crate::api::core::WsLine>
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<crate::api::core::WsLine>>
+    for crate::api::core::WsLine
+{
+    fn into_into_dart(self) -> FrbWrapper<crate::api::core::WsLine> {
         self.into()
     }
 }
@@ -7372,6 +7608,9 @@ impl SseEncode for crate::api::core::HarEntry {
         <Option<String>>::sse_encode(self.response_body, serializer);
         <Option<String>>::sse_encode(self.body_note, serializer);
         <Vec<crate::api::core::HarPhase>>::sse_encode(self.phases, serializer);
+        <String>::sse_encode(self.http_version, serializer);
+        <String>::sse_encode(self.server_ip, serializer);
+        <Option<crate::api::core::HarSocket>>::sse_encode(self.socket, serializer);
     }
 }
 
@@ -7382,6 +7621,18 @@ impl SseEncode for crate::api::core::HarFinding {
         <String>::sse_encode(self.title, serializer);
         <String>::sse_encode(self.detail, serializer);
         <Vec<u32>>::sse_encode(self.entries, serializer);
+    }
+}
+
+impl SseEncode for crate::api::core::HarMessage {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.sent, serializer);
+        <u64>::sse_encode(self.offset_ms, serializer);
+        <bool>::sse_encode(self.binary, serializer);
+        <u64>::sse_encode(self.size_bytes, serializer);
+        <String>::sse_encode(self.text, serializer);
+        <bool>::sse_encode(self.cut, serializer);
     }
 }
 
@@ -7423,6 +7674,19 @@ impl SseEncode for crate::api::core::HarSeverity {
             },
             serializer,
         );
+    }
+}
+
+impl SseEncode for crate::api::core::HarSocket {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u32>::sse_encode(self.sent, serializer);
+        <u32>::sse_encode(self.received, serializer);
+        <u64>::sse_encode(self.sent_bytes, serializer);
+        <u64>::sse_encode(self.received_bytes, serializer);
+        <Vec<crate::api::core::HarMessage>>::sse_encode(self.messages, serializer);
+        <u32>::sse_encode(self.left_out, serializer);
+        <Option<String>>::sse_encode(self.ended, serializer);
     }
 }
 
@@ -7728,6 +7992,16 @@ impl SseEncode for Vec<crate::api::core::HarFinding> {
     }
 }
 
+impl SseEncode for Vec<crate::api::core::HarMessage> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::core::HarMessage>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<crate::api::core::HarPhase> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -7814,6 +8088,16 @@ impl SseEncode for Vec<crate::api::core::Variable> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::api::core::Variable>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::core::WsLine> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::core::WsLine>::sse_encode(item, serializer);
         }
     }
 }
@@ -7931,6 +8215,16 @@ impl SseEncode for Option<crate::api::core::GrpcReply> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <crate::api::core::GrpcReply>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::api::core::HarSocket> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::core::HarSocket>::sse_encode(value, serializer);
         }
     }
 }
@@ -8223,6 +8517,14 @@ impl SseEncode for crate::api::core::WsEventKind {
             },
             serializer,
         );
+    }
+}
+
+impl SseEncode for crate::api::core::WsLine {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.sent, serializer);
+        <crate::api::core::WsEvent>::sse_encode(self.event, serializer);
     }
 }
 

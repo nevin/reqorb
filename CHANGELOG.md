@@ -39,6 +39,20 @@ the new version when it is tagged.
   JSON, open a collection folder or start a collection.
 - On Windows, Linux and iPad, a `⋮` button holds the menus the Mac has in its menu bar.
 - A request's sections sit closer together, so more of them fit beside the response.
+- **WebSocket logs in the HAR analyser.** A connection recorded by Chrome, Firefox or
+  reqorb is listed with its message counts and opens on a **Messages** tab, where the
+  messages can be filtered by text and direction and opened to read JSON indented.
+  `reqorb analyze FILE --messages` prints them. A connection or an event stream no
+  longer counts as a slow request, and plain `ws://` is reported as unencrypted.
+- **The WebSocket log** can be filtered by text and direction, a line opens to show
+  JSON indented, binary data as hexadecimal or the handshake's headers, and can be
+  copied. The log no longer jumps to the end while you read further up. It can be
+  saved as a HAR file or opened straight in the HAR analyser; `reqorb ws` has
+  `--har FILE` and `--redact` for the same.
+- **HAR analyser:** clicking a line under Status, Hosts or Content narrows the table
+  to those requests. Three new findings: requests the browser held in its queue,
+  CORS preflights that are not remembered, and static files without caching headers.
+  A request's detail shows its HTTP version and server address.
 
 ## 1.0.0 – 2026-10-18
 

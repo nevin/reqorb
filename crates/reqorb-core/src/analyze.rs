@@ -23,6 +23,12 @@ const PHASES: &[&str] = &[
 ];
 /// How many entries a finding spells out before it says "and N more".
 const NAMED: usize = 5;
+/// A request counts as held back from this many milliseconds in the queue.
+const QUEUED_MS: u64 = 500;
+/// A WebSocket message is shown up to this many bytes.
+const MESSAGE_BYTES: usize = 64 * 1024;
+/// How many messages of one connection are kept; the rest are only counted.
+const MESSAGES: usize = 5000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -73,6 +79,43 @@ pub struct HarEntry {
     pub body_note: Option<String>,
     /// Where the time went, in the order the phases happen.
     pub phases: Vec<HarPhase>,
+    /// Such as `HTTP/1.1` or `h2`; empty when the archive does not say.
+    pub http_version: String,
+    /// The address the request went to, when the archive says.
+    pub server_ip: String,
+    /// The conversation, when this is a WebSocket connection.
+    pub socket: Option<HarSocket>,
+}
+
+/// What a WebSocket connection carried. Browsers record the messages
+/// under `_webSocketMessages`, and so does reqorb when it saves a log.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HarSocket {
+    /// Messages each way, counting those left out of `messages`.
+    pub sent: u32,
+    pub received: u32,
+    pub sent_bytes: u64,
+    pub received_bytes: u64,
+    /// Oldest first, up to the first few thousand.
+    pub messages: Vec<HarMessage>,
+    /// How many later messages `messages` does not hold.
+    pub left_out: u32,
+    /// How the connection ended, when the archive says.
+    pub ended: Option<String>,
+}
+
+/// One message on a WebSocket.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HarMessage {
+    /// Whether the client sent it; otherwise the server did.
+    pub sent: bool,
+    /// Milliseconds after the connection started.
+    pub offset_ms: u64,
+    pub binary: bool,
+    pub size_bytes: u64,
+    /// A text message, cut short when `cut` is set. Empty for binary ones.
+    pub text: String,
+    pub cut: bool,
 }
 
 /// One step of a request, such as `dns` or `wait`, and how long it took.
@@ -141,7 +184,7 @@ pub fn analyze_har(text: &str) -> Result<HarReport, Error> {
     let entries: Vec<HarEntry> = recorded
         .iter()
         .zip(&starts)
-        .map(|(entry, start)| summarize(entry, start.map_or(0, |s| s - first)))
+        .map(|(entry, start)| summarize(entry, *start, first))
         .collect();
 
     let mut report = HarReport {
@@ -248,7 +291,100 @@ fn response_body(content: &Value) -> (Option<String>, Option<String>) {
     )
 }
 
-fn summarize(entry: &Value, offset_ms: u64) -> HarEntry {
+/// The time of a WebSocket message in milliseconds since the Unix epoch.
+/// Browsers write seconds with a fraction.
+fn message_time(message: &Value) -> Option<u64> {
+    let time = message["time"].as_f64().filter(|t| *t >= 0.0)?;
+    let ms = if time >= 1e11 { time } else { time * 1000.0 };
+    Some(ms.round() as u64)
+}
+
+/// The conversation of a WebSocket connection that started at `started`,
+/// or `None` when the entry is an ordinary request.
+fn socket(entry: &Value, url: &str, started: Option<u64>) -> Option<HarSocket> {
+    let recorded = entry["_webSocketMessages"].as_array();
+    let upgrade = |message: &Value| {
+        header(message, "upgrade").is_some_and(|u| u.eq_ignore_ascii_case("websocket"))
+    };
+    let url = url.to_lowercase();
+    if recorded.is_none()
+        && !str_field(entry, "_resourceType").is_some_and(|t| t.eq_ignore_ascii_case("websocket"))
+        && !url.starts_with("ws://")
+        && !url.starts_with("wss://")
+        && !upgrade(&entry["request"])
+        && !upgrade(&entry["response"])
+    {
+        return None;
+    }
+    let recorded = recorded.map_or(&[][..], Vec::as_slice);
+    // Without a start for the connection, the first message stands in.
+    let start = started.or_else(|| recorded.iter().find_map(message_time));
+    let offset = |at: Option<u64>| {
+        at.zip(start)
+            .map_or(0, |(at, start)| at.saturating_sub(start))
+    };
+    let mut socket = HarSocket {
+        sent: 0,
+        received: 0,
+        sent_bytes: 0,
+        received_bytes: 0,
+        messages: Vec::new(),
+        left_out: 0,
+        ended: None,
+    };
+    for message in recorded {
+        let sent = str_field(message, "type") == Some("send");
+        let binary = number(&message["opcode"]) == Some(2);
+        let data = str_field(message, "data").unwrap_or("");
+        // Binary messages are written in base64, four characters to three bytes.
+        let size_bytes = if binary {
+            let padding = data.bytes().rev().take_while(|b| *b == b'=').count();
+            (data.len() / 4 * 3).saturating_sub(padding) as u64
+        } else {
+            data.len() as u64
+        };
+        if sent {
+            socket.sent += 1;
+            socket.sent_bytes += size_bytes;
+        } else {
+            socket.received += 1;
+            socket.received_bytes += size_bytes;
+        }
+        if socket.messages.len() == MESSAGES {
+            socket.left_out += 1;
+            continue;
+        }
+        let mut end = if binary {
+            0
+        } else {
+            data.len().min(MESSAGE_BYTES)
+        };
+        while !data.is_char_boundary(end) {
+            end -= 1;
+        }
+        socket.messages.push(HarMessage {
+            sent,
+            offset_ms: offset(message_time(message)),
+            binary,
+            size_bytes,
+            text: data[..end].to_string(),
+            cut: !binary && end < data.len(),
+        });
+    }
+    // reqorb's own logs say how the connection ended; browsers do not.
+    let closed = &entry["_webSocketClosed"];
+    socket.ended = match str_field(entry, "_webSocketError") {
+        Some(error) => Some(format!("Failed: {error}")),
+        None => str_field(closed, "reason").map(|reason| match number(&closed["code"]) {
+            Some(code) if code > 0 => format!("Closed: {reason} (code {code})"),
+            _ => format!("Closed: {reason}"),
+        }),
+    };
+    Some(socket)
+}
+
+fn summarize(entry: &Value, started: Option<u64>, first: u64) -> HarEntry {
+    let offset_ms = started.map_or(0, |s| s - first);
     let request = &entry["request"];
     let response = &entry["response"];
     let content = &response["content"];
@@ -264,15 +400,38 @@ fn summarize(entry: &Value, offset_ms: u64) -> HarEntry {
         .or_else(|| number(&content["size"]))
         .unwrap_or_else(|| str_field(content, "text").map_or(0, |t| t.len() as u64));
     let (response_body, body_note) = response_body(content);
+    let socket = socket(entry, &url, started);
+    let time_ms = number(&entry["time"]).unwrap_or(0);
+    let version = str_field(response, "httpVersion")
+        .filter(|v| !v.is_empty())
+        .or_else(|| str_field(request, "httpVersion"))
+        .unwrap_or("");
     HarEntry {
         offset_ms,
-        method: str_field(request, "method").unwrap_or("GET").to_uppercase(),
+        method: match &socket {
+            Some(_) => "WS".to_string(),
+            None => str_field(request, "method").unwrap_or("GET").to_uppercase(),
+        },
         host: host_of(&url),
         url,
         status: number(&response["status"]).unwrap_or(0).min(999) as u16,
-        kind: kind_of(mime).to_string(),
-        size_bytes,
-        time_ms: number(&entry["time"]).unwrap_or(0),
+        kind: match &socket {
+            Some(_) => "socket",
+            None => kind_of(mime),
+        }
+        .to_string(),
+        // The handshake of a WebSocket weighs nothing; its messages do.
+        size_bytes: match &socket {
+            Some(socket) if socket.sent + socket.received > 0 => {
+                socket.sent_bytes + socket.received_bytes
+            }
+            _ => size_bytes,
+        },
+        // A connection lasts at least until its last message.
+        time_ms: socket
+            .iter()
+            .flat_map(|s| s.messages.last())
+            .fold(time_ms, |ms, last| ms.max(last.offset_ms)),
         wait_ms: number(&entry["timings"]["wait"]),
         status_text: str_field(response, "statusText").unwrap_or("").to_string(),
         request_headers: headers(request),
@@ -297,6 +456,11 @@ fn summarize(entry: &Value, offset_ms: u64) -> HarEntry {
                 })
             })
             .collect(),
+        http_version: version.to_string(),
+        server_ip: str_field(entry, "serverIPAddress")
+            .unwrap_or("")
+            .to_string(),
+        socket,
     }
 }
 
@@ -316,6 +480,7 @@ fn kind_of(mime: &str) -> &'static str {
         m if m.contains("javascript") || m.contains("ecmascript") => "script",
         "text/html" | "application/xhtml+xml" => "html",
         "text/css" => "css",
+        "text/event-stream" => "events",
         m if m.starts_with("image/") => "image",
         m if m.starts_with("font/") || m.contains("font") => "font",
         m if m.starts_with("video/") || m.starts_with("audio/") => "media",
@@ -384,14 +549,23 @@ impl Findings<'_> {
         advice: &str,
         note: impl Fn(&HarEntry) -> String,
     ) {
+        let entries = self.entries;
+        self.add_at(severity, hits, title, advice, |i| note(&entries[i]));
+    }
+
+    /// As `add`, for a note that needs the entry's position.
+    fn add_at(
+        &mut self,
+        severity: HarSeverity,
+        hits: Vec<usize>,
+        title: impl Fn(usize) -> String,
+        advice: &str,
+        note: impl Fn(usize) -> String,
+    ) {
         if hits.is_empty() {
             return;
         }
-        let mut lines: Vec<String> = hits
-            .iter()
-            .take(NAMED)
-            .map(|&i| note(&self.entries[i]))
-            .collect();
+        let mut lines: Vec<String> = hits.iter().take(NAMED).map(|&i| note(i)).collect();
         if hits.len() > NAMED {
             lines.push(format!("and {} more", hits.len() - NAMED));
         }
@@ -439,7 +613,8 @@ fn findings(entries: &[HarEntry], recorded: &[Value], own: bool) -> Vec<HarFindi
         |e| format!("{} {}", e.status, label(e)),
     );
 
-    let mut slow = pick(&|_, e| e.time_ms >= SLOW_MS);
+    // A WebSocket or an event stream stays open on purpose.
+    let mut slow = pick(&|_, e| e.time_ms >= SLOW_MS && e.socket.is_none() && e.kind != "events");
     slow.sort_by_key(|&i| std::cmp::Reverse(entries[i].time_ms));
     out.add(
         Warning,
@@ -511,11 +686,74 @@ fn findings(entries: &[HarEntry], recorded: &[Value], own: bool) -> Vec<HarFindi
             let local = ["localhost", "127.0.0.1", "[::1]"]
                 .iter()
                 .any(|l| e.host == *l || e.host.starts_with(&format!("{l}:")));
-            e.url.to_lowercase().starts_with("http://") && !local
+            let url = e.url.to_lowercase();
+            (url.starts_with("http://") || url.starts_with("ws://")) && !local
         }),
         |n| format!("{} not encrypted", plural(n, "request is", "requests are")),
-        "Sent over plain http://, so anyone on the network path can read or \
-         change them.",
+        "Sent over plain http:// or ws://, so anyone on the network path can \
+         read or change them.",
+        label,
+    );
+
+    let queued = |i: usize| number(&recorded[i]["timings"]["blocked"]).unwrap_or(0);
+    let mut held = pick(&|i, _| queued(i) >= QUEUED_MS);
+    held.sort_by_key(|&i| std::cmp::Reverse(queued(i)));
+    out.add_at(
+        Info,
+        held,
+        |n| {
+            format!(
+                "{} held back before being sent",
+                plural(n, "request was", "requests were")
+            )
+        },
+        "Longest first. The browser queued these for half a second or more, \
+         usually because it already had six connections open to the host \
+         (HTTP/1.1) or was busy with requests it ranked higher.",
+        |i| format!("{} ms queued {}", queued(i), label(&entries[i])),
+    );
+
+    out.add(
+        Info,
+        pick(&|i, e| {
+            let recorded = &recorded[i];
+            e.method == "OPTIONS"
+                && header(&recorded["request"], "access-control-request-method").is_some()
+                && e.status != 0
+                && header(&recorded["response"], "access-control-max-age").is_none()
+        }),
+        |n| {
+            format!(
+                "{} not remembered",
+                plural(n, "CORS preflight is", "CORS preflights are")
+            )
+        },
+        "The browser asks permission before some cross-origin requests, and \
+         asks again within seconds unless the answer carries \
+         Access-Control-Max-Age. Setting it saves a round trip per call.",
+        label,
+    );
+
+    out.add(
+        Info,
+        pick(&|i, e| {
+            let response = &recorded[i]["response"];
+            matches!(e.kind.as_str(), "script" | "css" | "image" | "font")
+                && e.status == 200
+                // An archive without headers says nothing either way.
+                && !e.response_headers.is_empty()
+                && header(response, "cache-control").is_none()
+                && header(response, "expires").is_none()
+        }),
+        |n| {
+            format!(
+                "{} no caching headers",
+                plural(n, "static file has", "static files have")
+            )
+        },
+        "Without Cache-Control or Expires the browser has to guess how long \
+         to keep a file. A long max-age on files whose names change with \
+         their content saves fetching them again.",
         label,
     );
 
@@ -878,6 +1116,166 @@ mod tests {
         let (body, note) = response_body(&json!({ "text": long }));
         assert!(body.unwrap().len() <= BODY_BYTES);
         assert_eq!(note.as_deref(), Some("Showing the first 200 KB of 292 KB."));
+    }
+
+    #[test]
+    fn reads_the_messages_of_a_websocket() {
+        let mut socket = entry(
+            "2024-01-01T00:00:00.000Z",
+            "GET",
+            "ws://chat.test/live",
+            101,
+            "",
+            0,
+            4,
+        );
+        socket["_resourceType"] = json!("websocket");
+        socket["response"]["httpVersion"] = json!("HTTP/1.1");
+        socket["serverIPAddress"] = json!("10.0.0.7");
+        let long = "x".repeat(MESSAGE_BYTES + 10);
+        socket["_webSocketMessages"] = json!([
+            { "type": "send", "time": 1_704_067_200.5, "opcode": 1, "data": "{\"op\":\"hi\"}" },
+            { "type": "receive", "time": 1_704_067_201.25, "opcode": 1, "data": long },
+            { "type": "receive", "time": 1_704_067_203.0, "opcode": 2, "data": "AAECAw==" },
+        ]);
+        // A handshake that was turned down has no messages, but is a socket.
+        let mut refused = entry(
+            "2024-01-01T00:00:05.000Z",
+            "GET",
+            "https://chat.test/live",
+            403,
+            "",
+            0,
+            20,
+        );
+        refused["request"]["headers"] = json!([{ "name": "Upgrade", "value": "websocket" }]);
+        let stream = entry(
+            "2024-01-01T00:00:06.000Z",
+            "GET",
+            "https://api.test/events",
+            200,
+            "text/event-stream",
+            100,
+            9000,
+        );
+        let har = json!({ "log": { "entries": [socket, refused, stream] } });
+        let report = analyze_har(&har.to_string()).unwrap();
+
+        let entry = &report.entries[0];
+        assert_eq!(
+            (entry.method.as_str(), entry.kind.as_str()),
+            ("WS", "socket")
+        );
+        assert_eq!(
+            (entry.http_version.as_str(), entry.server_ip.as_str()),
+            ("HTTP/1.1", "10.0.0.7")
+        );
+        // It lasted until its last message, three seconds in.
+        assert_eq!(entry.time_ms, 3000);
+        let socket = entry.socket.as_ref().unwrap();
+        assert_eq!((socket.sent, socket.received, socket.left_out), (1, 2, 0));
+        assert_eq!(socket.sent_bytes, 11);
+        assert_eq!(socket.received_bytes, MESSAGE_BYTES as u64 + 10 + 4);
+        assert_eq!(entry.size_bytes, socket.sent_bytes + socket.received_bytes);
+        let offsets: Vec<u64> = socket.messages.iter().map(|m| m.offset_ms).collect();
+        assert_eq!(offsets, [500, 1250, 3000]);
+        assert!(socket.messages[1].cut);
+        assert_eq!(socket.messages[1].text.len(), MESSAGE_BYTES);
+        let binary = &socket.messages[2];
+        assert_eq!(
+            (binary.binary, binary.size_bytes, binary.text.as_str()),
+            (true, 4, "")
+        );
+        assert_eq!(socket.ended, None);
+
+        assert!(report.entries[1].socket.is_some());
+        assert_eq!(report.entries[2].kind, "events");
+        // Neither the open socket nor the stream is slow; ws:// is plain.
+        let titles: Vec<&str> = report.findings.iter().map(|f| f.title.as_str()).collect();
+        assert_eq!(titles, ["1 client error", "1 request is not encrypted"]);
+        assert_eq!(report.findings[1].entries, [0]);
+    }
+
+    #[test]
+    fn counts_the_messages_it_leaves_out() {
+        let message = json!({ "type": "receive", "time": 1.0, "opcode": 1, "data": "tick" });
+        let mut socket = entry(
+            "2024-01-01T00:00:00Z",
+            "GET",
+            "wss://feed.test/",
+            101,
+            "",
+            0,
+            1,
+        );
+        socket["_webSocketMessages"] = json!(vec![message; MESSAGES + 3]);
+        let har = json!({ "log": { "entries": [socket] } });
+        let report = analyze_har(&har.to_string()).unwrap();
+        let socket = report.entries[0].socket.as_ref().unwrap();
+        assert_eq!(socket.messages.len(), MESSAGES);
+        assert_eq!((socket.received, socket.left_out), (MESSAGES as u32 + 3, 3));
+        assert_eq!(socket.received_bytes, 4 * (MESSAGES as u64 + 3));
+    }
+
+    #[test]
+    fn finds_queues_preflights_and_uncached_files() {
+        let at = "2024-01-01T00:00:00Z";
+        let mut queued = entry(
+            at,
+            "GET",
+            "https://api.test/a",
+            200,
+            "application/json",
+            10,
+            900,
+        );
+        queued["timings"]["blocked"] = json!(750);
+        let mut preflight = entry(at, "OPTIONS", "https://api.test/a", 204, "", 0, 20);
+        preflight["request"]["headers"] =
+            json!([{ "name": "Access-Control-Request-Method", "value": "POST" }]);
+        let mut remembered = preflight.clone();
+        remembered["request"]["url"] = json!("https://api.test/b");
+        remembered["response"]["headers"] =
+            json!([{ "name": "access-control-max-age", "value": "600" }]);
+        let mut bare = entry(
+            at,
+            "GET",
+            "https://cdn.test/app.css",
+            200,
+            "text/css",
+            10,
+            20,
+        );
+        bare["response"]["headers"] = json!([{ "name": "Content-Type", "value": "text/css" }]);
+        let mut kept = entry(
+            at,
+            "GET",
+            "https://cdn.test/logo.png",
+            200,
+            "image/png",
+            10,
+            20,
+        );
+        kept["response"]["headers"] = json!([{ "name": "Cache-Control", "value": "max-age=600" }]);
+        let har = json!({ "log": {
+            "creator": { "name": "reqorb" },
+            "entries": [queued, preflight, remembered, bare, kept],
+        } });
+        let report = analyze_har(&har.to_string()).unwrap();
+        let found: Vec<(&str, &[u32])> = report
+            .findings
+            .iter()
+            .map(|f| (f.title.as_str(), f.entries.as_slice()))
+            .collect();
+        assert_eq!(
+            found,
+            [
+                ("1 request was held back before being sent", &[0][..]),
+                ("1 CORS preflight is not remembered", &[1][..]),
+                ("1 static file has no caching headers", &[3][..]),
+            ]
+        );
+        assert!(report.findings[0].detail.ends_with("750 ms queued GET /a"));
     }
 
     #[test]

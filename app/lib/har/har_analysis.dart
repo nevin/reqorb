@@ -1,8 +1,9 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:reqorb/response/response_view.dart';
+import 'package:reqorb/shared/messages.dart';
+import 'package:reqorb/shared/readable.dart';
 import 'package:reqorb/src/rust/api/core.dart';
 import 'package:reqorb/shared/theme.dart';
 
@@ -17,6 +18,16 @@ enum _Sort {
 
   const _Sort(this.label);
   final String label;
+}
+
+/// One line of a breakdown, chosen to narrow the table to its requests.
+class _Group {
+  const _Group(this.title, this.name, this.holds);
+
+  /// The breakdown it belongs to, such as `Hosts`.
+  final String title;
+  final String name;
+  final bool Function(HarEntry entry) holds;
 }
 
 /// A report on a HAR archive: totals, findings, breakdowns and every
@@ -43,6 +54,9 @@ class HarAnalysisPage extends StatefulWidget {
 class _HarAnalysisPageState extends State<HarAnalysisPage> {
   /// The finding whose requests the table is narrowed to, if any.
   HarFinding? _finding;
+
+  /// The line of a breakdown the table is narrowed to, if any.
+  _Group? _group;
   _Sort _sort = _Sort.order;
 
   /// The heading of the request table.
@@ -70,7 +84,17 @@ class _HarAnalysisPageState extends State<HarAnalysisPage> {
   void _toggle(HarFinding finding) {
     final chosen = !identical(_finding, finding);
     setState(() => _finding = chosen ? finding : null);
-    if (!chosen) return;
+    if (chosen) _showRequests();
+  }
+
+  /// The same for a line of a breakdown.
+  void _toggleGroup(_Group group) {
+    final chosen = _group?.title != group.title || _group?.name != group.name;
+    setState(() => _group = chosen ? group : null);
+    if (chosen) _showRequests();
+  }
+
+  void _showRequests() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final heading = _requests.currentContext;
       if (heading == null) return;
@@ -95,7 +119,7 @@ class _HarAnalysisPageState extends State<HarAnalysisPage> {
           '${e.method} ${e.url} ${e.status} ${e.kind} '
                   '${e.operation ?? ''}'
               .toLowerCase();
-      return words.every(text.contains);
+      return (_group?.holds(e) ?? true) && words.every(text.contains);
     }
 
     final rows = [
@@ -177,9 +201,30 @@ class _HarAnalysisPageState extends State<HarAnalysisPage> {
                         spacing: 24,
                         runSpacing: 16,
                         children: [
-                          _breakdown(theme, 'Status', report.statuses),
-                          _breakdown(theme, 'Hosts', report.hosts),
-                          _breakdown(theme, 'Content', report.kinds),
+                          _breakdown(
+                            theme,
+                            'Status',
+                            report.statuses,
+                            (name) =>
+                                (e) => name == 'no response'
+                                ? e.status == 0
+                                : e.status != 0 &&
+                                      '${e.status ~/ 100}xx' == name,
+                          ),
+                          _breakdown(
+                            theme,
+                            'Hosts',
+                            report.hosts,
+                            (name) =>
+                                (e) => e.host == name,
+                          ),
+                          _breakdown(
+                            theme,
+                            'Content',
+                            report.kinds,
+                            (name) =>
+                                (e) => e.kind == name,
+                          ),
                         ],
                       ),
                       const SizedBox(height: 20),
@@ -200,6 +245,20 @@ class _HarAnalysisPageState extends State<HarAnalysisPage> {
                                 visualDensity: VisualDensity.compact,
                                 onDeleted: () =>
                                     setState(() => _finding = null),
+                                deleteButtonTooltipMessage: 'Show all requests',
+                              ),
+                            ),
+                          if (_group case final group?)
+                            Flexible(
+                              child: InputChip(
+                                key: const Key('har-group-filter'),
+                                label: Text(
+                                  '${group.title}: '
+                                  '${group.name.isEmpty ? '(none)' : group.name}',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                visualDensity: VisualDensity.compact,
+                                onDeleted: () => setState(() => _group = null),
                                 deleteButtonTooltipMessage: 'Show all requests',
                               ),
                             ),
@@ -318,6 +377,8 @@ class _HarAnalysisPageState extends State<HarAnalysisPage> {
   Widget _summary(ThemeData theme) {
     final report = _report;
     final scheme = theme.colorScheme;
+    final sockets = [for (final e in report.entries) ?e.socket];
+    final messages = sockets.fold(0, (n, s) => n + s.sent + s.received);
     return Wrap(
       key: const Key('har-summary'),
       spacing: 12,
@@ -340,6 +401,15 @@ class _HarAnalysisPageState extends State<HarAnalysisPage> {
           value: formatDuration(report.totalTimeMs),
           hint: 'Every request\'s time added together',
         ),
+        if (sockets.isNotEmpty)
+          _Stat(
+            label: 'WebSocket messages',
+            value: '$messages',
+            hint:
+                'On ${sockets.length} '
+                '${sockets.length == 1 ? 'connection' : 'connections'}. '
+                'Click one in the table to read its messages.',
+          ),
         if (report.creator.isNotEmpty)
           _Stat(label: 'Recorded by', value: report.creator),
       ],
@@ -414,7 +484,14 @@ class _HarAnalysisPageState extends State<HarAnalysisPage> {
     );
   }
 
-  Widget _breakdown(ThemeData theme, String title, List<HarCount> counts) {
+  /// A breakdown called [title]; [holds] says which requests a line of it
+  /// with a given name stands for.
+  Widget _breakdown(
+    ThemeData theme,
+    String title,
+    List<HarCount> counts,
+    bool Function(HarEntry) Function(String name) holds,
+  ) {
     const shown = 6;
     final scheme = theme.colorScheme;
     final total = _report.entries.length;
@@ -427,35 +504,47 @@ class _HarAnalysisPageState extends State<HarAnalysisPage> {
           Text(title, style: theme.textTheme.titleSmall),
           const SizedBox(height: 6),
           for (final count in counts.take(shown))
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          count.name.isEmpty ? '(none)' : count.name,
-                          style: small,
-                          overflow: TextOverflow.ellipsis,
+            InkWell(
+              key: Key('har-group-$title-${count.name}'),
+              borderRadius: BorderRadius.circular(4),
+              onTap: () =>
+                  _toggleGroup(_Group(title, count.name, holds(count.name))),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            count.name.isEmpty ? '(none)' : count.name,
+                            style: small,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ),
-                      Text(
-                        '${count.count} · ${formatSize(count.bytes)} · '
-                        '${formatDuration(count.timeMs)}',
-                        style: small?.copyWith(color: scheme.onSurfaceVariant),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 3),
-                  LinearProgressIndicator(
-                    value: total == 0 ? 0 : count.count / total,
-                    minHeight: 3,
-                    borderRadius: BorderRadius.circular(2),
-                    backgroundColor: scheme.surfaceContainerHighest,
-                  ),
-                ],
+                        Text(
+                          '${count.count} · ${formatSize(count.bytes)} · '
+                          '${formatDuration(count.timeMs)}',
+                          style: small?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    LinearProgressIndicator(
+                      value: total == 0 ? 0 : count.count / total,
+                      minHeight: 3,
+                      borderRadius: BorderRadius.circular(2),
+                      backgroundColor: scheme.surfaceContainerHighest,
+                      color:
+                          _group?.title == title && _group?.name == count.name
+                          ? scheme.tertiary
+                          : null,
+                    ),
+                  ],
+                ),
               ),
             ),
           if (counts.length > shown)
@@ -602,6 +691,11 @@ class _EntryRow extends StatelessWidget {
                         text: '  $operation',
                         style: small.copyWith(fontWeight: FontWeight.w600),
                       ),
+                    if (entry.socket case final socket?)
+                      TextSpan(
+                        text: '  ↑${socket.sent} ↓${socket.received}',
+                        style: small.copyWith(fontWeight: FontWeight.w600),
+                      ),
                     TextSpan(text: '  ${entry.host}', style: muted),
                   ],
                 ),
@@ -679,17 +773,6 @@ class _EntryDialog extends StatelessWidget {
 
   final HarEntry entry;
 
-  /// [body] indented when it is JSON, otherwise as recorded.
-  static String _readable(String body) {
-    final trimmed = body.trimLeft();
-    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return body;
-    try {
-      return JsonEncoder.withIndent(CodeStyle.indent).convert(jsonDecode(body));
-    } on FormatException {
-      return body;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -700,11 +783,12 @@ class _EntryDialog extends StatelessWidget {
       color: scheme.onSurfaceVariant,
     );
     final longest = entry.phases.fold(1, (m, p) => p.ms > m ? p.ms : m);
+    final socket = entry.socket;
     return Dialog(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 760, maxHeight: 680),
         child: DefaultTabController(
-          length: 2,
+          length: socket == null ? 2 : 3,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -740,9 +824,16 @@ class _EntryDialog extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '${entry.kind} · ${formatSize(entry.sizeBytes)} · '
-                            '${formatDuration(entry.timeMs)} · started at '
-                            '${formatDuration(entry.offsetMs)}',
+                            [
+                              entry.kind,
+                              formatSize(entry.sizeBytes),
+                              formatDuration(entry.timeMs),
+                              'started at ${formatDuration(entry.offsetMs)}',
+                              if (entry.httpVersion.isNotEmpty)
+                                entry.httpVersion,
+                              if (entry.serverIp.isNotEmpty) entry.serverIp,
+                            ].join(' · '),
+                            key: const Key('har-detail-facts'),
                             style: muted,
                           ),
                         ],
@@ -795,17 +886,23 @@ class _EntryDialog extends StatelessWidget {
                     ],
                   ),
                 ),
-              const TabBar(
+              TabBar(
                 isScrollable: true,
                 tabAlignment: TabAlignment.start,
                 tabs: [
-                  Tab(key: Key('har-detail-request'), text: 'Request'),
-                  Tab(key: Key('har-detail-response'), text: 'Response'),
+                  if (socket != null)
+                    const Tab(
+                      key: Key('har-detail-messages'),
+                      text: 'Messages',
+                    ),
+                  const Tab(key: Key('har-detail-request'), text: 'Request'),
+                  const Tab(key: Key('har-detail-response'), text: 'Response'),
                 ],
               ),
               Expanded(
                 child: TabBarView(
                   children: [
+                    if (socket != null) _Messages(socket: socket),
                     _message(
                       theme,
                       entry.requestHeaders,
@@ -869,10 +966,251 @@ class _EntryDialog extends StatelessWidget {
           const SizedBox(height: 4),
           if (note != null) Text(note, style: muted),
           if (body != null)
-            SelectableText(_readable(body), style: small)
+            SelectableText(readable(body), style: small)
           else if (note == null)
             Text(empty, style: muted),
         ],
+      ),
+    );
+  }
+}
+
+/// Which messages of a connection are listed.
+enum _Direction {
+  both('All'),
+  sent('Sent'),
+  received('Received');
+
+  const _Direction(this.label);
+  final String label;
+}
+
+/// The conversation a WebSocket connection carried.
+class _Messages extends StatefulWidget {
+  const _Messages({required this.socket});
+
+  final HarSocket socket;
+
+  @override
+  State<_Messages> createState() => _MessagesState();
+}
+
+class _MessagesState extends State<_Messages> {
+  final _search = TextEditingController();
+  _Direction _direction = _Direction.both;
+
+  /// Positions of the messages shown whole.
+  final _opened = <int>{};
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  static String _plain(HarMessage message) => message.binary
+      ? '[${formatSize(message.sizeBytes)} of binary data]'
+      : message.text;
+
+  /// Positions of the messages to list.
+  List<int> get _rows {
+    final messages = widget.socket.messages;
+    final words = _search.text.toLowerCase().split(' ')
+      ..removeWhere((w) => w.isEmpty);
+    return [
+      for (var i = 0; i < messages.length; i++)
+        if (switch (_direction) {
+              _Direction.both => true,
+              _Direction.sent => messages[i].sent,
+              _Direction.received => !messages[i].sent,
+            } &&
+            (words.isEmpty ||
+                words.every(messages[i].text.toLowerCase().contains)))
+          i,
+    ];
+  }
+
+  Future<void> _copy(HarMessage message) async {
+    final messenger = ScaffoldMessenger.of(context);
+    await Clipboard.setData(ClipboardData(text: readable(_plain(message))));
+    notify(messenger, 'Copied');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final socket = widget.socket;
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
+    final rows = _rows;
+    final total = socket.sent + socket.received;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+          child: Text(
+            [
+              '${socket.sent} sent (${formatSize(socket.sentBytes)})',
+              '${socket.received} received '
+                  '(${formatSize(socket.receivedBytes)})',
+              ?socket.ended,
+            ].join(' · '),
+            key: const Key('har-messages-summary'),
+            style: muted,
+          ),
+        ),
+        if (total == 0)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+            child: Text(
+              'The archive holds no messages for this connection.',
+              style: muted,
+            ),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    key: const Key('har-messages-search'),
+                    controller: _search,
+                    autocorrect: false,
+                    style: theme.textTheme.bodySmall,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      hintText: 'Text the messages must contain',
+                      prefixIcon: const Icon(Icons.search, size: 16),
+                      prefixIconConstraints: const BoxConstraints(minWidth: 32),
+                      suffixText: rows.length == socket.messages.length
+                          ? null
+                          : '${rows.length} of ${socket.messages.length}',
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                DropdownButton<_Direction>(
+                  key: const Key('har-messages-direction'),
+                  value: _direction,
+                  isDense: true,
+                  underline: const SizedBox.shrink(),
+                  style: theme.textTheme.bodySmall,
+                  items: [
+                    for (final direction in _Direction.values)
+                      DropdownMenuItem(
+                        value: direction,
+                        child: Text(direction.label),
+                      ),
+                  ],
+                  onChanged: (direction) =>
+                      setState(() => _direction = direction ?? _Direction.both),
+                ),
+              ],
+            ),
+          ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+            // One more line says how many messages were left out.
+            itemCount: rows.length + (socket.leftOut > 0 ? 1 : 0),
+            itemBuilder: (context, i) {
+              if (i == rows.length) {
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                  child: Text(
+                    'and ${socket.leftOut} later messages, which are counted '
+                    'above but not listed',
+                    style: muted,
+                  ),
+                );
+              }
+              return _row(theme, rows[i]);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _row(ThemeData theme, int index) {
+    final scheme = theme.colorScheme;
+    final message = widget.socket.messages[index];
+    final opened = _opened.contains(index);
+    final small = mono.copyWith(fontSize: 12);
+    final faint = small.copyWith(color: scheme.outline);
+    final (icon, color, tip) = message.sent
+        ? (Icons.arrow_upward, scheme.primary, 'Sent')
+        : (Icons.arrow_downward, statusColor(200, scheme), 'Received');
+    return InkWell(
+      key: Key('har-message-$index'),
+      borderRadius: BorderRadius.circular(4),
+      onTap: () =>
+          setState(() => opened ? _opened.remove(index) : _opened.add(index)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Tooltip(
+              message: tip,
+              child: Icon(icon, size: 14, color: color),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 78,
+              child: Tooltip(
+                message: 'After the connection started',
+                child: Text(
+                  '+${formatDuration(message.offsetMs)}',
+                  style: faint,
+                ),
+              ),
+            ),
+            Expanded(
+              child: opened
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SelectableText(readable(_plain(message)), style: small),
+                        if (message.cut)
+                          Text(
+                            'Only the start of this message is shown.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                      ],
+                    )
+                  : Text(
+                      _plain(message),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: message.binary ? faint : small,
+                    ),
+            ),
+            const SizedBox(width: 8),
+            if (opened)
+              SizedBox.square(
+                dimension: 20,
+                child: IconButton(
+                  key: Key('har-message-copy-$index'),
+                  tooltip: 'Copy',
+                  iconSize: 14,
+                  padding: EdgeInsets.zero,
+                  color: scheme.outline,
+                  icon: const Icon(Icons.copy),
+                  onPressed: () => _copy(message),
+                ),
+              )
+            else
+              Text(formatSize(message.sizeBytes), style: faint),
+          ],
+        ),
       ),
     );
   }

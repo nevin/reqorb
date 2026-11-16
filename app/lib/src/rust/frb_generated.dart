@@ -70,7 +70,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 1570196396;
+  int get rustContentHash => 334565286;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -369,6 +369,13 @@ abstract class RustLibApi extends BaseApi {
   });
 
   bool crateApiCoreWsClose({required int id});
+
+  String crateApiCoreWsLogHar({
+    required Request request,
+    required List<Variable> variables,
+    required List<WsLine> lines,
+    required bool redact,
+  });
 
   Stream<WsEvent> crateApiCoreWsOpen({
     required int id,
@@ -2707,6 +2714,39 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "ws_close", argNames: ["id"]);
 
   @override
+  String crateApiCoreWsLogHar({
+    required Request request,
+    required List<Variable> variables,
+    required List<WsLine> lines,
+    required bool redact,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_request(request, serializer);
+          sse_encode_list_variable(variables, serializer);
+          sse_encode_list_ws_line(lines, serializer);
+          sse_encode_bool(redact, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 81)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiCoreWsLogHarConstMeta,
+        argValues: [request, variables, lines, redact],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiCoreWsLogHarConstMeta => const TaskConstMeta(
+    debugName: "ws_log_har",
+    argNames: ["request", "variables", "lines", "redact"],
+  );
+
+  @override
   Stream<WsEvent> crateApiCoreWsOpen({
     required int id,
     required Request request,
@@ -2725,7 +2765,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 81,
+              funcId: 82,
               port: port_,
             );
           },
@@ -2755,7 +2795,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_u_32(id, serializer);
           sse_encode_String(text, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 82)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 83)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -2978,6 +3018,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   GrpcReply dco_decode_box_autoadd_grpc_reply(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_grpc_reply(raw);
+  }
+
+  @protected
+  HarSocket dco_decode_box_autoadd_har_socket(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_har_socket(raw);
   }
 
   @protected
@@ -3463,8 +3509,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   HarEntry dco_decode_har_entry(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 17)
-      throw Exception('unexpected arr length: expect 17 but see ${arr.length}');
+    if (arr.length != 20)
+      throw Exception('unexpected arr length: expect 20 but see ${arr.length}');
     return HarEntry(
       offsetMs: dco_decode_CastedPrimitive_u_64(arr[0]),
       method: dco_decode_String(arr[1]),
@@ -3483,6 +3529,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       responseBody: dco_decode_opt_String(arr[14]),
       bodyNote: dco_decode_opt_String(arr[15]),
       phases: dco_decode_list_har_phase(arr[16]),
+      httpVersion: dco_decode_String(arr[17]),
+      serverIp: dco_decode_String(arr[18]),
+      socket: dco_decode_opt_box_autoadd_har_socket(arr[19]),
     );
   }
 
@@ -3497,6 +3546,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       title: dco_decode_String(arr[1]),
       detail: dco_decode_String(arr[2]),
       entries: dco_decode_list_prim_u_32_strict(arr[3]),
+    );
+  }
+
+  @protected
+  HarMessage dco_decode_har_message(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return HarMessage(
+      sent: dco_decode_bool(arr[0]),
+      offsetMs: dco_decode_CastedPrimitive_u_64(arr[1]),
+      binary: dco_decode_bool(arr[2]),
+      sizeBytes: dco_decode_CastedPrimitive_u_64(arr[3]),
+      text: dco_decode_String(arr[4]),
+      cut: dco_decode_bool(arr[5]),
     );
   }
 
@@ -3536,6 +3601,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   HarSeverity dco_decode_har_severity(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return HarSeverity.values[raw as int];
+  }
+
+  @protected
+  HarSocket dco_decode_har_socket(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    return HarSocket(
+      sent: dco_decode_u_32(arr[0]),
+      received: dco_decode_u_32(arr[1]),
+      sentBytes: dco_decode_CastedPrimitive_u_64(arr[2]),
+      receivedBytes: dco_decode_CastedPrimitive_u_64(arr[3]),
+      messages: dco_decode_list_har_message(arr[4]),
+      leftOut: dco_decode_u_32(arr[5]),
+      ended: dco_decode_opt_String(arr[6]),
+    );
   }
 
   @protected
@@ -3742,6 +3824,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<HarMessage> dco_decode_list_har_message(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_har_message).toList();
+  }
+
+  @protected
   List<HarPhase> dco_decode_list_har_phase(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_har_phase).toList();
@@ -3805,6 +3893,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<Variable> dco_decode_list_variable(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_variable).toList();
+  }
+
+  @protected
+  List<WsLine> dco_decode_list_ws_line(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_ws_line).toList();
   }
 
   @protected
@@ -3890,6 +3984,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   GrpcReply? dco_decode_opt_box_autoadd_grpc_reply(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_grpc_reply(raw);
+  }
+
+  @protected
+  HarSocket? dco_decode_opt_box_autoadd_har_socket(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_har_socket(raw);
   }
 
   @protected
@@ -4163,6 +4263,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  WsLine dco_decode_ws_line(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return WsLine(
+      sent: dco_decode_bool(arr[0]),
+      event: dco_decode_ws_event(arr[1]),
+    );
+  }
+
+  @protected
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_String(deserializer);
@@ -4370,6 +4482,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   GrpcReply sse_decode_box_autoadd_grpc_reply(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_grpc_reply(deserializer));
+  }
+
+  @protected
+  HarSocket sse_decode_box_autoadd_har_socket(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_har_socket(deserializer));
   }
 
   @protected
@@ -4888,6 +5006,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_responseBody = sse_decode_opt_String(deserializer);
     var var_bodyNote = sse_decode_opt_String(deserializer);
     var var_phases = sse_decode_list_har_phase(deserializer);
+    var var_httpVersion = sse_decode_String(deserializer);
+    var var_serverIp = sse_decode_String(deserializer);
+    var var_socket = sse_decode_opt_box_autoadd_har_socket(deserializer);
     return HarEntry(
       offsetMs: var_offsetMs,
       method: var_method,
@@ -4906,6 +5027,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       responseBody: var_responseBody,
       bodyNote: var_bodyNote,
       phases: var_phases,
+      httpVersion: var_httpVersion,
+      serverIp: var_serverIp,
+      socket: var_socket,
     );
   }
 
@@ -4921,6 +5045,25 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       title: var_title,
       detail: var_detail,
       entries: var_entries,
+    );
+  }
+
+  @protected
+  HarMessage sse_decode_har_message(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_sent = sse_decode_bool(deserializer);
+    var var_offsetMs = sse_decode_CastedPrimitive_u_64(deserializer);
+    var var_binary = sse_decode_bool(deserializer);
+    var var_sizeBytes = sse_decode_CastedPrimitive_u_64(deserializer);
+    var var_text = sse_decode_String(deserializer);
+    var var_cut = sse_decode_bool(deserializer);
+    return HarMessage(
+      sent: var_sent,
+      offsetMs: var_offsetMs,
+      binary: var_binary,
+      sizeBytes: var_sizeBytes,
+      text: var_text,
+      cut: var_cut,
     );
   }
 
@@ -4964,6 +5107,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_i_32(deserializer);
     return HarSeverity.values[inner];
+  }
+
+  @protected
+  HarSocket sse_decode_har_socket(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_sent = sse_decode_u_32(deserializer);
+    var var_received = sse_decode_u_32(deserializer);
+    var var_sentBytes = sse_decode_CastedPrimitive_u_64(deserializer);
+    var var_receivedBytes = sse_decode_CastedPrimitive_u_64(deserializer);
+    var var_messages = sse_decode_list_har_message(deserializer);
+    var var_leftOut = sse_decode_u_32(deserializer);
+    var var_ended = sse_decode_opt_String(deserializer);
+    return HarSocket(
+      sent: var_sent,
+      received: var_received,
+      sentBytes: var_sentBytes,
+      receivedBytes: var_receivedBytes,
+      messages: var_messages,
+      leftOut: var_leftOut,
+      ended: var_ended,
+    );
   }
 
   @protected
@@ -5293,6 +5457,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<HarMessage> sse_decode_list_har_message(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <HarMessage>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_har_message(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<HarPhase> sse_decode_list_har_phase(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -5404,6 +5580,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <Variable>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_variable(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<WsLine> sse_decode_list_ws_line(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <WsLine>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_ws_line(deserializer));
     }
     return ans_;
   }
@@ -5542,6 +5730,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_box_autoadd_grpc_reply(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  HarSocket? sse_decode_opt_box_autoadd_har_socket(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_har_socket(deserializer));
     } else {
       return null;
     }
@@ -5907,6 +6108,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  WsLine sse_decode_ws_line(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_sent = sse_decode_bool(deserializer);
+    var var_event = sse_decode_ws_event(deserializer);
+    return WsLine(sent: var_sent, event: var_event);
+  }
+
+  @protected
   void sse_encode_AnyhowException(
     AnyhowException self,
     SseSerializer serializer,
@@ -6166,6 +6375,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_grpc_reply(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_har_socket(
+    HarSocket self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_har_socket(self, serializer);
   }
 
   @protected
@@ -6543,6 +6761,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_String(self.responseBody, serializer);
     sse_encode_opt_String(self.bodyNote, serializer);
     sse_encode_list_har_phase(self.phases, serializer);
+    sse_encode_String(self.httpVersion, serializer);
+    sse_encode_String(self.serverIp, serializer);
+    sse_encode_opt_box_autoadd_har_socket(self.socket, serializer);
   }
 
   @protected
@@ -6552,6 +6773,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.title, serializer);
     sse_encode_String(self.detail, serializer);
     sse_encode_list_prim_u_32_strict(self.entries, serializer);
+  }
+
+  @protected
+  void sse_encode_har_message(HarMessage self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bool(self.sent, serializer);
+    sse_encode_CastedPrimitive_u_64(self.offsetMs, serializer);
+    sse_encode_bool(self.binary, serializer);
+    sse_encode_CastedPrimitive_u_64(self.sizeBytes, serializer);
+    sse_encode_String(self.text, serializer);
+    sse_encode_bool(self.cut, serializer);
   }
 
   @protected
@@ -6580,6 +6812,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_har_severity(HarSeverity self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_har_socket(HarSocket self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.sent, serializer);
+    sse_encode_u_32(self.received, serializer);
+    sse_encode_CastedPrimitive_u_64(self.sentBytes, serializer);
+    sse_encode_CastedPrimitive_u_64(self.receivedBytes, serializer);
+    sse_encode_list_har_message(self.messages, serializer);
+    sse_encode_u_32(self.leftOut, serializer);
+    sse_encode_opt_String(self.ended, serializer);
   }
 
   @protected
@@ -6871,6 +7115,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_har_message(
+    List<HarMessage> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_har_message(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_har_phase(
     List<HarPhase> self,
     SseSerializer serializer,
@@ -6986,6 +7242,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_variable(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_ws_line(List<WsLine> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_ws_line(item, serializer);
     }
   }
 
@@ -7128,6 +7393,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_grpc_reply(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_har_socket(
+    HarSocket? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_har_socket(self, serializer);
     }
   }
 
@@ -7386,5 +7664,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_ws_event_kind(WsEventKind self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_ws_line(WsLine self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bool(self.sent, serializer);
+    sse_encode_ws_event(self.event, serializer);
   }
 }

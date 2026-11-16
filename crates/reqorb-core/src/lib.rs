@@ -37,7 +37,10 @@ mod vars;
 mod vault;
 mod ws;
 
-pub use analyze::{HarCount, HarEntry, HarFinding, HarPhase, HarReport, HarSeverity, analyze_har};
+pub use analyze::{
+    HarCount, HarEntry, HarFinding, HarMessage, HarPhase, HarReport, HarSeverity, HarSocket,
+    analyze_har,
+};
 pub use auth::{Auth, AuthField, AuthKind, AuthParam, auth_fields};
 pub use checks::{TestResult, capture, run_tests};
 pub use codegen::{CodeTarget, generate_code};
@@ -49,9 +52,10 @@ pub use document::{
 pub use error::Error;
 pub use files::{DirAccess, FileAccess, check_directory};
 pub use formats::{
-    ExportFormat, ImportResult, collection_dir_stamp, export_collection, export_environment,
-    export_native, import, import_har, import_url, is_collection_dir, read_collection_dir,
-    read_environments_dir, to_curl, to_har, write_collection_dir, write_environments_dir,
+    ExportFormat, ImportResult, WsLine, collection_dir_stamp, export_collection,
+    export_environment, export_native, import, import_har, import_url, is_collection_dir,
+    read_collection_dir, read_environments_dir, to_curl, to_har, write_collection_dir,
+    write_environments_dir, ws_to_har,
 };
 pub use graphql::{
     GraphQlArg, GraphQlDraft, GraphQlField, GraphQlQuery, GraphQlSchema, GraphQlType,

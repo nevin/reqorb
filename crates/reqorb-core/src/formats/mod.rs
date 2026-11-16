@@ -21,7 +21,7 @@ mod import_tests;
 use serde_json::{Value, json};
 
 pub use curl::to_curl;
-pub use har::{import_har, to_har};
+pub use har::{WsLine, import_har, to_har, ws_to_har};
 pub use native::export_native;
 pub use tree::{
     collection_dir_stamp, is_collection_dir, read_collection_dir, read_environments_dir,

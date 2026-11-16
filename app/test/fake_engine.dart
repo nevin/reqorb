@@ -164,6 +164,20 @@ class FakeEngine extends Engine {
     return true;
   }
 
+  /// Every conversation written out as HAR, with whether it was redacted.
+  final wsLogs = <(Request, List<WsLine>, bool)>[];
+
+  @override
+  String wsLogHar({
+    required Request request,
+    required List<Variable> variables,
+    required List<WsLine> lines,
+    required bool redact,
+  }) {
+    wsLogs.add((request, lines, redact));
+    return '{"log":{"entries":[]}}';
+  }
+
   // --------------------------------------------------------------- graphql
 
   /// The schema a server hands over, or null for one that refuses.

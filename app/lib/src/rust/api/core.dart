@@ -123,6 +123,20 @@ bool wsSend({required int id, required String text}) =>
 bool wsClose({required int id}) =>
     RustLib.instance.api.crateApiCoreWsClose(id: id);
 
+/// A WebSocket conversation as a HAR document, which the analyser reads.
+/// `request` is what was connected to; `redact` masks credentials.
+String wsLogHar({
+  required Request request,
+  required List<Variable> variables,
+  required List<WsLine> lines,
+  required bool redact,
+}) => RustLib.instance.api.crateApiCoreWsLogHar(
+  request: request,
+  variables: variables,
+  lines: lines,
+  redact: redact,
+);
+
 /// Asks a gRPC server which methods it offers, through server reflection.
 Future<GrpcSchema> grpcReflect({
   required String url,
@@ -1089,6 +1103,9 @@ class HarEntry {
   final String? responseBody;
   final String? bodyNote;
   final List<HarPhase> phases;
+  final String httpVersion;
+  final String serverIp;
+  final HarSocket? socket;
 
   const HarEntry({
     required this.offsetMs,
@@ -1108,6 +1125,9 @@ class HarEntry {
     this.responseBody,
     this.bodyNote,
     required this.phases,
+    required this.httpVersion,
+    required this.serverIp,
+    this.socket,
   });
 
   @override
@@ -1128,7 +1148,10 @@ class HarEntry {
       operation.hashCode ^
       responseBody.hashCode ^
       bodyNote.hashCode ^
-      phases.hashCode;
+      phases.hashCode ^
+      httpVersion.hashCode ^
+      serverIp.hashCode ^
+      socket.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1151,7 +1174,10 @@ class HarEntry {
           operation == other.operation &&
           responseBody == other.responseBody &&
           bodyNote == other.bodyNote &&
-          phases == other.phases;
+          phases == other.phases &&
+          httpVersion == other.httpVersion &&
+          serverIp == other.serverIp &&
+          socket == other.socket;
 }
 
 class HarFinding {
@@ -1180,6 +1206,45 @@ class HarFinding {
           title == other.title &&
           detail == other.detail &&
           entries == other.entries;
+}
+
+class HarMessage {
+  final bool sent;
+  final int offsetMs;
+  final bool binary;
+  final int sizeBytes;
+  final String text;
+  final bool cut;
+
+  const HarMessage({
+    required this.sent,
+    required this.offsetMs,
+    required this.binary,
+    required this.sizeBytes,
+    required this.text,
+    required this.cut,
+  });
+
+  @override
+  int get hashCode =>
+      sent.hashCode ^
+      offsetMs.hashCode ^
+      binary.hashCode ^
+      sizeBytes.hashCode ^
+      text.hashCode ^
+      cut.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is HarMessage &&
+          runtimeType == other.runtimeType &&
+          sent == other.sent &&
+          offsetMs == other.offsetMs &&
+          binary == other.binary &&
+          sizeBytes == other.sizeBytes &&
+          text == other.text &&
+          cut == other.cut;
 }
 
 class HarPhase {
@@ -1256,6 +1321,49 @@ class HarReport {
 }
 
 enum HarSeverity { error, warning, info }
+
+class HarSocket {
+  final int sent;
+  final int received;
+  final int sentBytes;
+  final int receivedBytes;
+  final List<HarMessage> messages;
+  final int leftOut;
+  final String? ended;
+
+  const HarSocket({
+    required this.sent,
+    required this.received,
+    required this.sentBytes,
+    required this.receivedBytes,
+    required this.messages,
+    required this.leftOut,
+    this.ended,
+  });
+
+  @override
+  int get hashCode =>
+      sent.hashCode ^
+      received.hashCode ^
+      sentBytes.hashCode ^
+      receivedBytes.hashCode ^
+      messages.hashCode ^
+      leftOut.hashCode ^
+      ended.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is HarSocket &&
+          runtimeType == other.runtimeType &&
+          sent == other.sent &&
+          received == other.received &&
+          sentBytes == other.sentBytes &&
+          receivedBytes == other.receivedBytes &&
+          messages == other.messages &&
+          leftOut == other.leftOut &&
+          ended == other.ended;
+}
 
 class Header {
   final String name;
@@ -1943,3 +2051,21 @@ class WsEvent {
 }
 
 enum WsEventKind { open, text, binary, ping, pong, closed, error }
+
+class WsLine {
+  final bool sent;
+  final WsEvent event;
+
+  const WsLine({required this.sent, required this.event});
+
+  @override
+  int get hashCode => sent.hashCode ^ event.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is WsLine &&
+          runtimeType == other.runtimeType &&
+          sent == other.sent &&
+          event == other.event;
+}

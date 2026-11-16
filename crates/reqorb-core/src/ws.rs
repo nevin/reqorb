@@ -63,6 +63,12 @@ impl WsEvent {
         }
     }
 
+    /// A `Text` event for a message sent just now, for a log of the
+    /// conversation.
+    pub fn sent(text: impl Into<String>) -> Self {
+        Self::text(WsEventKind::Text, text)
+    }
+
     /// An `Error` event, for a connection that could not be opened.
     pub fn failed(message: impl Into<String>) -> Self {
         Self::text(WsEventKind::Error, message)

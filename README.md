@@ -26,7 +26,8 @@ view. One Rust core does the networking and powers all three front ends.
 - **Code editor:** bodies, GraphQL queries, messages, tests, variables and responses are
   coloured by language, with line numbers, bracket matching, find and replace, folding of
   responses, and completion of `{{variables}}` and GraphQL fields.
-- **WebSocket:** connect, send messages and watch a timestamped log.
+- **WebSocket:** connect, send messages and watch a timestamped log that can be
+  filtered, saved as HAR and opened in the HAR analyser.
 - **gRPC:** load methods by server reflection or from a `.proto` file and call them with
   JSON messages, including streaming methods, whose responses are shown as they arrive.
 - **Tests and chaining:** check each response with one-line tests, and capture values
@@ -122,6 +123,8 @@ reqorb POST https://httpbin.org/post --json '{"n": 1}' --code python   # print c
 reqorb code shop.reqorb.json 'Orders/Create' -l go -e dev.env -o create.go
 
 reqorb ws wss://echo.websocket.org -m hello -n 2
+reqorb ws wss://echo.websocket.org -m hello -n 2 --har chat.har   # keep the conversation
+reqorb analyze chat.har --messages                       # and read it back
 reqorb grpc grpcb.in:9000                                # list methods
 reqorb grpc grpcb.in:9000 hello.HelloService/SayHello -d '{"greeting":"hi"}'
 ```
@@ -718,6 +721,13 @@ Not supported yet: persisted queries and file uploads.
   the recorded responses are not kept.
 - **WebSocket:** choose `WS` where the HTTP method goes. Headers and header-based
   authorization go with the handshake; `http(s)://` addresses are read as `ws(s)://`.
+  The log lists what was sent and received with the time of each. The magnifier
+  filters it by text and by direction, and a line with more to show (JSON, binary
+  data, the handshake's headers) opens with the arrow at its end and can be copied.
+  The log stays where you scrolled to while new lines arrive. **Save** writes the
+  conversation as a HAR file, with the messages where browsers put them
+  (`_webSocketMessages`), and the graph button opens it in the HAR analyser;
+  `reqorb ws … --har FILE` does the same from the command line.
 - **gRPC:** choose `GRPC`. Methods come from server reflection or a `.proto` file, and
   messages are written as JSON. A call sends all its messages first, which covers
   unary and all three streaming kinds; separate the messages of a client stream with a
@@ -739,14 +749,30 @@ the same report, and `--json` gives it as JSON for scripts. The report has:
 - totals: requests, failures, bytes transferred, and the time from first to last
 - requests grouped by status, host and kind of content
 - every request with its status, size and time, on a timeline in the app
+- WebSocket connections with how many messages went each way, and the messages
+  themselves
 - findings, most serious first: requests with no response, 5xx and 4xx errors,
   requests of a second or longer, responses over 1 MB, credentials in URLs, plain
-  `http://` to a remote host, cookies without `Secure` or `HttpOnly`, uncompressed
-  text over 10 KB, redirects and repeated requests
+  `http://` or `ws://` to a remote host, cookies without `Secure` or `HttpOnly`,
+  requests the browser held in its queue for half a second or more, CORS preflights
+  answered without `Access-Control-Max-Age`, static files without caching headers,
+  uncompressed text over 10 KB, redirects and repeated requests
 
-In the app, clicking a finding narrows the request table to the requests it is about,
-and the filter box narrows it by address, method, status or kind. Clicking a request
-shows its headers, bodies and timing phases. **Import as collection** keeps the ticked
+In the app, clicking a finding or a line under **Status**, **Hosts** or **Content**
+narrows the request table to the requests it is about, and the filter box narrows it
+by address, method, status or kind. Clicking a request shows its headers, bodies,
+timing phases, HTTP version and server address.
+
+A WebSocket connection is listed as `WS` with its message counts (`↑3 ↓12`), and
+opens on a **Messages** tab: each message with its direction, the time since the
+connection started and its size. The messages can be filtered by text and direction,
+and one opens to show JSON indented. The messages are read from `_webSocketMessages`,
+which Chrome, Firefox and reqorb's own logs write; `reqorb analyze FILE --messages`
+prints them. A connection or an event stream is open on purpose, so neither counts as
+a slow request. Up to 5,000 messages of a connection are listed, each up to 64 KB;
+the rest are counted.
+
+**Import as collection** keeps the ticked
 requests, which is how to pick the API calls out of a browser archive. The compression check is
 skipped for archives reqorb recorded itself, as it stores responses decompressed.
 
