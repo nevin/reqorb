@@ -170,6 +170,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   DocQuery dco_decode_doc_query(dynamic raw);
 
   @protected
+  DocQuoting dco_decode_doc_quoting(dynamic raw);
+
+  @protected
   DocRow dco_decode_doc_row(dynamic raw);
 
   @protected
@@ -625,6 +628,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   DocQuery sse_decode_doc_query(SseDeserializer deserializer);
+
+  @protected
+  DocQuoting sse_decode_doc_quoting(SseDeserializer deserializer);
 
   @protected
   DocRow sse_decode_doc_row(SseDeserializer deserializer);
@@ -1139,6 +1145,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_doc_query(DocQuery self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_doc_quoting(DocQuoting self, SseSerializer serializer);
 
   @protected
   void sse_encode_doc_row(DocRow self, SseSerializer serializer);
