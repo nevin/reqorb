@@ -89,11 +89,11 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "dev.reqorb" "\0"
+            VALUE "CompanyName", "codersworld" "\0"
             VALUE "FileDescription", "reqorb" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "reqorb" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 dev.reqorb. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 codersworld. All rights reserved." "\0"
             VALUE "OriginalFilename", "reqorb.exe" "\0"
             VALUE "ProductName", "reqorb" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"

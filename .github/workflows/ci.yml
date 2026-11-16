@@ -58,6 +58,7 @@ jobs:
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           channel: stable
+          flutter-version: 3.47.7
           cache: true
       - run: flutter pub get
         working-directory: app
@@ -75,6 +76,7 @@ jobs:
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           channel: stable
+          flutter-version: 3.47.7
           cache: true
       - run: flutter pub get
       - run: dart format --output=none --set-exit-if-changed lib test integration_test
@@ -96,6 +98,7 @@ jobs:
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           channel: stable
+          flutter-version: 3.47.7
           cache: true
       - run: flutter config --enable-macos-desktop
       - run: flutter pub get
