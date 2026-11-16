@@ -7,6 +7,7 @@
 //! - `text`: the pieces of the original and of added text that make up
 //!   the document now.
 //! - `search`: finding text or a pattern in all of it.
+//! - `lex`: where strings and comments are, for brackets and colouring.
 //!
 //! Positions are byte offsets. A line longer than [`ROW_BYTES`] is shown
 //! over several rows; an editor works in rows, and in columns counted in
@@ -14,6 +15,7 @@
 
 mod index;
 mod json;
+mod lex;
 mod search;
 mod source;
 #[cfg(test)]
@@ -33,6 +35,7 @@ use memchr::memchr_iter;
 use crate::Error;
 use index::{Index, Indexed};
 pub use json::{JsonKind, JsonNode, JsonPage};
+pub use lex::Quoting;
 pub use search::{Found, MAX_KEPT, Query};
 use source::Source;
 use text::{Piece, Text};
@@ -46,6 +49,10 @@ const PAGE: u64 = 64 * 1024;
 
 /// How much is read at once when going through a whole document.
 const CHUNK: u64 = 1024 * 1024;
+
+/// How far either way brackets are paired, and how far back is read to
+/// know what a place is inside.
+const REACH: u64 = 64 * 1024;
 
 /// A NUL among this many bytes at the start means the file is not text.
 const SNIFF: u64 = 8 * 1024;
@@ -401,6 +408,43 @@ impl Document {
     /// Bytes `start..end` as text; anything not UTF-8 shows as `�`.
     pub fn text(&self, start: u64, end: u64) -> String {
         String::from_utf8_lossy(&self.text.read(start, end)).into_owned()
+    }
+
+    /// The bracket just before `at`, or at it, and its partner, the
+    /// opening one first, when neither is in a string or a comment and
+    /// they are within [`REACH`] of `at`.
+    pub fn bracket_pair(&self, at: u64, quoting: Quoting) -> Option<(u64, u64)> {
+        let at = at.min(self.len());
+        let back = at.saturating_sub(REACH);
+        let from = self.line_after(back, at).unwrap_or(back);
+        let bytes = self.bytes(from, (at + REACH).min(self.len()));
+        lex::bracket_pair(&bytes, (at - from) as usize, quoting)
+            .map(|(a, b)| (from + a as u64, from + b as u64))
+    }
+
+    /// What, put before the text from `at`, has it coloured as it would be
+    /// with all that comes before: the opening of the string or comment
+    /// `at` is inside, as far as [`REACH`] back tells. Empty in code, and
+    /// on a line too long to tell.
+    pub fn opener_at(&self, at: u64, quoting: Quoting) -> &'static str {
+        let at = at.min(self.len());
+        let Some(from) = self.line_after(at.saturating_sub(REACH), at) else {
+            return "";
+        };
+        let bytes = self.bytes(from, at);
+        lex::scan(&bytes, quoting, lex::Inside::Code, |_, _| {}).opener(quoting)
+    }
+
+    /// Where a scan back from `limit` to `from` starts: at `from` if it is
+    /// the start of the document, otherwise at the next line's start, as
+    /// the middle of a line may be the middle of a string. None if no line
+    /// starts by `limit`.
+    fn line_after(&self, from: u64, limit: u64) -> Option<u64> {
+        if from == 0 {
+            return Some(0);
+        }
+        let next = self.line_start(self.line_of(from) + 1);
+        (next <= limit).then_some(next)
     }
 
     /// A copy of the text as it is now, to search.

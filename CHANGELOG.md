@@ -6,6 +6,14 @@ the new version when it is tagged.
 
 ## Unreleased
 
+- A change made just before quitting, or before the iPad app goes to the background, is
+  saved; it could be lost before.
+- Two saves of the workspace never overlap, so an older one can no longer be left on disk
+  after a newer one.
+- On Linux, large responses and copies of files being saved are kept in your own cache
+  folder (`~/.cache`), readable by you alone, instead of the shared `/tmp`, where another
+  user of the machine could read or replace them. On every system the files are made
+  readable by their owner alone, and a link left in their place is never followed.
 - The app's identifier is now `com.codersworld.reqorb`, for signing and the App Store.
   On macOS this gives it a new data folder: to keep a workspace from 1.0, quit reqorb
   and copy `workspace.json` from

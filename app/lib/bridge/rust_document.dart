@@ -57,6 +57,14 @@ class RustDocument implements TextDocument {
       rust.docText(id: _id, start: start, end: end);
 
   @override
+  DocSpan? bracketPair(int at, DocQuoting quoting) =>
+      rust.docBracketPair(id: _id, at: at, quoting: quoting);
+
+  @override
+  String openerAt(int at, DocQuoting quoting) =>
+      rust.docOpenerAt(id: _id, at: at, quoting: quoting);
+
+  @override
   Uint8List bytes(int start, int end) =>
       rust.docBytes(id: _id, start: start, end: end);
 

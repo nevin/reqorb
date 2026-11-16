@@ -31,6 +31,9 @@ const _block = 128;
 /// Space above and below the rows.
 const _padding = 8.0;
 
+/// How many blocks of rows are kept once fetched.
+const _blocksKept = 64;
+
 /// The most lines indented or outdented at once.
 const _indentLimit = 100000;
 
@@ -43,8 +46,8 @@ const _indentLimit = 100000;
 /// Chinese or Japanese input work. It is told only the rows around the
 /// selection, never the whole text.
 ///
-/// The rows are keyed `<name>`; the numbers beside them
-/// `<name>-number-<row>`; the status line `<name>-status`; the find bar's
+/// The rows are keyed `<name>`; each row's text `<name>-row-<row>`; the
+/// numbers beside them `<name>-number-<row>`; the status line `<name>-status`; the find bar's
 /// parts `<name>-find`, `<name>-find-field`, `<name>-find-count`,
 /// `<name>-find-next`, `<name>-find-previous`, `<name>-find-close`,
 /// `<name>-find-case`, `<name>-find-regex` and `<name>-find-word`; and
@@ -103,6 +106,9 @@ class DocumentView extends StatefulWidget {
 class _DocumentViewState extends State<DocumentView> {
   final _vertical = ScrollController();
   final _horizontal = ScrollController();
+
+  /// The line numbers' own list, kept where the text's is.
+  final _numbers = ScrollController();
   final _focus = FocusNode(debugLabel: 'document');
   final _query = TextEditingController();
   final _queryFocus = FocusNode(debugLabel: 'document find');
@@ -223,7 +229,15 @@ class _DocumentViewState extends State<DocumentView> {
   }
 
   void _scrolled() {
+    _followText();
     if (_byTouch || _menuOverSelection) setState(() {});
+  }
+
+  /// Scrolls the line numbers to where the text is.
+  void _followText() {
+    if (!_numbers.hasClients || !_vertical.hasClients) return;
+    final to = _vertical.offset.clamp(0.0, _numbers.position.maxScrollExtent);
+    if (_numbers.offset != to) _numbers.jumpTo(to);
   }
 
   void _hideMenu() {
@@ -275,6 +289,7 @@ class _DocumentViewState extends State<DocumentView> {
     _horizontal.removeListener(_scrolled);
     _vertical.dispose();
     _horizontal.dispose();
+    _numbers.dispose();
     _focus.dispose();
     _query.dispose();
     _queryFocus.dispose();
@@ -314,11 +329,29 @@ class _DocumentViewState extends State<DocumentView> {
   /// would no longer place them exactly.
   double get _rowHeight => (CodeStyle.fontSize * 1.4).ceilToDouble();
 
-  double _measure(String text) => (TextPainter(
-    text: TextSpan(text: text, style: _style),
-    textDirection: TextDirection.ltr,
-    textScaler: MediaQuery.textScalerOf(context),
-  )..layout()).width;
+  /// [text] laid out on one line as the rows are, for [use] to measure;
+  /// let go of after.
+  T _laidOut<T>(String text, T Function(TextPainter painter) use) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: _style),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    try {
+      return use(painter);
+    } finally {
+      painter.dispose();
+    }
+  }
+
+  double _measure(String text) => _laidOut(text, (p) => p.width);
+
+  /// The column of [text] nearest [x] across it.
+  int _columnAt(String text, double x) => _laidOut(
+    text,
+    (p) => p.getPositionForOffset(Offset(x, p.height / 2)).offset,
+  );
 
   DocRow? _rowAt(int row) {
     if (_info.version != _cachedVersion) {
@@ -326,13 +359,19 @@ class _DocumentViewState extends State<DocumentView> {
       _spans.clear();
       _cachedVersion = _info.version;
     }
-    // A long scroll leaves blocks behind; they are cheap to fetch again.
-    if (_blocks.length > 64) {
-      _blocks.clear();
-      _spans.clear();
-    }
     final block = row ~/ _block;
-    final rows = _blocks[block] ??= _fetch(block);
+    var rows = _blocks.remove(block);
+    if (rows == null) {
+      // A long scroll leaves blocks behind; the one used longest ago goes.
+      if (_blocks.length >= _blocksKept) {
+        final oldest = _blocks.keys.first;
+        _blocks.remove(oldest);
+        _spans.remove(oldest);
+      }
+      rows = _fetch(block);
+    }
+    // Put back last, as the one used most recently.
+    _blocks[block] = rows;
     final i = row - block * _block;
     return i < rows.length ? rows[i] : null;
   }
@@ -362,31 +401,30 @@ class _DocumentViewState extends State<DocumentView> {
     return spans[row - block * _block];
   }
 
-  /// Languages in which a comment, or a tag's text, can run over lines,
-  /// so that a block's colours depend on what came before it.
-  static const _spansLines = {
-    CodeLanguage.javascript,
-    CodeLanguage.source,
-    CodeLanguage.xml,
-    CodeLanguage.graphql,
+  /// How the language shown quotes text and writes comments, for the
+  /// engine to pair brackets and tell what a block starts inside; none for
+  /// plain words.
+  DocQuoting? get _quoting => switch (_language) {
+    CodeLanguage.json => DocQuoting.json,
+    CodeLanguage.javascript => DocQuoting.javaScript,
+    CodeLanguage.source => DocQuoting.source,
+    CodeLanguage.script => DocQuoting.script,
+    CodeLanguage.graphql => DocQuoting.graphql,
+    CodeLanguage.xml => DocQuoting.xml,
+    _ => null,
   };
 
-  /// How far before a block is read to colour it from the right start.
-  static const _lookBack = 64 * 1024;
-
   /// What to colour before [first], the first row of a block, so that
-  /// the block starts in the right state: an opening quote for a row
-  /// that begins inside a string, or, where comments span lines, the
-  /// lines before it, as far as [_lookBack].
+  /// the block starts in the right state: an opening quote for a row that
+  /// begins inside a string, or, where strings and comments can run over
+  /// lines, the opening of the one it begins inside.
   String _before(DocRow first) {
     if (first.segment > 0) return first.quoted ? '"' : '';
-    if (!_spansLines.contains(_language) || first.start == 0) return '';
-    final from = math.max(0, first.start - _lookBack);
-    final text = _doc.text(from, first.start);
-    if (from == 0) return text;
-    // From a line's start, not the middle of one.
-    final line = text.indexOf('\n');
-    return line < 0 ? '' : text.substring(line + 1);
+    final quoting = _quoting;
+    if (quoting == null || quoting == DocQuoting.json || first.start == 0) {
+      return '';
+    }
+    return _doc.openerAt(first.start, quoting);
   }
 
   List<TextSpan> _colour(List<DocRow> rows, Brightness brightness) {
@@ -542,7 +580,23 @@ class _DocumentViewState extends State<DocumentView> {
 
   bool get _showsCaret => widget.editable && _focus.hasPrimaryFocus;
 
-  Widget _row(BuildContext context, int index, double gutter, double gap) {
+  /// The number beside row [index]: its line's, on the line's first row.
+  Widget _number(BuildContext context, int index) {
+    final row = _rowAt(index);
+    if (row == null) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    return Text(
+      semanticsLabel: row.segment == 0 ? 'Line ${row.line + 1}' : '',
+      row.segment == 0 ? '${row.line + 1}' : '',
+      key: ValueKey('${widget.name}-number-$index'),
+      textAlign: TextAlign.right,
+      style: _style.copyWith(
+        color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
+      ),
+    );
+  }
+
+  Widget _row(BuildContext context, int index, double gap) {
     final row = _rowAt(index);
     if (row == null) return const SizedBox.shrink();
     final theme = Theme.of(context);
@@ -551,6 +605,7 @@ class _DocumentViewState extends State<DocumentView> {
     final span = _spanOf(index, theme.brightness);
     final text = Text.rich(
       span,
+      key: ValueKey('${widget.name}-row-$index'),
       maxLines: 1,
       softWrap: false,
       overflow: TextOverflow.clip,
@@ -558,18 +613,6 @@ class _DocumentViewState extends State<DocumentView> {
     );
     return Row(
       children: [
-        SizedBox(
-          width: gutter,
-          child: Text(
-            semanticsLabel: row.segment == 0 ? 'Line ${row.line + 1}' : '',
-            row.segment == 0 ? '${row.line + 1}' : '',
-            key: ValueKey('${widget.name}-number-$index'),
-            textAlign: TextAlign.right,
-            style: _style.copyWith(
-              color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
-            ),
-          ),
-        ),
         SizedBox(width: gap),
         Expanded(
           child: marks.isEmpty
@@ -623,68 +666,13 @@ class _DocumentViewState extends State<DocumentView> {
     );
   }
 
-  static const _opens = '{[(';
-  static const _closes = '}])';
-
-  /// How far to look for a bracket's partner, either way.
-  static const _reach = 64 * 1024;
-
-  /// The bracket just before or at [at] and its partner, in bytes, when
-  /// neither is in a string or a comment.
+  /// The bracket beside [at] and its partner, in bytes, when neither is
+  /// in a string or a comment.
   (int, int)? _bracketsAt(int at) {
-    if (_language == CodeLanguage.plain) return null;
-    final len = _info.len;
-    final near = _doc.text(math.max(0, at - 1), math.min(len, at + 1));
-    if (!near.split('').any((c) => _opens.contains(c) || _closes.contains(c))) {
-      return null;
-    }
-    final from = math.max(0, at - _reach);
-    final text = _doc.text(from, math.min(len, at + _reach));
-    // Where [at] is in the text, as UTF-16 units.
-    final caret = unitsOf(text, at - from);
-    final tokens = tokenize(text, _language);
-    bool quoted(int i) {
-      var low = 0, high = tokens.length - 1;
-      while (low <= high) {
-        final mid = (low + high) >> 1;
-        final t = tokens[mid];
-        if (i < t.start) {
-          high = mid - 1;
-        } else if (i >= t.end) {
-          low = mid + 1;
-        } else {
-          return t.kind == TokenKind.string ||
-              t.kind == TokenKind.comment ||
-              t.kind == TokenKind.key;
-        }
-      }
-      return false;
-    }
-
-    // The one just typed, before the caret, comes first.
-    for (final i in [caret - 1, caret]) {
-      if (i < 0 || i >= text.length) continue;
-      final char = text[i];
-      final opens = _opens.indexOf(char);
-      final closes = _closes.indexOf(char);
-      if ((opens < 0 && closes < 0) || quoted(i)) continue;
-      final forward = opens >= 0;
-      final own = char.codeUnitAt(0);
-      final other = (forward ? _closes[opens] : _opens[closes]).codeUnitAt(0);
-      var depth = 0;
-      for (var j = i; j >= 0 && j < text.length; j += forward ? 1 : -1) {
-        final unit = text.codeUnitAt(j);
-        if ((unit != own && unit != other) || quoted(j)) continue;
-        depth += unit == own ? 1 : -1;
-        if (depth == 0) {
-          final a = from + utf8Length(text, 0, forward ? i : j);
-          final b = from + utf8Length(text, 0, forward ? j : i);
-          return (a, b);
-        }
-      }
-      return null;
-    }
-    return null;
+    final quoting = _quoting;
+    if (quoting == null) return null;
+    final pair = _doc.bracketPair(at, quoting);
+    return pair == null ? null : (pair.start, pair.end);
   }
 
   void _selectNothing() {
@@ -714,16 +702,7 @@ class _DocumentViewState extends State<DocumentView> {
     if (r == null) return (row, 0);
     final x = local.dx - gutter - gap;
     if (x <= 0) return (row, 0);
-    final painter = TextPainter(
-      text: TextSpan(text: r.text, style: _style),
-      textDirection: TextDirection.ltr,
-      textScaler: MediaQuery.textScalerOf(context),
-      maxLines: 1,
-    )..layout();
-    return (
-      row,
-      painter.getPositionForOffset(Offset(x, painter.height / 2)).offset,
-    );
+    return (row, _columnAt(r.text, x));
   }
 
   int _offsetAt(Offset local, double gutter, double gap) {
@@ -751,7 +730,9 @@ class _DocumentViewState extends State<DocumentView> {
     return (_doc.offsetOf(row, start), _doc.offsetOf(row, end));
   }
 
-  void _down(PointerDownEvent event, double gutter, double gap) {
+  /// A pointer going down at [local], a place in the text as if the
+  /// numbers scrolled across with it.
+  void _down(PointerDownEvent event, Offset local, double gutter, double gap) {
     // A finger or a pen is followed by the gestures below.
     if (event.kind == PointerDeviceKind.touch ||
         event.kind == PointerDeviceKind.stylus) {
@@ -759,14 +740,14 @@ class _DocumentViewState extends State<DocumentView> {
     }
     if (event.buttons == kSecondaryButton) {
       _focus.requestFocus();
-      final offset = _offsetAt(event.localPosition, gutter, gap);
+      final offset = _offsetAt(local, gutter, gap);
       final selection = _selection;
       if (selection == null || offset < selection.$1 || offset > selection.$2) {
         _select(offset, offset);
       }
       setState(() {
         _menuOverSelection = false;
-        _menuAt = event.localPosition - Offset(_horizontalOffset, 0);
+        _menuAt = local - Offset(_horizontalOffset, 0);
       });
       return;
     }
@@ -777,11 +758,11 @@ class _DocumentViewState extends State<DocumentView> {
     final now = DateTime.now();
     final again =
         now.difference(_lastDown) < kDoubleTapTimeout &&
-        (event.localPosition - _lastDownAt).distance < kDoubleTapSlop;
+        (local - _lastDownAt).distance < kDoubleTapSlop;
     _clicks = again ? _clicks % 3 + 1 : 1;
     _lastDown = now;
-    _lastDownAt = event.localPosition;
-    final at = event.localPosition;
+    _lastDownAt = local;
+    final at = local;
     final keyboard = HardwareKeyboard.instance;
     if (widget.onLink != null &&
         (keyboard.isMetaPressed || keyboard.isControlPressed)) {
@@ -899,7 +880,13 @@ class _DocumentViewState extends State<DocumentView> {
     setState(() => _menuOverSelection = false);
   }
 
-  void _move(PointerMoveEvent event, double gutter, double gap, double height) {
+  void _move(
+    PointerMoveEvent event,
+    Offset local,
+    double gutter,
+    double gap,
+    double height,
+  ) {
     // A finger drags to scroll; it selects with handles, which are to come.
     if (event.buttons != kPrimaryButton ||
         _clicks != 1 ||
@@ -908,7 +895,7 @@ class _DocumentViewState extends State<DocumentView> {
       return;
     }
     // Dragging past the top or bottom scrolls on.
-    final y = event.localPosition.dy;
+    final y = local.dy;
     if (_vertical.hasClients && (y < 0 || y > height)) {
       final position = _vertical.position;
       position.jumpTo(
@@ -918,7 +905,7 @@ class _DocumentViewState extends State<DocumentView> {
         ),
       );
     }
-    _select(_anchor!, _offsetAt(event.localPosition, gutter, gap));
+    _select(_anchor!, _offsetAt(local, gutter, gap));
   }
 
   /// Copies the selection; false if there is none, or it is too big.
@@ -1127,6 +1114,7 @@ class _DocumentViewState extends State<DocumentView> {
     final found = _found;
     final total = _count;
     final messenger = ScaffoldMessenger.maybeOf(context);
+    _editedAt(found.first.start);
     await _doc.replaceAll(found, _replacement.text);
     if (!mounted) return;
     _composing = null;
@@ -1352,9 +1340,47 @@ class _DocumentViewState extends State<DocumentView> {
 
   /// Takes in an edit: what the document holds now, and whoever is
   /// listening. A search open is run again, as what it found has moved.
+  /// Where the first edit since the view last took one in was made, if
+  /// the rows fetched were all of the version before it.
+  int? _editedFrom;
+
+  /// Notes an edit about to be made at byte [at], so that only the rows
+  /// from there on are fetched again.
+  void _editedAt(int at) {
+    final from = _editedFrom;
+    if (from != null) {
+      // Another edit before the view takes them in, as a closing bracket
+      // put in after an opening one.
+      _editedFrom = math.min(from, at);
+      return;
+    }
+    // Rows found meanwhile, or a version not taken in, may have moved any
+    // row; then none is kept.
+    if (_cachedVersion != _doc.info().version || !_info.indexingDone) {
+      _cachedVersion = -1;
+      return;
+    }
+    _editedFrom = at;
+  }
+
+  /// Keeps the rows and colours fetched before the first edit noted, and
+  /// lets go of the rest, which an edit there may have changed or moved.
+  void _keepRowsBeforeEdit(DocInfo info) {
+    final from = _editedFrom;
+    _editedFrom = null;
+    if (from == null || _cachedVersion < 0) return;
+    // The row before the edit too, as joining two lines changes it.
+    final row = _doc.positionOf(math.max(0, from - 1)).row;
+    final block = math.max(0, row - 1) ~/ _block;
+    _blocks.removeWhere((b, _) => b >= block);
+    _spans.removeWhere((b, _) => b >= block);
+    _cachedVersion = info.version;
+  }
+
   void _changed() {
     setState(() {
       _info = _doc.info();
+      _keepRowsBeforeEdit(_info);
       _menuAt = null;
       _menuOverSelection = false;
       if (_finding) {
@@ -1378,6 +1404,7 @@ class _DocumentViewState extends State<DocumentView> {
   }) {
     if (!widget.editable) return;
     _composing = null;
+    _editedAt(start);
     _doc.replace(start, end, text, typing: typing);
     final at = caret ?? start + utf8Length(text);
     _changed();
@@ -1391,6 +1418,7 @@ class _DocumentViewState extends State<DocumentView> {
 
   void _afterUndo(DocSpan? changed) {
     if (changed == null) return;
+    _editedAt(changed.start);
     _composing = null;
     _changed();
     _select(changed.end, changed.end);
@@ -1517,6 +1545,7 @@ class _DocumentViewState extends State<DocumentView> {
     }
     if (spans.isEmpty) return;
     _composing = null;
+    _editedAt(spans.first.start);
     await _doc.replaceAll(spans, outdent ? '' : unit);
     if (!mounted) return;
     _changed();
@@ -1608,16 +1637,7 @@ class _DocumentViewState extends State<DocumentView> {
       _moveTo(_info.len, extend: extend, goalX: x);
       return;
     }
-    final text = _rowAt(target)?.text ?? '';
-    final painter = TextPainter(
-      text: TextSpan(text: text, style: _style),
-      textDirection: TextDirection.ltr,
-      textScaler: MediaQuery.textScalerOf(context),
-      maxLines: 1,
-    )..layout();
-    final col = painter
-        .getPositionForOffset(Offset(x, painter.height / 2))
-        .offset;
+    final col = _columnAt(_rowAt(target)?.text ?? '', x);
     _moveTo(_doc.offsetOf(target, col), extend: extend, goalX: x);
   }
 
@@ -1756,6 +1776,7 @@ class _DocumentViewState extends State<DocumentView> {
       };
       if (range != null) {
         final (start, end) = _bytesOf(value.text, range);
+        _editedAt(start);
         _doc.replace(start, end, inserted, typing: true);
         changed = true;
         if (!_windowWhole) {
@@ -1827,6 +1848,7 @@ class _DocumentViewState extends State<DocumentView> {
     final next = _doc.text(after, math.min(len, after + 1));
     if (_pairs.containsValue(char) && next == char) {
       // Typed over: the one just put in goes, and the caret steps on.
+      _editedAt(at);
       _doc.replace(at, after, '', typing: true);
       _sent = value;
       _changed();
@@ -1841,6 +1863,7 @@ class _DocumentViewState extends State<DocumentView> {
         isWordChar(_doc.text(previousChar(_doc, at), at))) {
       return false;
     }
+    _editedAt(after);
     _doc.replace(after, after, closer, typing: true);
     _sent = value;
     _changed();
@@ -1903,7 +1926,10 @@ class _DocumentViewState extends State<DocumentView> {
     final view = LayoutBuilder(
       key: _viewKey,
       builder: (context, constraints) {
-        final width = math.max(constraints.maxWidth, gutter + gap + textWidth);
+        final width = math.max(constraints.maxWidth - gutter, gap + textWidth);
+        // Where a point in the text is as if the numbers scrolled across
+        // with it, as the view works places out from.
+        Offset withGutter(Offset local) => local + Offset(gutter, 0);
         // The scrollbar down the side stays in view however far it is
         // scrolled across; it is for the list, one level in.
         final scrolled = Scrollbar(
@@ -1920,9 +1946,15 @@ class _DocumentViewState extends State<DocumentView> {
                 width: width,
                 height: constraints.maxHeight,
                 child: Listener(
-                  onPointerDown: (e) => _down(e, gutter, gap),
-                  onPointerMove: (e) =>
-                      _move(e, gutter, gap, constraints.maxHeight),
+                  onPointerDown: (e) =>
+                      _down(e, withGutter(e.localPosition), gutter, gap),
+                  onPointerMove: (e) => _move(
+                    e,
+                    withGutter(e.localPosition),
+                    gutter,
+                    gap,
+                    constraints.maxHeight,
+                  ),
                   child: GestureDetector(
                     supportedDevices: const {
                       PointerDeviceKind.touch,
@@ -1930,11 +1962,12 @@ class _DocumentViewState extends State<DocumentView> {
                     },
                     // A double tap is told apart by hand: a recognizer for
                     // it would hold every single tap back until it knew.
-                    onTapUp: (d) => _tapTouch(d.localPosition, gutter, gap),
+                    onTapUp: (d) =>
+                        _tapTouch(withGutter(d.localPosition), gutter, gap),
                     onLongPressStart: (d) =>
-                        _wordTouch(d.localPosition, gutter, gap),
+                        _wordTouch(withGutter(d.localPosition), gutter, gap),
                     onLongPressMoveUpdate: (d) =>
-                        _dragFromWord(d.localPosition, gutter, gap),
+                        _dragFromWord(withGutter(d.localPosition), gutter, gap),
                     onLongPressEnd: (_) {
                       if (_pressedWord != null) {
                         setState(() => _menuOverSelection = true);
@@ -1948,8 +1981,7 @@ class _DocumentViewState extends State<DocumentView> {
                         padding: const EdgeInsets.symmetric(vertical: _padding),
                         itemExtent: _rowHeight,
                         itemCount: _info.rowCount,
-                        itemBuilder: (context, row) =>
-                            _row(context, row, gutter, gap),
+                        itemBuilder: (context, row) => _row(context, row, gap),
                       ),
                     ),
                   ),
@@ -1958,6 +1990,29 @@ class _DocumentViewState extends State<DocumentView> {
             ),
           ),
         );
+        // The numbers stay in view however far the text is scrolled
+        // across; they follow it up and down, and scroll it from there.
+        final numbers = SizedBox(
+          width: gutter,
+          child: Listener(
+            onPointerSignal: (e) {
+              if (e is PointerScrollEvent) _scrollBy(e.scrollDelta.dy);
+            },
+            onPointerPanZoomUpdate: (e) => _scrollBy(-e.panDelta.dy),
+            child: GestureDetector(
+              onVerticalDragUpdate: (d) => _scrollBy(-d.delta.dy),
+              child: ListView.builder(
+                controller: _numbers,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(vertical: _padding),
+                itemExtent: _rowHeight,
+                itemCount: _info.rowCount,
+                itemBuilder: _number,
+              ),
+            ),
+          ),
+        );
+        WidgetsBinding.instance.addPostFrameCallback((_) => _followText());
         return Semantics(
           container: true,
           textField: widget.editable,
@@ -1967,7 +2022,13 @@ class _DocumentViewState extends State<DocumentView> {
           child: Stack(
             clipBehavior: Clip.hardEdge,
             children: [
-              scrolled,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  numbers,
+                  Expanded(child: scrolled),
+                ],
+              ),
               ..._handles(scheme),
               ?_menu(theme, constraints),
             ],
@@ -2484,6 +2545,7 @@ class _MarkPainter extends CustomPainter {
         paint,
       );
     }
+    painter.dispose();
   }
 
   @override
